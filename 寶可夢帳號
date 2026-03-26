@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>帳號管理中心 - 專業帳號整理系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+        .glass-effect { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 antialiased">
+
+    <header class="sticky top-0 z-50 glass-effect border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-2">
+                    <div class="bg-indigo-600 p-2 rounded-lg text-white">
+                        <i class="fas fa-key text-xl"></i>
+                    </div>
+                    <span class="text-xl font-bold tracking-tight text-gray-900">AccountHub</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm">
+                        <i class="fas fa-plus mr-2"></i>手動新增
+                    </button>
+                    <img class="h-8 w-8 rounded-full border border-gray-300" src="https://picsum.photos/id/64/100/100" alt="Avatar">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 mb-8">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="bg-indigo-100 p-3 rounded-xl text-indigo-600">
+                    <i class="fas fa-bolt text-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900">極速批次整理區 (告別5分鐘的折磨)</h2>
+                    <p class="text-sm text-gray-500">請將資料以「平台, 帳號, 狀態」的格式貼在下方，每行一筆。例如：`Facebook, user@mail.com, 正常`</p>
+                </div>
+            </div>
+            
+            <textarea id="bulkDataInput" rows="4" class="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-mono text-sm mb-4" placeholder="在此貼上您的帳號資料...&#10;Google, alex@gmail.com, 已開啟2FA&#10;Netflix, family@mail.com, 需改密碼&#10;Spotify, music_lover, 正常"></textarea>
+            
+            <div class="flex justify-between items-center">
+                <p class="text-xs text-indigo-600 font-medium bg-indigo-50 px-3 py-1 rounded-full"><i class="fas fa-info-circle mr-1"></i>支援一次貼上 50+ 筆資料</p>
+                <button onclick="processBulkData()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-medium transition-all shadow-md flex items-center gap-2">
+                    <i class="fas fa-magic"></i> 一鍵轉換為表格
+                </button>
+            </div>
+        </div>
+
+        <section class="mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div class="relative w-full md:w-96">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input type="text" id="accountSearch" placeholder="搜尋平台名稱、帳號或備註..." 
+                    class="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all">
+            </div>
+            <div class="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                <button class="px-4 py-2 bg-gray-200 rounded-full text-sm font-medium whitespace-nowrap">全部</button>
+                <button class="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap">社群媒體</button>
+                <button class="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap">工作辦公</button>
+                <button class="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap">影音串流</button>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider font-semibold">
+                            <th class="px-6 py-4">平台與服務</th>
+                            <th class="px-6 py-4">帳號名稱</th>
+                            <th class="px-6 py-4">最後同步</th>
+                            <th class="px-6 py-4">狀態</th>
+                            <th class="px-6 py-4 text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100" id="accountTable">
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    <img src="https://picsum.photos/id/20/40/40" class="rounded-lg" alt="icon">
+                                    <div>
+                                        <p class="font-bold text-gray-900">Google Workspace</p>
+                                        <p class="text-xs text-gray-400">work-email@company.com</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 text-sm font-medium">alex.dev_2024</td>
+                            <td class="px-6 py-4 text-sm text-gray-500">2026-03-26</td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">已加密</span>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <button class="text-indigo-600 hover:text-indigo-800 font-medium text-sm">編輯</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center text-sm text-gray-500">
+                <p id="tableStatus">目前顯示 1 個項目</p>
+                <div class="flex gap-2">
+                    <button class="px-3 py-1 border border-gray-300 rounded hover:bg-white transition-all disabled:opacity-50" disabled>上一頁</button>
+                    <button class="px-3 py-1 border border-gray-300 rounded hover:bg-white transition-all">下一頁</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="mt-12 py-8 border-t border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
+            <p>&copy; 2026 帳號管理中心. 根據您的需求精心打造.</p>
+        </div>
+    </footer>
+
+    <script>
+        // 搜尋過濾邏輯
+        document.getElementById('accountSearch').addEventListener('keyup', function() {
+            let filter = this.value.toUpperCase();
+            let rows = document.querySelector("#accountTable").getElementsByTagName("tr");
+            
+            for (let i = 0; i < rows.length; i++) {
+                let text = rows[i].textContent || rows[i].innerText;
+                if (text.toUpperCase().indexOf(filter) > -1) {
+                    rows[i].style.display = "";
+                } else {
+                    rows[i].style.display = "none";
+                }
+            }
+        });
+
+        // 批次匯入轉換邏輯
+        function processBulkData() {
+            const input = document.getElementById('bulkDataInput').value;
+            if(!input.trim()) {
+                alert("請先貼上資料喔！");
+                return;
+            }
+
+            const lines = input.split('\n');
+            const tableBody = document.getElementById('accountTable');
+            let addedCount = 0;
+            const today = new Date().toISOString().split('T')[0];
+
+            lines.forEach((line, index) => {
+                if(!line.trim()) return;
+                
+                // 假設使用者用逗號分隔資料
+                const parts = line.split(',').map(item => item.trim());
+                const platform = parts[0] || '未命名平台';
+                const account = parts[1] || '無帳號資料';
+                const status = parts[2] || '已匯入';
+
+                // 隨機產生一張圖片 ID 讓畫面好看一點
+                const randomImgId = Math.floor(Math.random() * 100) + 1;
+                
+                // 決定狀態標籤的顏色
+                let statusClass = 'bg-gray-100 text-gray-700';
+                if(status.includes('正常') || status.includes('已')) statusClass = 'bg-green-100 text-green-700';
+                if(status.includes('需') || status.includes('警告')) statusClass = 'bg-yellow-100 text-yellow-700';
+
+                const newRow = document.createElement('tr');
+                newRow.className = 'hover:bg-gray-50 transition-colors';
+                newRow.innerHTML = `
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-3">
+                            <img src="https://picsum.photos/id/${randomImgId}/40/40" class="rounded-lg" alt="icon">
+                            <div>
+                                <p class="font-bold text-gray-900">${platform}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-sm font-medium">${account}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${today}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 ${statusClass} text-xs font-bold rounded-full">${status}</span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <button class="text-indigo-600 hover:text-indigo-800 font-medium text-sm">編輯</button>
+                    </td>
+                `;
+                tableBody.appendChild(newRow);
+                addedCount++;
+            });
+
+            // 清空輸入框並更新狀態
+            document.getElementById('bulkDataInput').value = '';
+            const totalRows = tableBody.getElementsByTagName('tr').length;
+            document.getElementById('tableStatus').innerText = `已成功匯入 ${addedCount} 筆，目前共顯示 ${totalRows} 個項目`;
+            
+            // 視覺回饋
+            alert(`太棒了！瞬間為您建立好 ${addedCount} 筆帳號資料！`);
+        }
+    </script>
+</body>
+</html>
