@@ -3,180 +3,273 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>純數字驅動儀表板</title>
+    <title>寶可夢頂級帳號庫 - 批次管理系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* 隱藏數字輸入框的預設上下箭頭，讓介面更乾淨 */
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { 
-            -webkit-appearance: none; 
-            margin: 0; 
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+        .glass-effect { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7c7cc; border-radius: 8px; }
+        .poke-checkbox { width: 1rem; height: 1rem; color: #2563eb; background-color: #f3f4f6; border-color: #d1d5db; border-radius: 0.25rem; cursor: pointer; }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen font-sans selection:bg-indigo-500 selection:text-white">
+<body class="bg-gray-50 text-gray-800 antialiased relative">
 
-    <header class="bg-gray-800 shadow-lg border-b border-gray-700 py-6 px-4 md:px-8">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-            <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-                <i class="fa-solid fa-chart-pie mr-2 text-indigo-400"></i>即時數據監控中心
-            </h1>
-            <span class="text-sm text-gray-400 bg-gray-700 px-3 py-1 rounded-full"><i class="fa-solid fa-circle-dot text-green-400 mr-2 animate-pulse"></i>系統運作中</span>
+    <header class="sticky top-0 z-50 glass-effect border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-2">
+                    <div class="bg-blue-600 p-2 rounded-lg text-white shadow-md"><i class="fas fa-layer-group text-xl"></i></div>
+                    <span class="text-xl font-bold tracking-tight text-gray-900">寶可夢大量庫存系統</span>
+                </div>
+                <button onclick="exportTableToCSV('寶可夢庫存總表.csv')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm flex items-center gap-2">
+                    <i class="fas fa-file-excel"></i>匯出全部庫存 (CSV)
+                </button>
+            </div>
         </div>
     </header>
 
-    <main class="max-w-6xl mx-auto py-10 px-4 md:px-8">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <section class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 mb-10">
-            <h2 class="text-lg font-semibold mb-6 text-gray-300 border-b border-gray-700 pb-2"><i class="fa-solid fa-keyboard mr-2"></i>數據輸入區 (請直接輸入數字)</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                <div>
-                    <label for="progressInput" class="block text-sm font-medium text-gray-400 mb-2">專案進度 (%)</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                            <i class="fa-solid fa-percent text-gray-500"></i>
-                        </div>
-                        <input type="number" id="progressInput" min="0" max="100" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="0-100">
-                    </div>
-                </div>
-
-                <div>
-                    <label for="loadInput" class="block text-sm font-medium text-gray-400 mb-2">伺服器負載 (%)</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                            <i class="fa-solid fa-server text-gray-500"></i>
-                        </div>
-                        <input type="number" id="loadInput" min="0" max="100" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="0-100">
-                    </div>
-                </div>
-
-                <div>
-                    <label for="usersInput" class="block text-sm font-medium text-gray-400 mb-2">目前在線人數 (人)</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                            <i class="fa-solid fa-users text-gray-500"></i>
-                        </div>
-                        <input type="number" id="usersInput" min="0" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="輸入人數">
-                    </div>
-                </div>
-
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
+                <h2 class="text-xl font-bold text-gray-800"><i class="fas fa-bolt text-yellow-500 mr-2"></i>快速建檔區</h2>
+                <button type="button" onclick="addAccountToInventory()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-md transform hover:scale-105 flex items-center gap-2">
+                    <i class="fas fa-plus-circle"></i> 加入下方庫存總表
+                </button>
             </div>
-        </section>
 
-        <section>
-            <h2 class="text-lg font-semibold mb-6 text-gray-300"><i class="fa-solid fa-display mr-2"></i>視覺化面板</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <form id="generatorForm" class="grid grid-cols-1 md:grid-cols-4 gap-6">
                 
-                <div id="cardProgress" class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center transform transition duration-300 hover:scale-105" style="display: none;">
-                    <div class="flex justify-between items-end mb-4">
-                        <h3 class="text-gray-400 font-medium">專案總體進度</h3>
-                        <span id="progressText" class="text-3xl font-bold text-indigo-400">0%</span>
+                <div class="space-y-3">
+                    <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">1. 基本資訊</h3>
+                    <div><label class="block text-xs text-gray-700 mb-1">帳號代碼</label><input type="text" id="g_id" placeholder="例如: 3834vv" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm font-mono uppercase"></div>
+                    <div class="flex gap-2">
+                        <div class="w-1/2"><label class="block text-xs text-gray-700 mb-1">等級</label><input type="number" id="g_level" value="70" class="w-full p-2 border border-gray-300 rounded text-sm"></div>
+                        <div class="w-1/2"><label class="block text-xs text-gray-700 mb-1">陣營</label>
+                            <select id="g_team" class="w-full p-2 border border-gray-300 rounded text-sm">
+                                <option value="藍隊" selected>藍隊</option><option value="紅隊">紅隊</option><option value="黃隊">黃隊</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
-                        <div id="progressDisplay" class="bg-gradient-to-r from-indigo-500 to-indigo-300 h-4 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
-                    </div>
+                    <div><label class="block text-xs text-gray-700 mb-1">💰 價格</label><input type="number" id="g_price" placeholder="例如: 3800" class="w-full p-2 border border-yellow-400 rounded text-sm font-bold text-red-600 bg-yellow-50"></div>
+                    <div><label class="block text-xs text-gray-700 mb-1">星塵</label><input type="text" id="g_stardust" placeholder="例如: 360萬" class="w-full p-2 border border-gray-300 rounded text-sm"></div>
                 </div>
 
-                <div id="cardLoad" class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center transform transition duration-300 hover:scale-105" style="display: none;">
-                    <div class="flex justify-between items-end mb-4">
-                        <h3 class="text-gray-400 font-medium">伺服器即時負載</h3>
-                        <span id="loadText" class="text-3xl font-bold text-cyan-400">0%</span>
-                    </div>
-                    <div class="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
-                        <div id="loadDisplay" class="bg-cyan-500 h-4 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
-                    </div>
-                    <p id="loadStatus" class="text-xs text-cyan-400 mt-3 text-right">系統狀態良好</p>
+                <div class="space-y-2">
+                    <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">2. 亮點特徵</h3>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_marshadow" class="poke-checkbox">瑪夏多特殊調查</label>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_kyurem" class="poke-checkbox">酋雷姆合體</label>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_zamazenta" class="poke-checkbox">蒼響劍盾型態</label>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_necrozma" class="poke-checkbox">奈克洛茲瑪合體</label>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_dyna" class="poke-checkbox">極巨化／超極巨化</label>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_mega_ray" class="poke-checkbox">烈空坐能量</label>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_move_groudon" class="poke-checkbox">斷崖之劍</label>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_move_kyogre" class="poke-checkbox">根源波動</label>
+                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_move_ray" class="poke-checkbox">畫龍點睛</label>
                 </div>
 
-                <div id="cardUsers" class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center items-center transform transition duration-300 hover:scale-105" style="display: none;">
-                    <h3 class="text-gray-400 font-medium mb-2 w-full text-left">活躍用戶數</h3>
-                    <div class="flex items-center justify-center flex-1 w-full">
-                        <span id="usersText" class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 tracking-wider">0</span>
+                <div class="col-span-2 space-y-3">
+                    <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">3. 統計數據 (僅填寫數字)</h3>
+                    
+                    <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <div><label class="block text-[10px] text-gray-600 font-bold">百神</label><input type="number" id="st_hundos" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
+                        <div><label class="block text-[10px] text-gray-600 font-bold">神獸總數</label><input type="number" id="st_legend" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
+                        <div><label class="block text-[10px] text-gray-600 font-bold">色違神獸</label><input type="number" id="st_shiny_leg" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
+                        <div><label class="block text-[10px] text-gray-600 font-bold">裝扮</label><input type="number" id="st_costume" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
+                        <div><label class="block text-[10px] text-gray-600 font-bold">色違裝扮</label><input type="number" id="st_shiny_costume" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
+                        <div><label class="block text-[10px] text-gray-600 font-bold">特別背卡</label><input type="number" id="st_bg_special" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
+                        <div><label class="block text-[10px] text-gray-600 font-bold">紀念背卡</label><input type="number" id="st_bg_comm" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
+                        <div><label class="block text-[10px] text-red-600 font-bold">極巨化(🔥)</label><input type="number" id="st_dyna" class="w-full p-1.5 border border-red-300 rounded text-sm text-center bg-red-50"></div>
+                        <div><label class="block text-[10px] text-red-600 font-bold">超極巨化(🔥)</label><input type="number" id="st_giga" class="w-full p-1.5 border border-red-300 rounded text-sm text-center bg-red-50"></div>
+                        <div><label class="block text-[10px] text-gray-600 font-bold">完美</label><input type="number" id="st_perfect" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
+                        <div><label class="block text-[10px] text-gray-600 font-bold">色違完美</label><input type="number" id="st_shundo" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
                     </div>
-                </div>
 
+                    <div><label class="block text-xs text-gray-700 mb-1">🔥 自訂稀有神獸 (每行自動加🔥)</label><textarea id="g_custom_fire" rows="2" class="w-full p-2 border border-red-200 rounded text-sm custom-scrollbar" placeholder="如有其他特殊文字需求可填寫於此..."></textarea></div>
+                </div>
+            </form>
+        </div>
+
+        <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-gray-800"><i class="fas fa-boxes text-blue-500 mr-2"></i>庫存總表 (<span id="inventoryCount">0</span> 筆)</h2>
+            </div>
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse" id="inventoryTable">
+                    <thead>
+                        <tr class="bg-white text-gray-500 text-xs uppercase tracking-wider font-semibold border-b border-gray-200">
+                            <th class="px-6 py-4">帳號代碼</th>
+                            <th class="px-6 py-4">等級陣營</th>
+                            <th class="px-6 py-4">星塵</th>
+                            <th class="px-6 py-4">售價</th>
+                            <th class="px-6 py-4 text-center">生成文案</th>
+                            <th class="px-6 py-4 text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100" id="inventoryBody">
+                        </tbody>
+                </table>
+                <div id="emptyState" class="text-center py-12 text-gray-400">
+                    <i class="fas fa-inbox text-4xl mb-3"></i>
+                    <p>目前庫存為空，請從上方填寫資料並加入庫存。</p>
+                </div>
             </div>
         </section>
 
     </main>
 
+    <textarea id="hiddenCopyArea" class="hidden"></textarea>
+
     <script>
-        // 取得輸入框與顯示區的元素
-        const progressInput = document.getElementById('progressInput');
-        const progressText = document.getElementById('progressText');
-        const progressDisplay = document.getElementById('progressDisplay');
-        const cardProgress = document.getElementById('cardProgress'); // 取得卡片1外框
+        // 生成完整文案邏輯
+        function generateText() {
+            const v = (id) => document.getElementById(id).value.trim();
+            const checked = (id) => document.getElementById(id).checked;
+            let result = [];
 
-        const loadInput = document.getElementById('loadInput');
-        const loadText = document.getElementById('loadText');
-        const loadDisplay = document.getElementById('loadDisplay');
-        const loadStatus = document.getElementById('loadStatus');
-        const cardLoad = document.getElementById('cardLoad'); // 取得卡片2外框
-
-        const usersInput = document.getElementById('usersInput');
-        const usersText = document.getElementById('usersText');
-        const cardUsers = document.getElementById('cardUsers'); // 取得卡片3外框
-
-        // 監聽專案進度變化
-        progressInput.addEventListener('input', (e) => {
-            let rawValue = e.target.value;
-            // 如果輸入為 0 或清空輸入框，則隱藏卡片
-            if (rawValue === '0' || rawValue === '') {
-                cardProgress.style.display = 'none';
-            } else {
-                cardProgress.style.display = ''; // 恢復顯示
-                let val = Math.max(0, Math.min(100, rawValue)); // 限制在 0-100 之間
-                progressText.innerText = val + '%';
-                progressDisplay.style.width = val + '%';
+            result.push(v('g_id'));
+            result.push(`${v('g_level')}等${v('g_team')}`);
+            if(checked('chk_marshadow')) result.push(`🔥凱路迪歐, 瑪夏多特殊調查🔥`);
+            if(v('g_custom_fire')) {
+                v('g_custom_fire').split('\n').filter(l => l.trim()).forEach(h => result.push(`🔥${h.replace(/🔥/g, '').trim()}🔥`));
             }
-        });
+            if(checked('chk_kyurem')) result.push(`‼️酋雷姆闇黑/雙型態合體‼️`);
+            if(checked('chk_zamazenta')) result.push(`‼️蒼響劍盾型態‼️`);
+            if(checked('chk_necrozma')) result.push(`‼️奈克洛茲瑪月亮/雙型態合體‼️`);
+            if(checked('chk_dyna')) result.push(`✨可打極巨化／超極巨化✨`);
+            if(checked('chk_mega_ray')) result.push(`⭐️烈空坐能量夠Mega⭐️`);
+            if(checked('chk_move_groudon')) result.push(`固拉多有開斷崖之劍`);
+            if(checked('chk_move_kyogre')) result.push(`蓋歐卡有開根源波動`);
+            if(checked('chk_move_ray')) result.push(`烈空坐有開畫龍點睛`);
+            if(v('g_stardust')) result.push(`星塵 ${v('g_stardust')}`);
+            
+            // 11 個純數字輸入轉換邏輯
+            if(v('st_hundos')) result.push(`✅${v('st_hundos')}隻百神`);
+            if(v('st_legend')) result.push(`✅神獸總數${v('st_legend')}隻`);
+            if(v('st_shiny_leg')) result.push(`✅色違神獸${v('st_shiny_leg')}隻`);
+            if(v('st_costume')) result.push(`✅裝扮${v('st_costume')}隻`);
+            if(v('st_shiny_costume')) result.push(`✅色違裝扮${v('st_shiny_costume')}隻`);
+            if(v('st_bg_special')) result.push(`✅特別背卡${v('st_bg_special')}隻`);
+            if(v('st_bg_comm')) result.push(`✅紀念背卡${v('st_bg_comm')}隻`);
+            if(v('st_dyna')) result.push(`🔥極巨化${v('st_dyna')}隻`);
+            if(v('st_giga')) result.push(`🔥超極巨化${v('st_giga')}隻`);
+            if(v('st_perfect')) result.push(`✅完美${v('st_perfect')}隻`);
+            if(v('st_shundo')) result.push(`✅色違完美${v('st_shundo')}隻`);
+            
+            if(v('g_price')) result.push(`💰價格 ${v('g_price')}`);
 
-        // 監聽伺服器負載變化
-        loadInput.addEventListener('input', (e) => {
-            let rawValue = e.target.value;
-            // 如果輸入為 0 或清空輸入框，則隱藏卡片
-            if (rawValue === '0' || rawValue === '') {
-                cardLoad.style.display = 'none';
-            } else {
-                cardLoad.style.display = ''; // 恢復顯示
-                let val = Math.max(0, Math.min(100, rawValue));
-                loadText.innerText = val + '%';
-                loadDisplay.style.width = val + '%';
-                
-                // 根據數字改變顏色與狀態文字
-                if (val > 80) {
-                    loadDisplay.className = 'bg-red-500 h-4 rounded-full transition-all duration-500 ease-out';
-                    loadText.className = 'text-3xl font-bold text-red-500';
-                    loadStatus.innerText = '⚠️ 警告：負載過高！';
-                    loadStatus.className = 'text-xs text-red-500 mt-3 text-right animate-pulse';
-                } else if (val > 60) {
-                    loadDisplay.className = 'bg-yellow-500 h-4 rounded-full transition-all duration-500 ease-out';
-                    loadText.className = 'text-3xl font-bold text-yellow-500';
-                    loadStatus.innerText = '系統負載偏高';
-                    loadStatus.className = 'text-xs text-yellow-500 mt-3 text-right';
-                } else {
-                    loadDisplay.className = 'bg-cyan-500 h-4 rounded-full transition-all duration-500 ease-out';
-                    loadText.className = 'text-3xl font-bold text-cyan-400';
-                    loadStatus.innerText = '系統狀態良好';
-                    loadStatus.className = 'text-xs text-cyan-400 mt-3 text-right';
+            return result.join('\n');
+        }
+
+        // 將帳號加入庫存總表
+        function addAccountToInventory() {
+            const id = document.getElementById('g_id').value.trim();
+            if(!id) { alert("請至少輸入帳號代碼！"); return; }
+
+            const level = document.getElementById('g_level').value;
+            const team = document.getElementById('g_team').value;
+            const price = document.getElementById('g_price').value || "未標價";
+            const stardust = document.getElementById('g_stardust').value || "未知";
+            
+            // 取得生成的長篇文案，並安全編碼
+            const fullText = encodeURIComponent(generateText());
+
+            const tbody = document.getElementById('inventoryBody');
+            const newRow = document.createElement('tr');
+            newRow.className = 'hover:bg-blue-50 transition-colors bg-white';
+            
+            // 決定陣營顏色
+            let teamColor = 'text-gray-500';
+            if(team === '紅隊') teamColor = 'text-red-500';
+            if(team === '藍隊') teamColor = 'text-blue-500';
+            if(team === '黃隊') teamColor = 'text-yellow-500';
+
+            newRow.innerHTML = `
+                <td class="px-6 py-4 font-mono font-bold text-gray-900 uppercase">${id}</td>
+                <td class="px-6 py-4 text-sm font-bold ${teamColor}">${level}等 ${team}</td>
+                <td class="px-6 py-4 text-sm text-gray-600">${stardust}</td>
+                <td class="px-6 py-4 text-sm font-bold text-red-600">$ ${price}</td>
+                <td class="px-6 py-4 text-center">
+                    <button onclick="copyInventoryText('${fullText}', this)" class="bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm">
+                        <i class="far fa-copy mr-1"></i>複製文案
+                    </button>
+                </td>
+                <td class="px-6 py-4 text-center">
+                    <button onclick="this.closest('tr').remove(); updateCount();" class="text-red-400 hover:text-red-600 transition-colors p-2"><i class="fas fa-trash-alt"></i></button>
+                </td>
+            `;
+            
+            // 插入到表格最上方
+            tbody.insertBefore(newRow, tbody.firstChild);
+            
+            // 更新狀態與清空表單 (只清空數字與勾選，保留陣營與等級方便連打)
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('g_id').value = ''; 
+            const numInputs = document.querySelectorAll('#generatorForm input[type="number"]');
+            numInputs.forEach(input => { if(input.id !== 'g_level') input.value = ''; });
+            const checkBoxes = document.querySelectorAll('#generatorForm input[type="checkbox"]');
+            checkBoxes.forEach(cb => cb.checked = false);
+            document.getElementById('g_custom_fire').value = '';
+
+            updateCount();
+        }
+
+        function updateCount() {
+            const count = document.getElementById('inventoryBody').children.length;
+            document.getElementById('inventoryCount').innerText = count;
+            if(count === 0) document.getElementById('emptyState').style.display = 'block';
+        }
+
+        // 複製表格內特定帳號的文案
+        function copyInventoryText(encodedText, btn) {
+            const rawText = decodeURIComponent(encodedText);
+            const hiddenArea = document.getElementById('hiddenCopyArea');
+            hiddenArea.style.display = 'block';
+            hiddenArea.value = rawText;
+            hiddenArea.select();
+            document.execCommand('copy');
+            hiddenArea.style.display = 'none';
+            window.getSelection().removeAllRanges();
+
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> 已複製';
+            btn.classList.add('bg-green-600');
+            btn.classList.remove('bg-gray-800');
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.classList.remove('bg-green-600');
+                btn.classList.add('bg-gray-800');
+            }, 1500);
+        }
+
+        // 匯出 CSV
+        function exportTableToCSV(filename) {
+            let csv = [];
+            let rows = document.querySelectorAll("#inventoryTable tr");
+            if(rows.length <= 1) { alert("目前沒有庫存可以匯出喔！"); return; }
+
+            for (let i = 0; i < rows.length; i++) {
+                let row = [], cols = rows[i].querySelectorAll("td, th");
+                // 略過最後兩個按鈕欄位
+                for (let j = 0; j < cols.length - 2; j++) {
+                    let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").trim();
+                    row.push('"' + data + '"');
                 }
+                csv.push(row.join(","));
             }
-        });
-
-        // 監聽在線人數變化
-        usersInput.addEventListener('input', (e) => {
-            let rawValue = e.target.value;
-            // 如果輸入為 0 或清空輸入框，則隱藏卡片
-            if (rawValue === '0' || rawValue === '') {
-                cardUsers.style.display = 'none';
-            } else {
-                cardUsers.style.display = ''; // 恢復顯示
-                let val = Number(rawValue);
-                usersText.innerText = val.toLocaleString('en-US'); // 自動加上千分位逗號
-            }
-        });
+            let csvFile = new Blob(["\uFEFF" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
+            let downloadLink = document.createElement("a");
+            downloadLink.download = filename;
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            downloadLink.style.display = "none";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
     </script>
 </body>
 </html>
