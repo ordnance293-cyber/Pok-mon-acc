@@ -75,12 +75,20 @@
                 <div class="col-span-2 space-y-3">
                     <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">3. 統計與自訂亮點</h3>
                     <div><label class="block text-xs text-gray-700 mb-1">百神詳細清單 (自動加✅)</label><input type="text" id="g_hundos" placeholder="例如: 5隻百神 100%完全體鋼彈..." class="w-full p-2 border border-gray-300 rounded text-sm"></div>
-                    <div class="grid grid-cols-4 gap-2">
+                    
+                    <div class="grid grid-cols-5 gap-2">
                         <div><label class="block text-[10px] text-gray-600">神獸總數</label><input type="number" id="st_legend" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
                         <div><label class="block text-[10px] text-gray-600">色違神獸</label><input type="number" id="st_shiny_leg" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
-                        <div><label class="block text-[10px] text-gray-600">極巨化</label><input type="number" id="st_dyna" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
-                        <div><label class="block text-[10px] text-gray-600">完美(100%)</label><input type="number" id="st_perfect" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-[10px] text-gray-600">裝扮</label><input type="number" id="st_costume" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-[10px] text-gray-600">色違裝扮</label><input type="number" id="st_shiny_costume" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-[10px] text-gray-600">特別背卡</label><input type="number" id="st_bg_special" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-[10px] text-gray-600">紀念背卡</label><input type="number" id="st_bg_comm" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-[10px] text-gray-600">極巨化(🔥)</label><input type="number" id="st_dyna" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-[10px] text-gray-600">超極巨化(🔥)</label><input type="number" id="st_giga" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-[10px] text-gray-600">完美</label><input type="number" id="st_perfect" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-[10px] text-gray-600">色違完美</label><input type="number" id="st_shundo" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
                     </div>
+
                     <div><label class="block text-xs text-gray-700 mb-1">🔥 自訂稀有神獸 (每行自動加🔥)</label><textarea id="g_custom_fire" rows="2" class="w-full p-2 border border-red-200 rounded text-sm custom-scrollbar" placeholder="稀有無極汰那..."></textarea></div>
                 </div>
             </form>
@@ -138,11 +146,20 @@
             if(checked('chk_move_kyogre')) result.push(`蓋歐卡有開根源波動`);
             if(checked('chk_move_ray')) result.push(`烈空坐有開畫龍點睛`);
             if(v('g_stardust')) result.push(`星塵 ${v('g_stardust')}`);
+            
+            // 全新擴充的 11 個統計欄位
             if(v('g_hundos')) result.push(`✅${v('g_hundos')}`);
             if(v('st_legend')) result.push(`✅神獸總數${v('st_legend')}隻`);
             if(v('st_shiny_leg')) result.push(`✅色違神獸${v('st_shiny_leg')}隻`);
+            if(v('st_costume')) result.push(`✅裝扮${v('st_costume')}隻`);
+            if(v('st_shiny_costume')) result.push(`✅色違裝扮${v('st_shiny_costume')}隻`);
+            if(v('st_bg_special')) result.push(`✅特別背卡${v('st_bg_special')}隻`);
+            if(v('st_bg_comm')) result.push(`✅紀念背卡${v('st_bg_comm')}隻`);
             if(v('st_dyna')) result.push(`🔥極巨化${v('st_dyna')}隻`);
+            if(v('st_giga')) result.push(`🔥超極巨化${v('st_giga')}隻`);
             if(v('st_perfect')) result.push(`✅完美${v('st_perfect')}隻`);
+            if(v('st_shundo')) result.push(`✅色違完美${v('st_shundo')}隻`);
+            
             if(v('g_price')) result.push(`💰價格 ${v('g_price')}`);
 
             return result.join('\n');
