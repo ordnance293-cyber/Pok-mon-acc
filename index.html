@@ -38,7 +38,7 @@
                         <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                             <i class="fa-solid fa-percent text-gray-500"></i>
                         </div>
-                        <input type="number" id="progressInput" value="65" min="0" max="100" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="0-100">
+                        <input type="number" id="progressInput" min="0" max="100" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="0-100">
                     </div>
                 </div>
 
@@ -48,7 +48,7 @@
                         <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                             <i class="fa-solid fa-server text-gray-500"></i>
                         </div>
-                        <input type="number" id="loadInput" value="42" min="0" max="100" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="0-100">
+                        <input type="number" id="loadInput" min="0" max="100" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="0-100">
                     </div>
                 </div>
 
@@ -58,7 +58,7 @@
                         <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                             <i class="fa-solid fa-users text-gray-500"></i>
                         </div>
-                        <input type="number" id="usersInput" value="1250" min="0" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="輸入人數">
+                        <input type="number" id="usersInput" min="0" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 p-3 outline-none transition-all placeholder-gray-500" placeholder="輸入人數">
                     </div>
                 </div>
 
@@ -69,31 +69,31 @@
             <h2 class="text-lg font-semibold mb-6 text-gray-300"><i class="fa-solid fa-display mr-2"></i>視覺化面板</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                <div class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center transform transition duration-300 hover:scale-105">
+                <div id="cardProgress" class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center transform transition duration-300 hover:scale-105" style="display: none;">
                     <div class="flex justify-between items-end mb-4">
                         <h3 class="text-gray-400 font-medium">專案總體進度</h3>
-                        <span id="progressText" class="text-3xl font-bold text-indigo-400">65%</span>
+                        <span id="progressText" class="text-3xl font-bold text-indigo-400">0%</span>
                     </div>
                     <div class="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
-                        <div id="progressDisplay" class="bg-gradient-to-r from-indigo-500 to-indigo-300 h-4 rounded-full transition-all duration-500 ease-out" style="width: 65%"></div>
+                        <div id="progressDisplay" class="bg-gradient-to-r from-indigo-500 to-indigo-300 h-4 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
                     </div>
                 </div>
 
-                <div class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center transform transition duration-300 hover:scale-105">
+                <div id="cardLoad" class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center transform transition duration-300 hover:scale-105" style="display: none;">
                     <div class="flex justify-between items-end mb-4">
                         <h3 class="text-gray-400 font-medium">伺服器即時負載</h3>
-                        <span id="loadText" class="text-3xl font-bold text-cyan-400">42%</span>
+                        <span id="loadText" class="text-3xl font-bold text-cyan-400">0%</span>
                     </div>
                     <div class="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
-                        <div id="loadDisplay" class="bg-cyan-500 h-4 rounded-full transition-all duration-500 ease-out" style="width: 42%"></div>
+                        <div id="loadDisplay" class="bg-cyan-500 h-4 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
                     </div>
                     <p id="loadStatus" class="text-xs text-cyan-400 mt-3 text-right">系統狀態良好</p>
                 </div>
 
-                <div class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center items-center transform transition duration-300 hover:scale-105">
+                <div id="cardUsers" class="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 flex flex-col justify-center items-center transform transition duration-300 hover:scale-105" style="display: none;">
                     <h3 class="text-gray-400 font-medium mb-2 w-full text-left">活躍用戶數</h3>
                     <div class="flex items-center justify-center flex-1 w-full">
-                        <span id="usersText" class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 tracking-wider">1,250</span>
+                        <span id="usersText" class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 tracking-wider">0</span>
                     </div>
                 </div>
 
@@ -107,51 +107,75 @@
         const progressInput = document.getElementById('progressInput');
         const progressText = document.getElementById('progressText');
         const progressDisplay = document.getElementById('progressDisplay');
+        const cardProgress = document.getElementById('cardProgress'); // 取得卡片1外框
 
         const loadInput = document.getElementById('loadInput');
         const loadText = document.getElementById('loadText');
         const loadDisplay = document.getElementById('loadDisplay');
         const loadStatus = document.getElementById('loadStatus');
+        const cardLoad = document.getElementById('cardLoad'); // 取得卡片2外框
 
         const usersInput = document.getElementById('usersInput');
         const usersText = document.getElementById('usersText');
+        const cardUsers = document.getElementById('cardUsers'); // 取得卡片3外框
 
         // 監聽專案進度變化
         progressInput.addEventListener('input', (e) => {
-            let val = Math.max(0, Math.min(100, e.target.value || 0)); // 限制在 0-100 之間
-            progressText.innerText = val + '%';
-            progressDisplay.style.width = val + '%';
-        });
-
-        // 監聽伺服器負載變化 (加入顏色警告邏輯)
-        loadInput.addEventListener('input', (e) => {
-            let val = Math.max(0, Math.min(100, e.target.value || 0));
-            loadText.innerText = val + '%';
-            loadDisplay.style.width = val + '%';
-            
-            // 根據數字改變顏色與狀態文字
-            if (val > 80) {
-                loadDisplay.className = 'bg-red-500 h-4 rounded-full transition-all duration-500 ease-out';
-                loadText.className = 'text-3xl font-bold text-red-500';
-                loadStatus.innerText = '⚠️ 警告：負載過高！';
-                loadStatus.className = 'text-xs text-red-500 mt-3 text-right animate-pulse';
-            } else if (val > 60) {
-                loadDisplay.className = 'bg-yellow-500 h-4 rounded-full transition-all duration-500 ease-out';
-                loadText.className = 'text-3xl font-bold text-yellow-500';
-                loadStatus.innerText = '系統負載偏高';
-                loadStatus.className = 'text-xs text-yellow-500 mt-3 text-right';
+            let rawValue = e.target.value;
+            // 如果輸入為 0 或清空輸入框，則隱藏卡片
+            if (rawValue === '0' || rawValue === '') {
+                cardProgress.style.display = 'none';
             } else {
-                loadDisplay.className = 'bg-cyan-500 h-4 rounded-full transition-all duration-500 ease-out';
-                loadText.className = 'text-3xl font-bold text-cyan-400';
-                loadStatus.innerText = '系統狀態良好';
-                loadStatus.className = 'text-xs text-cyan-400 mt-3 text-right';
+                cardProgress.style.display = ''; // 恢復顯示
+                let val = Math.max(0, Math.min(100, rawValue)); // 限制在 0-100 之間
+                progressText.innerText = val + '%';
+                progressDisplay.style.width = val + '%';
             }
         });
 
-        // 監聽在線人數變化 (加入千分位逗號格式化)
+        // 監聽伺服器負載變化
+        loadInput.addEventListener('input', (e) => {
+            let rawValue = e.target.value;
+            // 如果輸入為 0 或清空輸入框，則隱藏卡片
+            if (rawValue === '0' || rawValue === '') {
+                cardLoad.style.display = 'none';
+            } else {
+                cardLoad.style.display = ''; // 恢復顯示
+                let val = Math.max(0, Math.min(100, rawValue));
+                loadText.innerText = val + '%';
+                loadDisplay.style.width = val + '%';
+                
+                // 根據數字改變顏色與狀態文字
+                if (val > 80) {
+                    loadDisplay.className = 'bg-red-500 h-4 rounded-full transition-all duration-500 ease-out';
+                    loadText.className = 'text-3xl font-bold text-red-500';
+                    loadStatus.innerText = '⚠️ 警告：負載過高！';
+                    loadStatus.className = 'text-xs text-red-500 mt-3 text-right animate-pulse';
+                } else if (val > 60) {
+                    loadDisplay.className = 'bg-yellow-500 h-4 rounded-full transition-all duration-500 ease-out';
+                    loadText.className = 'text-3xl font-bold text-yellow-500';
+                    loadStatus.innerText = '系統負載偏高';
+                    loadStatus.className = 'text-xs text-yellow-500 mt-3 text-right';
+                } else {
+                    loadDisplay.className = 'bg-cyan-500 h-4 rounded-full transition-all duration-500 ease-out';
+                    loadText.className = 'text-3xl font-bold text-cyan-400';
+                    loadStatus.innerText = '系統狀態良好';
+                    loadStatus.className = 'text-xs text-cyan-400 mt-3 text-right';
+                }
+            }
+        });
+
+        // 監聽在線人數變化
         usersInput.addEventListener('input', (e) => {
-            let val = Number(e.target.value || 0);
-            usersText.innerText = val.toLocaleString('en-US'); // 自動加上 1,000 這種逗號
+            let rawValue = e.target.value;
+            // 如果輸入為 0 或清空輸入框，則隱藏卡片
+            if (rawValue === '0' || rawValue === '') {
+                cardUsers.style.display = 'none';
+            } else {
+                cardUsers.style.display = ''; // 恢復顯示
+                let val = Number(rawValue);
+                usersText.innerText = val.toLocaleString('en-US'); // 自動加上千分位逗號
+            }
         });
     </script>
 </body>
