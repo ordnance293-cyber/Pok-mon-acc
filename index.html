@@ -14,6 +14,8 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 8px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7c7cc; border-radius: 8px; }
         .poke-checkbox { width: 1rem; height: 1rem; color: #2563eb; background-color: #f3f4f6; border-color: #d1d5db; border-radius: 0.25rem; cursor: pointer; }
+        /* 圖片預覽區的限制高度 */
+        #imagePreview { max-height: 250px; object-fit: contain; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased relative">
@@ -42,9 +44,22 @@
                 </button>
             </div>
 
-            <form id="generatorForm" class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <form id="generatorForm" class="grid grid-cols-1 md:grid-cols-5 gap-6">
                 
-                <div class="space-y-3">
+                <div class="space-y-3 md:col-span-1 bg-gray-50 p-3 rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center relative">
+                    <h3 class="font-bold text-xs text-gray-500 uppercase tracking-wider w-full text-center mb-2"><i class="fas fa-image mr-1"></i>圖片對照區</h3>
+                    <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="previewImage(event)">
+                    <label for="imageInput" class="cursor-pointer bg-white border border-gray-300 text-gray-600 px-3 py-1 rounded text-xs hover:bg-gray-100 transition shadow-sm mb-2 w-full text-center">
+                        選擇遊戲截圖
+                    </label>
+                    <div class="w-full flex justify-center overflow-hidden">
+                        <img id="imagePreview" src="" alt="預覽圖" class="hidden rounded shadow-sm">
+                        <span id="imagePlaceholder" class="text-xs text-gray-400 text-center py-8">尚未上傳圖片<br>(可將圖片丟給 AI 辨識後<br>貼入右側清單)</span>
+                    </div>
+                    <button type="button" id="clearImageBtn" onclick="clearImage()" class="hidden absolute top-2 right-2 text-red-500 hover:text-red-700 bg-white rounded-full w-6 h-6 flex items-center justify-center shadow"><i class="fas fa-times text-xs"></i></button>
+                </div>
+
+                <div class="space-y-3 md:col-span-1">
                     <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">1. 基本資訊</h3>
                     <div><label class="block text-xs text-gray-700 mb-1">帳號代碼</label><input type="text" id="g_id" placeholder="例如: 3834vv" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm font-mono uppercase"></div>
                     <div class="flex gap-2">
@@ -59,7 +74,7 @@
                     <div><label class="block text-xs text-gray-700 mb-1">星塵</label><input type="text" id="g_stardust" placeholder="例如: 360萬" class="w-full p-2 border border-gray-300 rounded text-sm"></div>
                 </div>
 
-                <div class="space-y-2">
+                <div class="space-y-2 md:col-span-1">
                     <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">2. 亮點特徵</h3>
                     <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_marshadow" class="poke-checkbox">瑪夏多特殊調查</label>
                     <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_kyurem" class="poke-checkbox">酋雷姆合體</label>
@@ -72,9 +87,15 @@
                     <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_move_ray" class="poke-checkbox">畫龍點睛</label>
                 </div>
 
-                <div class="col-span-2 space-y-3">
+                <div class="col-span-1 md:col-span-2 space-y-3">
                     <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">3. 統計與自訂亮點</h3>
-                    <div><label class="block text-xs text-gray-700 mb-1">百神詳細清單 (自動加✅)</label><input type="text" id="g_hundos" placeholder="例如: 5隻百神 100%完全體鋼彈..." class="w-full p-2 border border-gray-300 rounded text-sm"></div>
+                    <div>
+                        <label class="block text-xs text-gray-700 mb-1 flex justify-between">
+                            <span>百神詳細清單 (自動加✅)</span>
+                            <span class="text-blue-500 text-[10px]"><i class="fas fa-info-circle"></i> 將 AI 辨識結果貼於此</span>
+                        </label>
+                        <input type="text" id="g_hundos" placeholder="貼上 AI 辨識出來的名稱..." class="w-full p-2 border border-blue-200 rounded text-sm bg-blue-50 focus:ring-2 focus:ring-blue-500">
+                    </div>
                     
                     <div class="grid grid-cols-5 gap-2">
                         <div><label class="block text-[10px] text-gray-600">神獸總數</label><input type="number" id="st_legend" class="w-full p-1 border border-gray-300 rounded text-sm"></div>
@@ -111,7 +132,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100" id="inventoryBody">
-                        </tbody>
+                    </tbody>
                 </table>
                 <div id="emptyState" class="text-center py-12 text-gray-400">
                     <i class="fas fa-inbox text-4xl mb-3"></i>
@@ -119,21 +140,50 @@
                 </div>
             </div>
         </section>
-
     </main>
 
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 🌟 新增：定義全域陣列來儲存所有帳號資料，並在網頁載入時嘗試讀取 localStorage
+        // --- 🌟 新增：圖片預覽功能的 JavaScript ---
+        function previewImage(event) {
+            const input = event.target;
+            const preview = document.getElementById('imagePreview');
+            const placeholder = document.getElementById('imagePlaceholder');
+            const clearBtn = document.getElementById('clearImageBtn');
+
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.classList.remove('hidden');
+                    placeholder.classList.add('hidden');
+                    clearBtn.classList.remove('hidden');
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function clearImage() {
+            const input = document.getElementById('imageInput');
+            const preview = document.getElementById('imagePreview');
+            const placeholder = document.getElementById('imagePlaceholder');
+            const clearBtn = document.getElementById('clearImageBtn');
+
+            input.value = ''; // 清空選擇的檔案
+            preview.src = '';
+            preview.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+            clearBtn.classList.add('hidden');
+        }
+        // --- 圖片預覽功能結束 ---
+
         let inventoryData = JSON.parse(localStorage.getItem('pokemonInventory')) || [];
 
-        // 🌟 新增：網頁載入完成後，立刻把資料畫到表格上
         window.onload = function() {
             renderInventory();
         };
 
-        // 生成完整文案邏輯
         function generateText() {
             const v = (id) => document.getElementById(id).value.trim();
             const checked = (id) => document.getElementById(id).checked;
@@ -152,7 +202,7 @@
             if(checked('chk_mega_ray')) result.push(`⭐️烈空坐能量夠Mega⭐️`);
             if(checked('chk_move_groudon')) result.push(`固拉多有開斷崖之劍`);
             if(checked('chk_move_kyogre')) result.push(`蓋歐卡有開根源波動`);
-            if(checked('chk_move_ray')) result.push(`烈空坐有開畫長點睛`);
+            if(checked('chk_move_ray')) result.push(`烈空坐有開畫龍點睛`);
             if(v('g_stardust')) result.push(`星塵 ${v('g_stardust')}`);
             
             if(v('g_hundos')) result.push(`✅${v('g_hundos')}`);
@@ -172,7 +222,6 @@
             return result.join('\n');
         }
 
-        // 將帳號加入庫存總表 (修改為寫入陣列與 localStorage)
         function addAccountToInventory() {
             const accountId = document.getElementById('g_id').value.trim();
             if(!accountId) { alert("請至少輸入帳號代碼！"); return; }
@@ -183,11 +232,8 @@
             const stardust = document.getElementById('g_stardust').value || "未知";
             
             const fullText = encodeURIComponent(generateText());
-            
-            // 🌟 建立一個不重複的 ID 給這筆資料 (用時間戳記)
             const uid = Date.now().toString();
 
-            // 🌟 把表單資料打包成一個物件
             const newItem = {
                 uid: uid,
                 accountId: accountId,
@@ -198,23 +244,18 @@
                 fullText: fullText
             };
 
-            // 🌟 把新資料加到陣列的「最前面」 (unshift)
             inventoryData.unshift(newItem);
-
-            // 🌟 儲存進瀏覽器的 LocalStorage
             saveToLocalStorage();
-
-            // 🌟 重新畫出整個表格
             renderInventory();
 
-            // 清空代碼欄位方便連續新增
+            // 新增完成後，可以選擇是否清空圖片預覽
+            clearImage();
             document.getElementById('g_id').value = ''; 
         }
 
-        // 🌟 新增：將陣列資料渲染成 HTML 表格
         function renderInventory() {
             const tbody = document.getElementById('inventoryBody');
-            tbody.innerHTML = ''; // 先清空目前的表格內容
+            tbody.innerHTML = ''; 
 
             inventoryData.forEach(item => {
                 const newRow = document.createElement('tr');
@@ -245,25 +286,20 @@
             updateCount();
         }
 
-        // 🌟 新增：刪除單一帳號的功能
         function deleteAccount(uid) {
             if(confirm('確定要刪除這筆資料嗎？')) {
-                // 利用 filter 過濾掉被點擊刪除的那筆資料
                 inventoryData = inventoryData.filter(item => item.uid !== uid);
-                // 儲存更新後的陣列
                 saveToLocalStorage();
-                // 重新渲染表格
                 renderInventory();
             }
         }
 
-        // 🌟 新增：獨立儲存到 LocalStorage 的函式
         function saveToLocalStorage() {
             localStorage.setItem('pokemonInventory', JSON.stringify(inventoryData));
         }
 
         function updateCount() {
-            const count = inventoryData.length; // 改由陣列長度來判斷
+            const count = inventoryData.length; 
             document.getElementById('inventoryCount').innerText = count;
             if(count === 0) {
                 document.getElementById('emptyState').style.display = 'block';
@@ -272,7 +308,6 @@
             }
         }
 
-        // 複製表格內特定帳號的文案
         function copyInventoryText(encodedText, btn) {
             const rawText = decodeURIComponent(encodedText);
             const hiddenArea = document.getElementById('hiddenCopyArea');
@@ -294,7 +329,6 @@
             }, 1500);
         }
 
-        // 匯出 CSV (抓取表格內容)
         function exportTableToCSV(filename) {
             let csv = [];
             let rows = document.querySelectorAll("#inventoryTable tr");
@@ -302,14 +336,12 @@
 
             for (let i = 0; i < rows.length; i++) {
                 let row = [], cols = rows[i].querySelectorAll("td, th");
-                // 略過最後兩個按鈕欄位
                 for (let j = 0; j < cols.length - 2; j++) {
                     let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").trim();
                     row.push('"' + data + '"');
                 }
                 csv.push(row.join(","));
             }
-            // 加上 BOM 避免中文亂碼
             let csvFile = new Blob(["\uFEFF" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
             let downloadLink = document.createElement("a");
             downloadLink.download = filename;
