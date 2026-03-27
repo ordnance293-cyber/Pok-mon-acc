@@ -3,94 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資料匯出系統</title>
+    <title>寶可夢帳號管理系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
+<body class="bg-gray-900 text-gray-200 font-sans min-h-screen flex flex-col">
 
-    <header class="bg-indigo-600 text-white shadow-md">
+    <header class="bg-red-600 text-white shadow-lg border-b-4 border-gray-800">
         <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-            <h1 class="text-xl font-bold flex items-center gap-2">
-                <i class="fa-solid fa-database"></i> 員工資料管理系統
+            <h1 class="text-2xl font-bold flex items-center gap-2 tracking-wide">
+                <i class="fa-solid fa-gamepad"></i> 寶可夢帳號管理系統
             </h1>
         </div>
     </header>
 
     <main class="container mx-auto px-4 py-8 flex-grow">
         
-        <section class="flex justify-between items-center mb-6">
-            <h2 class="text-lg font-semibold text-gray-700">第一季人員名冊</h2>
+        <section class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <h2 class="text-xl font-semibold text-gray-100 flex items-center gap-2">
+                <i class="fa-solid fa-users"></i> 訓練家清單
+            </h2>
             
             <div class="flex gap-3">
                 <button 
                     onclick="kyuremFusion()" 
-                    class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg shadow transition duration-200 flex items-center gap-2 text-sm font-medium">
-                    <i class="fa-solid fa-bolt"></i>
+                    class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-lg shadow-lg border border-purple-400 transition duration-200 flex items-center gap-2 text-sm font-bold tracking-wider">
+                    <i class="fa-solid fa-dragon"></i>
                     酋雷姆合體
                 </button>
 
                 <button 
-                    onclick="exportTableToCSV('employee_data.csv')" 
-                    class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg shadow transition duration-200 flex items-center gap-2 text-sm font-medium">
-                    <i class="fa-solid fa-file-excel"></i>
-                    匯出為 CSV 試算表
+                    onclick="exportTableToCSV('pokemon_accounts.csv')" 
+                    class="bg-green-600 hover:bg-green-500 text-white px-5 py-2 rounded-lg shadow-lg border border-green-400 transition duration-200 flex items-center gap-2 text-sm font-bold tracking-wider">
+                    <i class="fa-solid fa-file-csv"></i>
+                    匯出帳號資料
                 </button>
             </div>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <section class="bg-gray-800 rounded-xl shadow-xl border border-gray-700 overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse" id="dataTable">
                     <thead>
-                        <tr class="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider border-b border-gray-200">
-                            <th class="p-4 font-semibold">員工編號</th>
-                            <th class="p-4 font-semibold">姓名</th>
-                            <th class="p-4 font-semibold">部門</th>
-                            <th class="p-4 font-semibold">職稱</th>
-                            <th class="p-4 font-semibold">聯絡信箱</th>
-                            <th class="p-4 font-semibold">狀態</th>
+                        <tr class="bg-gray-900 text-gray-400 text-sm uppercase tracking-wider border-b border-gray-700">
+                            <th class="p-4 font-semibold">帳號 ID</th>
+                            <th class="p-4 font-semibold">訓練家名稱</th>
+                            <th class="p-4 font-semibold">陣營隊伍</th>
+                            <th class="p-4 font-semibold">目前等級</th>
+                            <th class="p-4 font-semibold">寶可幣</th>
+                            <th class="p-4 font-semibold">帳號狀態</th>
                         </tr>
                     </thead>
-                    <tbody class="text-sm divide-y divide-gray-100">
-                        <tr class="hover:bg-gray-50 transition duration-150">
-                            <td class="p-4 text-gray-500">#EMP-001</td>
-                            <td class="p-4 font-medium text-gray-900">陳建宏</td>
-                            <td class="p-4">工程部</td>
-                            <td class="p-4">資深前端工程師</td>
-                            <td class="p-4 text-indigo-600 hover:underline cursor-pointer">chienhong.chen@example.com</td>
+                    <tbody class="text-sm divide-y divide-gray-700">
+                        <tr class="hover:bg-gray-700 transition duration-150">
+                            <td class="p-4 text-gray-400">#PTC-8832</td>
+                            <td class="p-4 font-bold text-white">AshKetchum_99</td>
+                            <td class="p-4 text-blue-400 font-medium"><i class="fa-brands fa-diaspora"></i> 神秘隊 (藍)</td>
+                            <td class="p-4 text-yellow-400 font-bold">Lv. 45</td>
+                            <td class="p-4">1,250</td>
                             <td class="p-4">
-                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">在職</span>
+                                <span class="bg-green-900 text-green-300 border border-green-700 px-2 py-1 rounded-full text-xs font-medium">正常運作</span>
                             </td>
                         </tr>
-                        <tr class="hover:bg-gray-50 transition duration-150">
-                            <td class="p-4 text-gray-500">#EMP-002</td>
-                            <td class="p-4 font-medium text-gray-900">林雅婷</td>
-                            <td class="p-4">設計部</td>
-                            <td class="p-4">UI/UX 設計師</td>
-                            <td class="p-4 text-indigo-600 hover:underline cursor-pointer">yating.lin@example.com</td>
+                        <tr class="hover:bg-gray-700 transition duration-150">
+                            <td class="p-4 text-gray-400">#PTC-1094</td>
+                            <td class="p-4 font-bold text-white">Red_Legend</td>
+                            <td class="p-4 text-red-400 font-medium"><i class="fa-brands fa-hotjar"></i> 勇氣隊 (紅)</td>
+                            <td class="p-4 text-yellow-400 font-bold">Lv. 50</td>
+                            <td class="p-4">8,400</td>
                             <td class="p-4">
-                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">在職</span>
+                                <span class="bg-green-900 text-green-300 border border-green-700 px-2 py-1 rounded-full text-xs font-medium">正常運作</span>
                             </td>
                         </tr>
-                        <tr class="hover:bg-gray-50 transition duration-150">
-                            <td class="p-4 text-gray-500">#EMP-003</td>
-                            <td class="p-4 font-medium text-gray-900">張偉翔</td>
-                            <td class="p-4">行銷部</td>
-                            <td class="p-4">數位行銷專員</td>
-                            <td class="p-4 text-indigo-600 hover:underline cursor-pointer">weixiang.chang@example.com</td>
+                        <tr class="hover:bg-gray-700 transition duration-150">
+                            <td class="p-4 text-gray-400">#PTC-5566</td>
+                            <td class="p-4 font-bold text-white">Goh_Catcher</td>
+                            <td class="p-4 text-yellow-400 font-medium"><i class="fa-solid fa-bolt"></i> 直覺隊 (黃)</td>
+                            <td class="p-4 text-yellow-400 font-bold">Lv. 38</td>
+                            <td class="p-4">320</td>
                             <td class="p-4">
-                                <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">留職停薪</span>
+                                <span class="bg-yellow-900 text-yellow-300 border border-yellow-700 px-2 py-1 rounded-full text-xs font-medium">閒置中</span>
                             </td>
                         </tr>
-                        <tr class="hover:bg-gray-50 transition duration-150">
-                            <td class="p-4 text-gray-500">#EMP-004</td>
-                            <td class="p-4 font-medium text-gray-900">李淑芬</td>
-                            <td class="p-4">人資部</td>
-                            <td class="p-4">HR 經理</td>
-                            <td class="p-4 text-indigo-600 hover:underline cursor-pointer">shufen.lee@example.com</td>
+                        <tr class="hover:bg-gray-700 transition duration-150">
+                            <td class="p-4 text-gray-400">#PTC-0001</td>
+                            <td class="p-4 font-bold text-white">TeamRocket_Boss</td>
+                            <td class="p-4 text-gray-400 font-medium"><i class="fa-solid fa-ban"></i> 無陣營</td>
+                            <td class="p-4 text-yellow-400 font-bold">Lv. 12</td>
+                            <td class="p-4">0</td>
                             <td class="p-4">
-                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">在職</span>
+                                <span class="bg-red-900 text-red-300 border border-red-700 px-2 py-1 rounded-full text-xs font-medium">已被封鎖</span>
                             </td>
                         </tr>
                     </tbody>
@@ -100,12 +102,12 @@
 
     </main>
 
-    <footer class="bg-white border-t border-gray-200 mt-auto text-center py-6 text-sm text-gray-500">
-        <p>&copy; 2026 企業內部系統. All rights reserved.</p>
+    <footer class="bg-gray-900 border-t border-gray-800 mt-auto text-center py-6 text-sm text-gray-500">
+        <p>&copy; 2026 寶可夢帳號管理中樞. All rights reserved.</p>
     </footer>
 
     <script>
-        // 新增：酋雷姆合體邏輯
+        // 酋雷姆合體邏輯 (維持原樣)
         function kyuremFusion() {
             const forms = [
                 "我是闇黑酋雷姆合體！",
@@ -118,33 +120,25 @@
             alert(forms[randomIndex]);
         }
 
-        // 原有：CSV 匯出邏輯
+        // CSV 匯出邏輯 (維持原樣)
         function exportTableToCSV(filename) {
             const table = document.getElementById("dataTable");
             let csv = [];
             
-            // 走訪表格中的每一列 (tr)
             for (let i = 0; i < table.rows.length; i++) {
                 let row = [], cols = table.rows[i].querySelectorAll("td, th");
                 
-                // 走訪每一欄 (td, th)
                 for (let j = 0; j < cols.length; j++) {
-                    // 取得純文字並清除頭尾空白，處理資料中可能包含的逗號與換行符號
                     let data = cols[j].innerText.trim().replace(/"/g, '""');
                     row.push('"' + data + '"');
                 }
                 
-                // 將單列的欄位合併
                 csv.push(row.join(","));
             }
 
-            // 將所有列合併成一個 CSV 字串，並加入 \n 換行
             const csvString = csv.join("\n");
-            
-            // 加上 \uFEFF (BOM) 確保 Excel 開啟 UTF-8 中文不會亂碼
             const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" });
             
-            // 建立虛擬的下載連結並觸發點擊
             const link = document.createElement("a");
             if (link.download !== undefined) { 
                 const url = URL.createObjectURL(blob);
