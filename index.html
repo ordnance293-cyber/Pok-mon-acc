@@ -21,12 +21,22 @@
         
         <section class="flex justify-between items-center mb-6">
             <h2 class="text-lg font-semibold text-gray-700">第一季人員名冊</h2>
-            <button 
-                onclick="exportTableToCSV('employee_data.csv')" 
-                class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg shadow transition duration-200 flex items-center gap-2 text-sm font-medium">
-                <i class="fa-solid fa-file-excel"></i>
-                匯出為 CSV 試算表
-            </button>
+            
+            <div class="flex gap-3">
+                <button 
+                    onclick="kyuremFusion()" 
+                    class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg shadow transition duration-200 flex items-center gap-2 text-sm font-medium">
+                    <i class="fa-solid fa-bolt"></i>
+                    酋雷姆合體
+                </button>
+
+                <button 
+                    onclick="exportTableToCSV('employee_data.csv')" 
+                    class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg shadow transition duration-200 flex items-center gap-2 text-sm font-medium">
+                    <i class="fa-solid fa-file-excel"></i>
+                    匯出為 CSV 試算表
+                </button>
+            </div>
         </section>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -95,6 +105,20 @@
     </footer>
 
     <script>
+        // 新增：酋雷姆合體邏輯
+        function kyuremFusion() {
+            const forms = [
+                "我是闇黑酋雷姆合體！",
+                "我是焰白酋雷姆合體！",
+                "我是雙型態合體！"
+            ];
+            // 產生 0 到 2 的隨機整數
+            const randomIndex = Math.floor(Math.random() * forms.length);
+            // 跳出結果
+            alert(forms[randomIndex]);
+        }
+
+        // 原有：CSV 匯出邏輯
         function exportTableToCSV(filename) {
             const table = document.getElementById("dataTable");
             let csv = [];
