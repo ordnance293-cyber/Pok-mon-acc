@@ -13,8 +13,7 @@
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 8px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7c7cc; border-radius: 8px; }
-        /* 美化 Checkbox */
-        .poke-checkbox { @apply w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer; }
+        .poke-checkbox { width: 1rem; height: 1rem; color: #2563eb; background-color: #f3f4f6; border-color: #d1d5db; border-radius: 0.25rem; cursor: pointer; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased relative">
@@ -157,7 +156,7 @@
             <div class="flex flex-col h-[80vh]">
                 <div class="flex justify-between items-center mb-3">
                     <h2 class="text-lg font-bold text-gray-800"><i class="far fa-eye text-blue-500 mr-2"></i>試算表產出預覽</h2>
-                    <button onclick="copyGeneratedText()" class="bg-gray-900 hover:bg-black text-white px-5 py-2 rounded-xl text-sm font-medium transition-all shadow-md flex items-center gap-2 transform hover:scale-105">
+                    <button type="button" onclick="copyGeneratedText(event)" class="bg-gray-900 hover:bg-black text-white px-5 py-2 rounded-xl text-sm font-medium transition-all shadow-md flex items-center gap-2 transform hover:scale-105">
                         <i class="far fa-copy"></i> 一鍵複製文案
                     </button>
                 </div>
@@ -168,14 +167,26 @@
         </div>
     </main>
 
+    <footer class="mt-8 py-6 border-t border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
+            <p>&copy; 2026 寶可夢帳號整理中心.</p>
+        </div>
+    </footer>
+
     <script>
         const formInputs = document.querySelectorAll('#generatorForm input, #generatorForm select, #generatorForm textarea');
         const previewBox = document.getElementById('livePreview');
 
-        // 核心：模擬試算表公式，把所有資料串接起來
         function updatePreview() {
-            const v = (id) => document.getElementById(id).value.trim();
-            const checked = (id) => document.getElementById(id).checked;
+            const v = (id) => {
+                const el = document.getElementById(id);
+                return el ? el.value.trim() : '';
+            };
+            const checked = (id) => {
+                const el = document.getElementById(id);
+                return el ? el.checked : false;
+            };
+            
             let result = [];
 
             // 1. 帳號與等級
@@ -185,8 +196,11 @@
             // 2. 特殊調查與亮點
             if(checked('chk_marshadow')) result.push(`🔥凱路迪歐, 瑪夏多特殊調查🔥`);
             
-            const customFires = v('g_custom_fire').split('\n').filter(l => l.trim() !== '');
-            customFires.forEach(h => result.push(`🔥${h.replace(/🔥/g, '').trim()}🔥`));
+            const customFiresText = v('g_custom_fire');
+            if(customFiresText) {
+                const customFires = customFiresText.split('\n').filter(l => l.trim() !== '');
+                customFires.forEach(h => result.push(`🔥${h.replace(/🔥/g, '').trim()}🔥`));
+            }
 
             // 3. 合體型態
             if(checked('chk_kyurem')) result.push(`‼️酋雷姆闇黑/雙型態合體‼️`);
@@ -204,7 +218,7 @@
             if(checked('chk_move_kyogre')) result.push(`蓋歐卡有開根源波動`);
             if(checked('chk_move_ray')) result.push(`烈空坐有開畫龍點睛`);
 
-            // 6. 星塵資源 (置中安插)
+            // 6. 星塵資源
             if(v('g_stardust')) result.push(`星塵 ${v('g_stardust')}`);
 
             // 7. 統計數據
@@ -227,14 +241,12 @@
             previewBox.value = result.join('\n');
         }
 
-        // 綁定所有表單元素的變化事件
         formInputs.forEach(input => {
             input.addEventListener('input', updatePreview);
             input.addEventListener('change', updatePreview);
         });
 
-        // 一鍵複製功能
-        function copyGeneratedText() {
+        function copyGeneratedText(event) {
             previewBox.select();
             document.execCommand('copy');
             window.getSelection().removeAllRanges();
@@ -252,7 +264,6 @@
             }, 2000);
         }
 
-        // 網頁載入時立刻產出一次預設的 3834vv 範例
         window.addEventListener('DOMContentLoaded', updatePreview);
     </script>
 </body>
