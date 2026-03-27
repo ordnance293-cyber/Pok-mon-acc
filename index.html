@@ -3,272 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - 批次管理系統</title>
+    <title>資料匯出系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
-        .glass-effect { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7c7cc; border-radius: 8px; }
-        .poke-checkbox { width: 1rem; height: 1rem; color: #2563eb; background-color: #f3f4f6; border-color: #d1d5db; border-radius: 0.25rem; cursor: pointer; }
-    </style>
 </head>
-<body class="bg-gray-50 text-gray-800 antialiased relative">
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
 
-    <header class="sticky top-0 z-50 glass-effect border-b border-gray-200">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center gap-2">
-                    <div class="bg-blue-600 p-2 rounded-lg text-white shadow-md"><i class="fas fa-layer-group text-xl"></i></div>
-                    <span class="text-xl font-bold tracking-tight text-gray-900">寶可夢大量庫存系統</span>
-                </div>
-                <button onclick="exportTableToCSV('寶可夢庫存總表.csv')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm flex items-center gap-2">
-                    <i class="fas fa-file-excel"></i>匯出全部庫存 (CSV)
-                </button>
-            </div>
+    <header class="bg-indigo-600 text-white shadow-md">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-database"></i> 員工資料管理系統
+            </h1>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="container mx-auto px-4 py-8 flex-grow">
         
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
-            <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
-                <h2 class="text-xl font-bold text-gray-800"><i class="fas fa-bolt text-yellow-500 mr-2"></i>快速建檔區</h2>
-                <button type="button" onclick="addAccountToInventory()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-md transform hover:scale-105 flex items-center gap-2">
-                    <i class="fas fa-plus-circle"></i> 加入下方庫存總表
-                </button>
-            </div>
+        <section class="flex justify-between items-center mb-6">
+            <h2 class="text-lg font-semibold text-gray-700">第一季人員名冊</h2>
+            <button 
+                onclick="exportTableToCSV('employee_data.csv')" 
+                class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg shadow transition duration-200 flex items-center gap-2 text-sm font-medium">
+                <i class="fa-solid fa-file-excel"></i>
+                匯出為 CSV 試算表
+            </button>
+        </section>
 
-            <form id="generatorForm" class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                
-                <div class="space-y-3">
-                    <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">1. 基本資訊</h3>
-                    <div><label class="block text-xs text-gray-700 mb-1">帳號代碼</label><input type="text" id="g_id" placeholder="例如: 3834vv" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm font-mono uppercase"></div>
-                    <div class="flex gap-2">
-                        <div class="w-1/2"><label class="block text-xs text-gray-700 mb-1">等級</label><input type="number" id="g_level" value="70" class="w-full p-2 border border-gray-300 rounded text-sm"></div>
-                        <div class="w-1/2"><label class="block text-xs text-gray-700 mb-1">陣營</label>
-                            <select id="g_team" class="w-full p-2 border border-gray-300 rounded text-sm">
-                                <option value="藍隊" selected>藍隊</option><option value="紅隊">紅隊</option><option value="黃隊">黃隊</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div><label class="block text-xs text-gray-700 mb-1">💰 價格</label><input type="number" id="g_price" placeholder="例如: 3800" class="w-full p-2 border border-yellow-400 rounded text-sm font-bold text-red-600 bg-yellow-50"></div>
-                    <div><label class="block text-xs text-gray-700 mb-1">星塵</label><input type="text" id="g_stardust" placeholder="例如: 360萬" class="w-full p-2 border border-gray-300 rounded text-sm"></div>
-                </div>
-
-                <div class="space-y-2">
-                    <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">2. 亮點特徵</h3>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_marshadow" class="poke-checkbox">瑪夏多特殊調查</label>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_kyurem" class="poke-checkbox">酋雷姆合體</label>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_zamazenta" class="poke-checkbox">蒼響劍盾型態</label>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_necrozma" class="poke-checkbox">奈克洛茲瑪合體</label>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_dyna" class="poke-checkbox">極巨化／超極巨化</label>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_mega_ray" class="poke-checkbox">烈空坐能量</label>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_move_groudon" class="poke-checkbox">斷崖之劍</label>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_move_kyogre" class="poke-checkbox">根源波動</label>
-                    <label class="flex items-center gap-2 text-xs text-gray-800 cursor-pointer"><input type="checkbox" id="chk_move_ray" class="poke-checkbox">畫龍點睛</label>
-                </div>
-
-                <div class="col-span-2 space-y-3">
-                    <h3 class="font-bold text-sm text-gray-500 uppercase tracking-wider">3. 統計數據 (僅填寫數字)</h3>
-                    
-                    <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                        <div><label class="block text-[10px] text-gray-600 font-bold">百神</label><input type="number" id="st_hundos" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                        <div><label class="block text-[10px] text-gray-600 font-bold">神獸總數</label><input type="number" id="st_legend" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                        <div><label class="block text-[10px] text-gray-600 font-bold">色違神獸</label><input type="number" id="st_shiny_leg" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                        <div><label class="block text-[10px] text-gray-600 font-bold">裝扮</label><input type="number" id="st_costume" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                        <div><label class="block text-[10px] text-gray-600 font-bold">色違裝扮</label><input type="number" id="st_shiny_costume" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                        <div><label class="block text-[10px] text-gray-600 font-bold">特別背卡</label><input type="number" id="st_bg_special" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                        <div><label class="block text-[10px] text-gray-600 font-bold">紀念背卡</label><input type="number" id="st_bg_comm" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                        <div><label class="block text-[10px] text-red-600 font-bold">極巨化(🔥)</label><input type="number" id="st_dyna" class="w-full p-1.5 border border-red-300 rounded text-sm text-center bg-red-50"></div>
-                        <div><label class="block text-[10px] text-red-600 font-bold">超極巨化(🔥)</label><input type="number" id="st_giga" class="w-full p-1.5 border border-red-300 rounded text-sm text-center bg-red-50"></div>
-                        <div><label class="block text-[10px] text-gray-600 font-bold">完美</label><input type="number" id="st_perfect" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                        <div><label class="block text-[10px] text-gray-600 font-bold">色違完美</label><input type="number" id="st_shundo" class="w-full p-1.5 border border-gray-300 rounded text-sm text-center"></div>
-                    </div>
-
-                    <div><label class="block text-xs text-gray-700 mb-1">🔥 自訂稀有神獸 (每行自動加🔥)</label><textarea id="g_custom_fire" rows="2" class="w-full p-2 border border-red-200 rounded text-sm custom-scrollbar" placeholder="如有其他特殊文字需求可填寫於此..."></textarea></div>
-                </div>
-            </form>
-        </div>
-
-        <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                <h2 class="text-lg font-bold text-gray-800"><i class="fas fa-boxes text-blue-500 mr-2"></i>庫存總表 (<span id="inventoryCount">0</span> 筆)</h2>
-            </div>
-            <div class="overflow-x-auto custom-scrollbar">
-                <table class="w-full text-left border-collapse" id="inventoryTable">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="dataTable">
                     <thead>
-                        <tr class="bg-white text-gray-500 text-xs uppercase tracking-wider font-semibold border-b border-gray-200">
-                            <th class="px-6 py-4">帳號代碼</th>
-                            <th class="px-6 py-4">等級陣營</th>
-                            <th class="px-6 py-4">星塵</th>
-                            <th class="px-6 py-4">售價</th>
-                            <th class="px-6 py-4 text-center">生成文案</th>
-                            <th class="px-6 py-4 text-center">操作</th>
+                        <tr class="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider border-b border-gray-200">
+                            <th class="p-4 font-semibold">員工編號</th>
+                            <th class="p-4 font-semibold">姓名</th>
+                            <th class="p-4 font-semibold">部門</th>
+                            <th class="p-4 font-semibold">職稱</th>
+                            <th class="p-4 font-semibold">聯絡信箱</th>
+                            <th class="p-4 font-semibold">狀態</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-100" id="inventoryBody">
-                        </tbody>
+                    <tbody class="text-sm divide-y divide-gray-100">
+                        <tr class="hover:bg-gray-50 transition duration-150">
+                            <td class="p-4 text-gray-500">#EMP-001</td>
+                            <td class="p-4 font-medium text-gray-900">陳建宏</td>
+                            <td class="p-4">工程部</td>
+                            <td class="p-4">資深前端工程師</td>
+                            <td class="p-4 text-indigo-600 hover:underline cursor-pointer">chienhong.chen@example.com</td>
+                            <td class="p-4">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">在職</span>
+                            </td>
+                        </tr>
+                        <tr class="hover:bg-gray-50 transition duration-150">
+                            <td class="p-4 text-gray-500">#EMP-002</td>
+                            <td class="p-4 font-medium text-gray-900">林雅婷</td>
+                            <td class="p-4">設計部</td>
+                            <td class="p-4">UI/UX 設計師</td>
+                            <td class="p-4 text-indigo-600 hover:underline cursor-pointer">yating.lin@example.com</td>
+                            <td class="p-4">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">在職</span>
+                            </td>
+                        </tr>
+                        <tr class="hover:bg-gray-50 transition duration-150">
+                            <td class="p-4 text-gray-500">#EMP-003</td>
+                            <td class="p-4 font-medium text-gray-900">張偉翔</td>
+                            <td class="p-4">行銷部</td>
+                            <td class="p-4">數位行銷專員</td>
+                            <td class="p-4 text-indigo-600 hover:underline cursor-pointer">weixiang.chang@example.com</td>
+                            <td class="p-4">
+                                <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">留職停薪</span>
+                            </td>
+                        </tr>
+                        <tr class="hover:bg-gray-50 transition duration-150">
+                            <td class="p-4 text-gray-500">#EMP-004</td>
+                            <td class="p-4 font-medium text-gray-900">李淑芬</td>
+                            <td class="p-4">人資部</td>
+                            <td class="p-4">HR 經理</td>
+                            <td class="p-4 text-indigo-600 hover:underline cursor-pointer">shufen.lee@example.com</td>
+                            <td class="p-4">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">在職</span>
+                            </td>
+                        </tr>
+                    </tbody>
                 </table>
-                <div id="emptyState" class="text-center py-12 text-gray-400">
-                    <i class="fas fa-inbox text-4xl mb-3"></i>
-                    <p>目前庫存為空，請從上方填寫資料並加入庫存。</p>
-                </div>
             </div>
         </section>
 
     </main>
 
-    <textarea id="hiddenCopyArea" class="hidden"></textarea>
+    <footer class="bg-white border-t border-gray-200 mt-auto text-center py-6 text-sm text-gray-500">
+        <p>&copy; 2026 企業內部系統. All rights reserved.</p>
+    </footer>
 
     <script>
-        // 生成完整文案邏輯
-        function generateText() {
-            const v = (id) => document.getElementById(id).value.trim();
-            const checked = (id) => document.getElementById(id).checked;
-            let result = [];
-
-            result.push(v('g_id'));
-            result.push(`${v('g_level')}等${v('g_team')}`);
-            if(checked('chk_marshadow')) result.push(`🔥凱路迪歐, 瑪夏多特殊調查🔥`);
-            if(v('g_custom_fire')) {
-                v('g_custom_fire').split('\n').filter(l => l.trim()).forEach(h => result.push(`🔥${h.replace(/🔥/g, '').trim()}🔥`));
-            }
-            if(checked('chk_kyurem')) result.push(`‼️酋雷姆闇黑/雙型態合體‼️`);
-            if(checked('chk_zamazenta')) result.push(`‼️蒼響劍盾型態‼️`);
-            if(checked('chk_necrozma')) result.push(`‼️奈克洛茲瑪月亮/雙型態合體‼️`);
-            if(checked('chk_dyna')) result.push(`✨可打極巨化／超極巨化✨`);
-            if(checked('chk_mega_ray')) result.push(`⭐️烈空坐能量夠Mega⭐️`);
-            if(checked('chk_move_groudon')) result.push(`固拉多有開斷崖之劍`);
-            if(checked('chk_move_kyogre')) result.push(`蓋歐卡有開根源波動`);
-            if(checked('chk_move_ray')) result.push(`烈空坐有開畫龍點睛`);
-            if(v('g_stardust')) result.push(`星塵 ${v('g_stardust')}`);
-            
-            // 11 個純數字輸入轉換邏輯
-            if(v('st_hundos')) result.push(`✅${v('st_hundos')}隻百神`);
-            if(v('st_legend')) result.push(`✅神獸總數${v('st_legend')}隻`);
-            if(v('st_shiny_leg')) result.push(`✅色違神獸${v('st_shiny_leg')}隻`);
-            if(v('st_costume')) result.push(`✅裝扮${v('st_costume')}隻`);
-            if(v('st_shiny_costume')) result.push(`✅色違裝扮${v('st_shiny_costume')}隻`);
-            if(v('st_bg_special')) result.push(`✅特別背卡${v('st_bg_special')}隻`);
-            if(v('st_bg_comm')) result.push(`✅紀念背卡${v('st_bg_comm')}隻`);
-            if(v('st_dyna')) result.push(`🔥極巨化${v('st_dyna')}隻`);
-            if(v('st_giga')) result.push(`🔥超極巨化${v('st_giga')}隻`);
-            if(v('st_perfect')) result.push(`✅完美${v('st_perfect')}隻`);
-            if(v('st_shundo')) result.push(`✅色違完美${v('st_shundo')}隻`);
-            
-            if(v('g_price')) result.push(`💰價格 ${v('g_price')}`);
-
-            return result.join('\n');
-        }
-
-        // 將帳號加入庫存總表
-        function addAccountToInventory() {
-            const id = document.getElementById('g_id').value.trim();
-            if(!id) { alert("請至少輸入帳號代碼！"); return; }
-
-            const level = document.getElementById('g_level').value;
-            const team = document.getElementById('g_team').value;
-            const price = document.getElementById('g_price').value || "未標價";
-            const stardust = document.getElementById('g_stardust').value || "未知";
-            
-            // 取得生成的長篇文案，並安全編碼
-            const fullText = encodeURIComponent(generateText());
-
-            const tbody = document.getElementById('inventoryBody');
-            const newRow = document.createElement('tr');
-            newRow.className = 'hover:bg-blue-50 transition-colors bg-white';
-            
-            // 決定陣營顏色
-            let teamColor = 'text-gray-500';
-            if(team === '紅隊') teamColor = 'text-red-500';
-            if(team === '藍隊') teamColor = 'text-blue-500';
-            if(team === '黃隊') teamColor = 'text-yellow-500';
-
-            newRow.innerHTML = `
-                <td class="px-6 py-4 font-mono font-bold text-gray-900 uppercase">${id}</td>
-                <td class="px-6 py-4 text-sm font-bold ${teamColor}">${level}等 ${team}</td>
-                <td class="px-6 py-4 text-sm text-gray-600">${stardust}</td>
-                <td class="px-6 py-4 text-sm font-bold text-red-600">$ ${price}</td>
-                <td class="px-6 py-4 text-center">
-                    <button onclick="copyInventoryText('${fullText}', this)" class="bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm">
-                        <i class="far fa-copy mr-1"></i>複製文案
-                    </button>
-                </td>
-                <td class="px-6 py-4 text-center">
-                    <button onclick="this.closest('tr').remove(); updateCount();" class="text-red-400 hover:text-red-600 transition-colors p-2"><i class="fas fa-trash-alt"></i></button>
-                </td>
-            `;
-            
-            // 插入到表格最上方
-            tbody.insertBefore(newRow, tbody.firstChild);
-            
-            // 更新狀態與清空表單 (只清空數字與勾選，保留陣營與等級方便連打)
-            document.getElementById('emptyState').style.display = 'none';
-            document.getElementById('g_id').value = ''; 
-            const numInputs = document.querySelectorAll('#generatorForm input[type="number"]');
-            numInputs.forEach(input => { if(input.id !== 'g_level') input.value = ''; });
-            const checkBoxes = document.querySelectorAll('#generatorForm input[type="checkbox"]');
-            checkBoxes.forEach(cb => cb.checked = false);
-            document.getElementById('g_custom_fire').value = '';
-
-            updateCount();
-        }
-
-        function updateCount() {
-            const count = document.getElementById('inventoryBody').children.length;
-            document.getElementById('inventoryCount').innerText = count;
-            if(count === 0) document.getElementById('emptyState').style.display = 'block';
-        }
-
-        // 複製表格內特定帳號的文案
-        function copyInventoryText(encodedText, btn) {
-            const rawText = decodeURIComponent(encodedText);
-            const hiddenArea = document.getElementById('hiddenCopyArea');
-            hiddenArea.style.display = 'block';
-            hiddenArea.value = rawText;
-            hiddenArea.select();
-            document.execCommand('copy');
-            hiddenArea.style.display = 'none';
-            window.getSelection().removeAllRanges();
-
-            const originalHTML = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check"></i> 已複製';
-            btn.classList.add('bg-green-600');
-            btn.classList.remove('bg-gray-800');
-            setTimeout(() => {
-                btn.innerHTML = originalHTML;
-                btn.classList.remove('bg-green-600');
-                btn.classList.add('bg-gray-800');
-            }, 1500);
-        }
-
-        // 匯出 CSV
         function exportTableToCSV(filename) {
+            const table = document.getElementById("dataTable");
             let csv = [];
-            let rows = document.querySelectorAll("#inventoryTable tr");
-            if(rows.length <= 1) { alert("目前沒有庫存可以匯出喔！"); return; }
-
-            for (let i = 0; i < rows.length; i++) {
-                let row = [], cols = rows[i].querySelectorAll("td, th");
-                // 略過最後兩個按鈕欄位
-                for (let j = 0; j < cols.length - 2; j++) {
-                    let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").trim();
+            
+            // 走訪表格中的每一列 (tr)
+            for (let i = 0; i < table.rows.length; i++) {
+                let row = [], cols = table.rows[i].querySelectorAll("td, th");
+                
+                // 走訪每一欄 (td, th)
+                for (let j = 0; j < cols.length; j++) {
+                    // 取得純文字並清除頭尾空白，處理資料中可能包含的逗號與換行符號
+                    let data = cols[j].innerText.trim().replace(/"/g, '""');
                     row.push('"' + data + '"');
                 }
+                
+                // 將單列的欄位合併
                 csv.push(row.join(","));
             }
-            let csvFile = new Blob(["\uFEFF" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
-            let downloadLink = document.createElement("a");
-            downloadLink.download = filename;
-            downloadLink.href = window.URL.createObjectURL(csvFile);
-            downloadLink.style.display = "none";
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
+
+            // 將所有列合併成一個 CSV 字串，並加入 \n 換行
+            const csvString = csv.join("\n");
+            
+            // 加上 \uFEFF (BOM) 確保 Excel 開啟 UTF-8 中文不會亂碼
+            const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" });
+            
+            // 建立虛擬的下載連結並觸發點擊
+            const link = document.createElement("a");
+            if (link.download !== undefined) { 
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
         }
     </script>
 </body>
