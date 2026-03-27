@@ -125,7 +125,15 @@
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 生成完整文案邏輯 (繼承自試算表)
+        // 🌟 新增：定義全域陣列來儲存所有帳號資料，並在網頁載入時嘗試讀取 localStorage
+        let inventoryData = JSON.parse(localStorage.getItem('pokemonInventory')) || [];
+
+        // 🌟 新增：網頁載入完成後，立刻把資料畫到表格上
+        window.onload = function() {
+            renderInventory();
+        };
+
+        // 生成完整文案邏輯
         function generateText() {
             const v = (id) => document.getElementById(id).value.trim();
             const checked = (id) => document.getElementById(id).checked;
@@ -144,10 +152,9 @@
             if(checked('chk_mega_ray')) result.push(`⭐️烈空坐能量夠Mega⭐️`);
             if(checked('chk_move_groudon')) result.push(`固拉多有開斷崖之劍`);
             if(checked('chk_move_kyogre')) result.push(`蓋歐卡有開根源波動`);
-            if(checked('chk_move_ray')) result.push(`烈空坐有開畫龍點睛`);
+            if(checked('chk_move_ray')) result.push(`烈空坐有開畫長點睛`);
             if(v('g_stardust')) result.push(`星塵 ${v('g_stardust')}`);
             
-            // 全新擴充的 11 個統計欄位
             if(v('g_hundos')) result.push(`✅${v('g_hundos')}`);
             if(v('st_legend')) result.push(`✅神獸總數${v('st_legend')}隻`);
             if(v('st_shiny_leg')) result.push(`✅色違神獸${v('st_shiny_leg')}隻`);
@@ -165,57 +172,104 @@
             return result.join('\n');
         }
 
-        // 將帳號加入庫存總表
+        // 將帳號加入庫存總表 (修改為寫入陣列與 localStorage)
         function addAccountToInventory() {
-            const id = document.getElementById('g_id').value.trim();
-            if(!id) { alert("請至少輸入帳號代碼！"); return; }
+            const accountId = document.getElementById('g_id').value.trim();
+            if(!accountId) { alert("請至少輸入帳號代碼！"); return; }
 
             const level = document.getElementById('g_level').value;
             const team = document.getElementById('g_team').value;
             const price = document.getElementById('g_price').value || "未標價";
             const stardust = document.getElementById('g_stardust').value || "未知";
             
-            // 取得生成的長篇文案，並安全編碼
             const fullText = encodeURIComponent(generateText());
+            
+            // 🌟 建立一個不重複的 ID 給這筆資料 (用時間戳記)
+            const uid = Date.now().toString();
 
+            // 🌟 把表單資料打包成一個物件
+            const newItem = {
+                uid: uid,
+                accountId: accountId,
+                level: level,
+                team: team,
+                price: price,
+                stardust: stardust,
+                fullText: fullText
+            };
+
+            // 🌟 把新資料加到陣列的「最前面」 (unshift)
+            inventoryData.unshift(newItem);
+
+            // 🌟 儲存進瀏覽器的 LocalStorage
+            saveToLocalStorage();
+
+            // 🌟 重新畫出整個表格
+            renderInventory();
+
+            // 清空代碼欄位方便連續新增
+            document.getElementById('g_id').value = ''; 
+        }
+
+        // 🌟 新增：將陣列資料渲染成 HTML 表格
+        function renderInventory() {
             const tbody = document.getElementById('inventoryBody');
-            const newRow = document.createElement('tr');
-            newRow.className = 'hover:bg-blue-50 transition-colors bg-white';
-            
-            // 決定陣營顏色
-            let teamColor = 'text-gray-500';
-            if(team === '紅隊') teamColor = 'text-red-500';
-            if(team === '藍隊') teamColor = 'text-blue-500';
-            if(team === '黃隊') teamColor = 'text-yellow-500';
+            tbody.innerHTML = ''; // 先清空目前的表格內容
 
-            newRow.innerHTML = `
-                <td class="px-6 py-4 font-mono font-bold text-gray-900 uppercase">${id}</td>
-                <td class="px-6 py-4 text-sm font-bold ${teamColor}">${level}等 ${team}</td>
-                <td class="px-6 py-4 text-sm text-gray-600">${stardust}</td>
-                <td class="px-6 py-4 text-sm font-bold text-red-600">$ ${price}</td>
-                <td class="px-6 py-4 text-center">
-                    <button onclick="copyInventoryText('${fullText}', this)" class="bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm">
-                        <i class="far fa-copy mr-1"></i>複製文案
-                    </button>
-                </td>
-                <td class="px-6 py-4 text-center">
-                    <button onclick="this.closest('tr').remove(); updateCount();" class="text-red-400 hover:text-red-600 transition-colors p-2"><i class="fas fa-trash-alt"></i></button>
-                </td>
-            `;
-            
-            // 插入到表格最上方
-            tbody.insertBefore(newRow, tbody.firstChild);
-            
-            // 更新狀態與清空表單
-            document.getElementById('emptyState').style.display = 'none';
-            document.getElementById('g_id').value = ''; // 只清空 ID，保留上一個設定方便連續新增
+            inventoryData.forEach(item => {
+                const newRow = document.createElement('tr');
+                newRow.className = 'hover:bg-blue-50 transition-colors bg-white';
+                
+                let teamColor = 'text-gray-500';
+                if(item.team === '紅隊') teamColor = 'text-red-500';
+                if(item.team === '藍隊') teamColor = 'text-blue-500';
+                if(item.team === '黃隊') teamColor = 'text-yellow-500';
+
+                newRow.innerHTML = `
+                    <td class="px-6 py-4 font-mono font-bold text-gray-900 uppercase">${item.accountId}</td>
+                    <td class="px-6 py-4 text-sm font-bold ${teamColor}">${item.level}等 ${item.team}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${item.stardust}</td>
+                    <td class="px-6 py-4 text-sm font-bold text-red-600">$ ${item.price}</td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="copyInventoryText('${item.fullText}', this)" class="bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm">
+                            <i class="far fa-copy mr-1"></i>複製文案
+                        </button>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="deleteAccount('${item.uid}')" class="text-red-400 hover:text-red-600 transition-colors p-2"><i class="fas fa-trash-alt"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(newRow);
+            });
+
             updateCount();
         }
 
+        // 🌟 新增：刪除單一帳號的功能
+        function deleteAccount(uid) {
+            if(confirm('確定要刪除這筆資料嗎？')) {
+                // 利用 filter 過濾掉被點擊刪除的那筆資料
+                inventoryData = inventoryData.filter(item => item.uid !== uid);
+                // 儲存更新後的陣列
+                saveToLocalStorage();
+                // 重新渲染表格
+                renderInventory();
+            }
+        }
+
+        // 🌟 新增：獨立儲存到 LocalStorage 的函式
+        function saveToLocalStorage() {
+            localStorage.setItem('pokemonInventory', JSON.stringify(inventoryData));
+        }
+
         function updateCount() {
-            const count = document.getElementById('inventoryBody').children.length;
+            const count = inventoryData.length; // 改由陣列長度來判斷
             document.getElementById('inventoryCount').innerText = count;
-            if(count === 0) document.getElementById('emptyState').style.display = 'block';
+            if(count === 0) {
+                document.getElementById('emptyState').style.display = 'block';
+            } else {
+                document.getElementById('emptyState').style.display = 'none';
+            }
         }
 
         // 複製表格內特定帳號的文案
@@ -240,7 +294,7 @@
             }, 1500);
         }
 
-        // 匯出 CSV (只抓取總表前 4 欄精華數據)
+        // 匯出 CSV (抓取表格內容)
         function exportTableToCSV(filename) {
             let csv = [];
             let rows = document.querySelectorAll("#inventoryTable tr");
@@ -255,6 +309,7 @@
                 }
                 csv.push(row.join(","));
             }
+            // 加上 BOM 避免中文亂碼
             let csvFile = new Blob(["\uFEFF" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
             let downloadLink = document.createElement("a");
             downloadLink.download = filename;
