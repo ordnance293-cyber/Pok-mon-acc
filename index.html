@@ -94,7 +94,7 @@
             }
         };
 
-        // 🔥 新增/更新資料到 Firebase
+        // 新增/更新資料到 Firebase
         let currentEditUid = null;
         window.saveAccountToInventory = async function() {
             const accountId = document.getElementById('g_id').value.trim();
@@ -157,7 +157,7 @@
             }
         };
 
-        // 🔥 開啟改文案視窗
+        // 開啟改文案視窗
         let currentEditModalUid = null;
         let currentEditModalAccountId = null;
         window.openEditModal = function(uid, accountId) {
@@ -170,7 +170,7 @@
             document.getElementById('editModal').classList.add('flex');
         };
 
-        // 🔥 儲存文案並同步試算表
+        // 儲存文案並同步試算表
         window.saveEditedText = async function() {
             if(!currentEditModalUid) return;
             const newText = document.getElementById('editModalText').value.trim();
@@ -221,7 +221,6 @@
                 const aB = isS ? `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1 rounded text-[10px] shadow-sm font-bold">🟡 補塗</button>` : `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-amber-400 text-gray-900 px-2 py-1 rounded text-[10px] shadow-sm font-bold">💰 售出</button>`;
                 const sId = item.accountId.substring(0, 6).toUpperCase(); const lD = item.level ? `${item.level}等 ` : '';
                 
-                // 加入了 📝 改文 按鈕
                 nR.innerHTML = `<td class="px-4 py-4"><div class="font-mono font-bold text-base uppercase flex items-center">${sId}${sB}</div><div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div></td><td class="px-4 py-4 text-sm font-bold ${tC}">${lD}${item.team}</td><td class="px-4 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td><td class="px-4 py-4 text-center"><div class="flex gap-1 justify-center flex-wrap"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-2 py-1 rounded text-[10px] shadow-sm">複製</button><button onclick="window.openEditModal('${item.uid}', '${item.accountId}')" class="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-[10px] shadow-sm font-bold transition">📝 改文</button><button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 text-white px-2 py-1 rounded text-[10px] shadow-sm">拋轉</button>${aB}<button onclick="window.editAccount('${item.uid}')" class="bg-blue-500 text-white px-2 py-1 rounded text-[10px] shadow-sm">✏️</button></div></td><td class="px-4 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-300 hover:text-red-600 p-1"><i class="fas fa-trash-alt"></i></button></td>`;
                 tbody.appendChild(nR);
             });
@@ -329,7 +328,7 @@
                 </div>
 
                 <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
-                    <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會顯示在最前面..." class="w-full p-2 border rounded text-xs h-10 bg-white outline-none"></textarea>
+                    <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢)，若有多隻請換行輸入..." class="w-full p-2 border rounded text-xs h-20 bg-white outline-none"></textarea>
                     
                     <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神清單 (支援自動加總，如：超夢*3)，底下的數量會自動累計！" class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-16 font-bold outline-none"></textarea>
                     
@@ -535,7 +534,17 @@
             const lvlStr = v('g_level') ? v('g_level') + '等 ' : ''; res.push(`${lvlStr}${v('g_team')}`);
             let spList = []; for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
-            if(v('g_rare_list')) res.push(`🔥${v('g_rare_list')}🔥`);
+            
+            // 🔥 這裡更新了：將稀有怪依據換行拆解，每一行都加上前後 🔥
+            const rareListText = v('g_rare_list');
+            if(rareListText) {
+                rareListText.split('\n').forEach(line => {
+                    if(line.trim() !== '') {
+                        res.push(`🔥${line.trim()}🔥`);
+                    }
+                });
+            }
+
             if(v('st_old_poke')) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
             if(v('st_old_leg')) res.push(`‼️${v('st_old_leg')} 隻 16–20年神獸‼️`);
             if(checked('chk_kyurem')) res.push(v('sel_kyurem'));
@@ -555,7 +564,7 @@
             if(v('st_dyna')) res.push(`✅極巨化${v('st_dyna')}隻`); if(v('st_giga')) res.push(`✅超極巨化${v('st_giga')}隻`);
             if(v('st_perfect')) res.push(`✅完美${v('st_perfect')}隻`);
             
-            // 🔥 背包數量小於 1000 隱藏邏輯 🔥
+            // 背包數量小於 1000 隱藏邏輯
             let pb = parseNum(v('st_poke_bag')); if(!isNaN(pb) && pb >= 1000) res.push(`🎒寶可夢背包 ${v('st_poke_bag')}`);
             let ib = parseNum(v('st_item_bag')); if(!isNaN(ib) && ib >= 1000) res.push(`🎒道具背包 ${v('st_item_bag')}`);
             
