@@ -497,6 +497,7 @@
                 let oL = parseNum(res.level); let oS = parseNum(res.stardust); let oX = parseNum(res.xp);
                 let fS = isNaN(oS) ? 0 : oS; let fX = isNaN(oX) ? 0 : oX;
 
+                // 🔥 這裡改回原來的 Math.floor 無條件捨去 🔥
                 if (!isNaN(oL)) {
                     if (oL < 60) { document.getElementById('g_level').value = 60; fS += 200000; fX = 0; } 
                     else if (oL >= 68) { document.getElementById('g_level').value = 70; fS += 300000; } 
@@ -535,7 +536,7 @@
             let spList = []; for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
             
-            // 🔥 這裡更新了：將稀有怪依據換行拆解，每一行都加上前後 🔥
+            // 稀有怪依據換行拆解，每一行都加上前後 🔥
             const rareListText = v('g_rare_list');
             if(rareListText) {
                 rareListText.split('\n').forEach(line => {
