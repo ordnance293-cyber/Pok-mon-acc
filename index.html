@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V25 智能精準辨識版</title>
+    <title>寶可夢頂級帳號庫 - V26 智慧連動版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -181,7 +181,7 @@
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-brain"></i> 寶可夢進銷存 V25 智能辨識版
+            <i class="fas fa-bolt"></i> 寶可夢進銷存 V26 智慧連動版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
@@ -279,9 +279,12 @@
                     </div>
 
                     <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會獨立顯示..." class="w-full p-2 border rounded text-xs h-10"></textarea>
-                    <textarea id="g_hundos" placeholder="AI 盤點結果..." class="w-full p-2 border border-blue-200 bg-blue-50 rounded text-xs h-16"></textarea>
+                    
+                    <!-- 🌟 這裡加上了 oninput 監聽，只要你打字就會觸發 updateHundoCount 函數 -->
+                    <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神名單 (以逗號或頓號分隔)，底下的數量會自動計算！" class="w-full p-2 border border-blue-200 bg-blue-50 rounded text-xs h-16"></textarea>
+                    
                     <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
-                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold"></div>
+                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold transition-colors duration-300"></div>
                         <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded"></div>
                         <div>色違寶可夢<input type="number" id="st_shiny" class="w-full p-1 border rounded"></div>
                         <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded"></div>
@@ -344,7 +347,23 @@
 
         window.clearImage = function() { document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; document.getElementById('aiBtn').classList.add('hidden'); };
 
-        // 🌟 重新調教的超精準 AI 辨識大腦
+        // 🌟 新增：手動修改名單時，自動計算數量的函數
+        window.updateHundoCount = function() {
+            const text = document.getElementById('g_hundos').value.trim();
+            const countInput = document.getElementById('st_hundo_leg');
+            if (!text) {
+                countInput.value = '';
+                return;
+            }
+            // 利用全形逗號、半形逗號、頓號、換行符號 來切割字串並計算數量
+            const items = text.split(/[,，、\n]+/).filter(item => item.trim() !== '');
+            countInput.value = items.length;
+            
+            // 給輸入框一個小閃爍特效，讓你知道它有自動更新
+            countInput.classList.add('bg-green-200');
+            setTimeout(() => countInput.classList.remove('bg-green-200'), 300);
+        };
+
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; if(!apiKey || files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '辨識中...';
@@ -365,11 +384,10 @@
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 const data = await resp.json(); let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim(); let res = JSON.parse(cleanText);
                 
-                // 精準填入對應的格子
                 document.getElementById('g_hundos').value = res.pokemon_list || ''; 
                 if(res.hundo_leg) document.getElementById('st_hundo_leg').value = res.hundo_leg;
                 if(res.legendary) document.getElementById('st_legend').value = res.legendary;
-                if(res.shiny_leg) document.getElementById('st_shiny_leg').value = res.shiny_leg; // 🌟 色違神獸
+                if(res.shiny_leg) document.getElementById('st_shiny_leg').value = res.shiny_leg; 
                 if(res.shiny) document.getElementById('st_shiny').value = res.shiny;
                 if(res.costume) document.getElementById('st_costume').value = res.costume;
                 if(res.bg_comm) document.getElementById('st_bg_comm').value = res.bg_comm;
@@ -377,6 +395,9 @@
                 if(res.dyna) document.getElementById('st_dyna').value = res.dyna;
                 if(res.giga) document.getElementById('st_giga').value = res.giga;
                 if(res.perfect) document.getElementById('st_perfect').value = res.perfect;
+                
+                // 觸發一次更新數量，確保文字跟數量一致
+                window.updateHundoCount();
             } catch (e) { alert("AI辨識異常"); }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
