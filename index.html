@@ -453,26 +453,30 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
+        // 🔥 AI 視覺極限強化版：替換為最強 pro 模型、增加畫質至 1080px，強制多圖聚合 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先填寫 AI Key！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 辨識中...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 視覺全力解析中...';
             try {
-                let parts = [{ text: "分析寶可夢截圖，輸出純 JSON（不含 Markdown）。【關鍵數量精確提取】：1. 若截圖上方搜尋列完整出現「傳說的寶可夢,幻,究極異獸」，讀取該畫面顯示的總數字填入 legendary (神獸總數)。2. 若搜尋列完整出現「傳說的寶可夢,幻,究極異獸&4*」，這是最高優先級！務必精準讀取數字並填入 hundo_leg (百神數量)。3. 若搜尋列完整出現「傳說的寶可夢,幻,究極異獸&異色」，讀取數字填入 shiny_leg (色違神獸)。【其他數據提取】：4. 標籤總數：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。5. 道具數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、綠券(greenpass)、寶可夢包(poke_bag)、道具包(item_bag)。6. 基本資訊：玩家等級(level)、星塵(stardust)、經驗(xp)。7. 網格盤點：辨識畫面中寶可夢並合併同類數量（如：超夢*3），填入 pokemon_list。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\",\"masterball\":\"\",\"rarecandy\":\"\",\"coin\":\"\",\"greenpass\":\"\",\"poke_bag\":\"\",\"item_bag\":\"\",\"level\":\"\",\"stardust\":\"\",\"xp\":\"\"}" }];
+                let parts = [{ text: "分析寶可夢截圖，輸出純 JSON（不含 Markdown）。\n【強制多圖辨識指令】：請仔細檢查上傳的『每一張』圖片，絕對不能遺漏。如果上傳了多張圖片，請務必將各圖片的數據互相結合或加總。\n\n【關鍵數量精確提取】：\n1. 若截圖上方搜尋列完整出現「傳說的寶可夢,幻,究極異獸」，讀取該畫面顯示的總數字填入 legendary (神獸總數)。\n2. 若搜尋列完整出現「傳說的寶可夢,幻,究極異獸&4*」，這是最高優先級！務必精準讀取數字並填入 hundo_leg (百神數量)。\n3. 若搜尋列完整出現「傳說的寶可夢,幻,究極異獸&異色」，讀取數字填入 shiny_leg (色違神獸)。\n\n【其他數據提取】：\n4. 標籤總數：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。\n5. 道具數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、綠券(greenpass)、寶可夢包(poke_bag)、道具包(item_bag)。\n6. 基本資訊：玩家等級(level)、星塵(stardust)、經驗(xp)。\n7. 網格盤點：辨識畫面中寶可夢並合併同類數量（如：超夢*3），填入 pokemon_list。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\",\"masterball\":\"\",\"rarecandy\":\"\",\"coin\":\"\",\"greenpass\":\"\",\"poke_bag\":\"\",\"item_bag\":\"\",\"level\":\"\",\"stardust\":\"\",\"xp\":\"\"}" }];
                 
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
-                                const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 800 * (img.height/img.width);
-                                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height); r(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+                                // 提升畫質至 1080px，保留細節
+                                const canvas = document.createElement('canvas'); canvas.width = 1080; canvas.height = 1080 * (img.height/img.width);
+                                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height); r(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
                             }; img.src = e.target.result;
                         }; reader.readAsDataURL(files[i]);
                     });
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+                
+                // 改用 pro 模型，推理與多圖處理能力最強
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 const data = await resp.json(); let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim(); let res = JSON.parse(cleanText);
                 
                 document.getElementById('g_hundos').value = res.pokemon_list || ''; 
@@ -497,7 +501,6 @@
                 let oL = parseNum(res.level); let oS = parseNum(res.stardust); let oX = parseNum(res.xp);
                 let fS = isNaN(oS) ? 0 : oS; let fX = isNaN(oX) ? 0 : oX;
 
-                // 🔥 這裡改回原來的 Math.floor 無條件捨去 🔥
                 if (!isNaN(oL)) {
                     if (oL < 60) { document.getElementById('g_level').value = 60; fS += 200000; fX = 0; } 
                     else if (oL >= 68) { document.getElementById('g_level').value = 70; fS += 300000; } 
