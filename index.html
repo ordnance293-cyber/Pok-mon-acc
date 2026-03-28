@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V35 旗艦全綁定版</title>
+    <title>寶可夢頂級帳號庫 - V35 旗艦本地記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -11,7 +11,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // Firebase 設定 (不變)
+        // Firebase 設定 (維持不變)
         const firebaseConfig = {
             apiKey: "AIzaSyAXHqvXLLTmYl8kVV1fR0gJRFangwV85n8",
             authDomain: "pokemon-acc.firebaseapp.com",
@@ -26,6 +26,30 @@
         const db = getDatabase(app);
         const inventoryRef = ref(db, 'inventory');
         let inventoryData = [];
+
+        // 🌟 網頁載入時，自動填入上次儲存的設定 🌟
+        window.addEventListener('DOMContentLoaded', () => {
+            ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
+                const savedValue = localStorage.getItem(id);
+                if (savedValue) document.getElementById(id).value = savedValue;
+            });
+        });
+
+        // 🌟 按下儲存按鈕時，把設定存在瀏覽器記憶體 🌟
+        window.saveSettings = function() {
+            ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
+                const val = document.getElementById(id).value.trim();
+                localStorage.setItem(id, val);
+            });
+            const btn = document.getElementById('saveBtn');
+            const oldText = btn.innerHTML;
+            btn.innerHTML = '✅ 已儲存';
+            btn.classList.replace('bg-gray-800', 'bg-green-600');
+            setTimeout(() => {
+                btn.innerHTML = '💾 儲存設定';
+                btn.classList.replace('bg-green-600', 'bg-gray-800');
+            }, 2000);
+        };
 
         // 監聽 Firebase 資料庫變動
         onValue(inventoryRef, (snapshot) => {
@@ -44,7 +68,7 @@
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(!sheetId || !scriptUrl) { 
-                showMsg("❌ 請檢查試算表設定是否完整！", "red");
+                showMsg("❌ 請先在頂部填寫並儲存試算表設定！", "red");
                 return; 
             }
             
@@ -66,7 +90,7 @@
             if(!confirm(`確定要將【${activeData.length}】個現貨帳號一次拋轉嗎？`)) return;
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("請填寫頂部設定！"); return; }
+            if(!sheetId || !scriptUrl) { alert("請先在頂部填寫並儲存設定！"); return; }
             
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 拋轉中...'; btn.disabled = true;
             const allData = activeData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
@@ -231,12 +255,13 @@
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V35 旗艦全綁定版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V35 旗艦記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
             <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
+            <input type="password" id="geminiApiKey" placeholder="請貼上新的 AI Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 focus:ring-2 focus:ring-yellow-400 transition-all outline-none">
+            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm active:scale-90">💾 儲存設定</button>
         </div>
     </header>
 
@@ -388,7 +413,6 @@
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 🚨 取消所有自動儲存機制 🚨
         window.previewImages = function(event) {
             const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
             for(let i = 0; i < files.length; i++) {
@@ -424,10 +448,10 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 視覺解析：升級至 gemini-2.5-pro 旗艦模型，支援 1080px 超清解析度 🔥
+        // 🔥 AI 視覺解析：使用最穩定 flash 模型，降溫設定 800px 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
-            if(!apiKey) { alert("請先在上方填寫 AI Key！"); return; }
+            if(!apiKey) { alert("請先在頂部填寫你的 AI Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 視覺解析中...';
             try {
@@ -437,8 +461,7 @@
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
-                                // 提升至 1080px 讓 Pro 模型能看清楚細節
-                                const maxSize = 1080;
+                                const maxSize = 800; // 防手機發燙過載設定
                                 let width = img.width;
                                 let height = img.height;
                                 if (width > height) {
@@ -450,15 +473,15 @@
                                 canvas.width = width; 
                                 canvas.height = height;
                                 canvas.getContext('2d').drawImage(img, 0, 0, width, height); 
-                                r(canvas.toDataURL('image/jpeg', 0.75).split(',')[1]);
+                                r(canvas.toDataURL('image/jpeg', 0.65).split(',')[1]);
                             }; img.src = e.target.result;
                         }; reader.readAsDataURL(files[i]);
                     });
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 🔥 將模型端點更新為 gemini-2.5-pro 🔥
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+                // 改用最穩定且免費額度最高的 gemini-1.5-flash 模型
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 
                 if (!resp.ok) {
                     const errData = await resp.text(); 
@@ -507,7 +530,7 @@
         };
 
         window.resetForm = function() {
-            document.querySelectorAll('input, textarea').forEach(el => { if(!['geminiApiKey','googleSheetId','gasUrl'].includes(el.id) && el.type !== 'checkbox') el.value = ''; if(el.type === 'checkbox') el.checked = false; });
+            document.querySelectorAll('input:not([type=password]), textarea').forEach(el => { if(!['googleSheetId','gasUrl'].includes(el.id) && el.type !== 'checkbox') el.value = ''; if(el.type === 'checkbox') el.checked = false; });
             document.getElementById('g_item_status').value = 'active'; document.getElementById('g_team').value = '藍隊';
             document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); window.clearImage();
             
