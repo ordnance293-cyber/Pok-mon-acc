@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V18 終極旗艦版</title>
+    <title>寶可夢頂級帳號庫 - V19 終極結帳版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script type="module">
+        // 🌟 這次多引入了 update 功能來更新 Firebase 狀態
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAXHqvXLLTmYl8kVV1fR0gJRFangwV85n8",
@@ -37,89 +38,80 @@
             renderInventory(); 
         });
 
-        // 單筆拋轉
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(!sheetId || !scriptUrl) { alert("請填寫頂部試算表設定！"); return; }
             
-            const oldText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 傳送中...';
-            btn.disabled = true;
-            
+            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 傳送中...'; btn.disabled = true;
             try {
-                await fetch(scriptUrl, {
-                    method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(fullText) })
-                });
-                btn.innerHTML = '✅ 已拋轉';
-                setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 2000);
+                await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(fullText) }) });
+                btn.innerHTML = '✅ 已拋轉'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 2000);
             } catch (e) { alert("同步失敗！"); btn.innerHTML = oldText; btn.disabled = false; }
         };
 
-        // 🌟 批次一鍵拋轉
         window.syncAllToSheets = async function(btn) {
-            if(inventoryData.length === 0) { alert('目前沒有資料可以拋轉喔！'); return; }
-            if(!confirm(`確定要將雲端列表上的【${inventoryData.length}】個帳號，全部一次拋轉到試算表嗎？\n(這會將清單整批新增在表格最下方)`)) return;
+            if(inventoryData.length === 0) { alert('沒有資料可拋轉！'); return; }
+            if(!confirm(`確定要將【${inventoryData.length}】個帳號一次拋轉嗎？`)) return;
+            const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
+            if(!sheetId || !scriptUrl) { alert("請填寫設定！"); return; }
             
+            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 拋轉中...'; btn.disabled = true;
+            const allData = inventoryData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
+            try {
+                await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'syncAll', id: sheetId, allData: allData }) });
+                btn.innerHTML = '✅ 全部拋轉成功！'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
+            } catch (e) { alert("失敗！"); btn.innerHTML = oldText; btn.disabled = false; }
+        };
+
+        // 🌟 全新：標記為售出功能
+        window.markAsSold = async function(uid, accountId, btn) {
+            if(!confirm(`確定要將【${accountId}】標記為已售出嗎？\n這會將試算表中所有分頁的該筆資料標示為黃色！`)) return;
+            
+            // 1. 更新 Firebase 網頁資料庫狀態
+            update(ref(db, `inventory/${uid}`), { status: 'sold' });
+
+            // 2. 通知試算表塗黃色
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("請填寫頂部試算表設定！"); return; }
-            
-            const oldText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 全部拋轉中...';
-            btn.disabled = true;
-            
-            const allData = inventoryData.map(item => ({
-                accountId: item.accountId,
-                data: decodeURIComponent(item.fullText)
-            }));
-            
-            try {
-                await fetch(scriptUrl, {
-                    method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'syncAll', id: sheetId, allData: allData })
-                });
-                btn.innerHTML = '✅ 全部拋轉成功！';
-                setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
-            } catch (e) { alert("批次同步失敗！"); btn.innerHTML = oldText; btn.disabled = false; }
+            if(sheetId && scriptUrl) {
+                try {
+                    await fetch(scriptUrl, {
+                        method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'sold', id: sheetId, accountId: accountId })
+                    });
+                } catch(e) { console.error("標記異常", e); }
+            }
         };
 
         window.addAccountToInventory = function() {
             const accountId = document.getElementById('g_id').value.trim();
             if(!accountId) { alert("請輸入帳號代碼！"); return; }
             const newItem = {
-                accountId: accountId, level: document.getElementById('g_level').value, team: document.getElementById('g_team').value, price: document.getElementById('g_price').value || "未標價", stardust: document.getElementById('g_stardust').value || "未知", fullText: encodeURIComponent(window.generateText()), timestamp: Date.now()
+                accountId: accountId, level: document.getElementById('g_level').value, team: document.getElementById('g_team').value, price: document.getElementById('g_price').value || "未標價", stardust: document.getElementById('g_stardust').value || "未知", fullText: encodeURIComponent(window.generateText()), timestamp: Date.now(),
+                status: 'active' // 🌟 預設為上架中
             };
             push(inventoryRef, newItem);
             document.querySelectorAll('input, textarea').forEach(el => {
                 if(!['geminiApiKey','googleSheetId','gasUrl','g_level'].includes(el.id) && el.type !== 'checkbox') el.value = '';
                 if(el.type === 'checkbox') el.checked = false;
             });
-            document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden'));
-            window.clearImage();
+            document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); window.clearImage();
         };
 
         window.deleteAccount = async function(uid, accountId) {
-            if(confirm('確定要刪除嗎？\n\n注意：這會同時從「雲端庫存」與「試算表」中刪除這筆資料！')) { 
+            if(confirm('確定要刪除嗎？這會同時從試算表刪除喔！')) { 
                 remove(ref(db, `inventory/${uid}`)); 
-                const sheetId = document.getElementById('googleSheetId').value.trim();
-                const scriptUrl = document.getElementById('gasUrl').value.trim();
+                const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
                 if(sheetId && scriptUrl) {
-                    try {
-                        await fetch(scriptUrl, {
-                            method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ action: 'delete', id: sheetId, accountId: accountId })
-                        });
-                    } catch(e) {}
+                    try { fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: sheetId, accountId: accountId }) }); } catch(e) {}
                 }
             }
         };
 
         window.renderInventory = function() {
             const tbody = document.getElementById('inventoryBody');
-            if(!tbody) return;
-            tbody.innerHTML = ''; 
+            if(!tbody) return; tbody.innerHTML = ''; 
             
             const sortMode = document.getElementById('sortMode') ? document.getElementById('sortMode').value : 'priceDesc';
             let displayData = [...inventoryData];
@@ -135,16 +127,26 @@
             });
 
             displayData.forEach(item => {
+                const isSold = item.status === 'sold';
+                const rowBg = isSold ? 'bg-yellow-50 opacity-80' : 'hover:bg-blue-50 bg-white';
                 const newRow = document.createElement('tr');
-                newRow.className = 'hover:bg-blue-50 bg-white border-b border-gray-100';
+                newRow.className = `${rowBg} border-b border-gray-100 transition duration-300`;
                 let teamColor = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
+                
+                // 售出標籤與按鈕邏輯
+                const soldLabel = isSold ? '<span class="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">已售出</span>' : '';
+                const actionBtns = isSold 
+                    ? `<span class="bg-gray-200 text-gray-500 px-3 py-1.5 rounded text-xs font-bold cursor-not-allowed">成交</span>`
+                    : `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-1.5 rounded text-xs shadow font-bold">💰 售出</button>`;
+
                 newRow.innerHTML = `
-                    <td class="px-6 py-4 font-mono font-bold uppercase">${item.accountId}</td>
+                    <td class="px-6 py-4 font-mono font-bold uppercase">${item.accountId}${soldLabel}</td>
                     <td class="px-6 py-4 text-sm font-bold ${teamColor}">${item.level}等 ${item.team}</td>
                     <td class="px-6 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td>
-                    <td class="px-6 py-4 text-center flex gap-2 justify-center">
+                    <td class="px-6 py-4 text-center flex gap-2 justify-center flex-wrap">
                         <button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs shadow">複製</button>
                         <button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs shadow">拋轉</button>
+                        ${actionBtns}
                     </td>
                     <td class="px-6 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-400 hover:text-red-600 p-2"><i class="fas fa-trash-alt"></i></button></td>
                 `;
@@ -157,8 +159,8 @@
 </head>
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
-        <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-700">
-            <i class="fas fa-rocket"></i> 全自動進銷存 V18
+        <h1 class="text-xl font-bold flex items-center gap-2 text-yellow-600">
+            <i class="fas fa-store"></i> 全自動進銷存 V19 結帳版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
@@ -293,61 +295,44 @@
         };
 
         window.previewImages = function(event) {
-            const files = event.target.files;
-            const container = document.getElementById('imagePreviewContainer');
-            container.innerHTML = ''; 
-            if(files.length === 0) return;
+            const files = event.target.files; const container = document.getElementById('imagePreviewContainer');
+            container.innerHTML = ''; if(files.length === 0) return;
             for(let i = 0; i < files.length; i++) {
                 const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = document.createElement('img');
-                    img.src = e.target.result; img.className = 'rounded h-12 border';
-                    container.appendChild(img);
-                }
+                reader.onload = (e) => { const img = document.createElement('img'); img.src = e.target.result; img.className = 'rounded h-12 border'; container.appendChild(img); }
                 reader.readAsDataURL(files[i]);
             }
             document.getElementById('aiBtn').classList.remove('hidden');
         };
 
         window.clearImage = function() {
-            document.getElementById('imageInput').value = '';
-            document.getElementById('imagePreviewContainer').innerHTML = '';
-            document.getElementById('aiBtn').classList.add('hidden');
+            document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; document.getElementById('aiBtn').classList.add('hidden');
         };
 
         window.analyzeMultipleImages = async function() {
-            const apiKey = document.getElementById('geminiApiKey').value.trim();
-            const files = document.getElementById('imageInput').files;
+            const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files;
             if(!apiKey || files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn');
-            aiBtn.disabled = true; aiBtn.innerHTML = '辨識中...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '辨識中...';
             try {
                 let parts = [{ text: "辨識寶可夢型態(起源等)、色違、暗影，統計數量。抓出截圖最上方『寶可夢 XX/YY』的 XX 數字。輸出 JSON: {pokemon_list: '字串', total_perfect: 數字}" }];
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
                         const reader = new FileReader();
                         reader.onload = (e) => {
-                            const img = new Image();
-                            img.onload = () => {
-                                const canvas = document.createElement('canvas');
-                                canvas.width = 800; canvas.height = 800 * (img.height/img.width);
-                                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                                r(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
-                            };
-                            img.src = e.target.result;
-                        };
-                        reader.readAsDataURL(files[i]);
+                            const img = new Image(); img.onload = () => {
+                                const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 800 * (img.height/img.width);
+                                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height); r(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+                            }; img.src = e.target.result;
+                        }; reader.readAsDataURL(files[i]);
                     });
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts }] })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] })
                 });
                 const data = await resp.json();
                 let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim();
                 let res = JSON.parse(cleanText);
-                
                 document.getElementById('g_hundos').value = res.pokemon_list || '';
                 if(res.total_perfect) document.getElementById('st_hundo_leg').value = res.total_perfect;
             } catch (e) { alert("AI辨識異常"); }
@@ -355,19 +340,11 @@
         };
 
         window.generateText = function() {
-            const v = (id) => document.getElementById(id).value.trim();
-            const checked = (id) => document.getElementById(id).checked;
-            let res = [];
-            
-            res.push(v('g_id'));
-            res.push(`${v('g_level')}等${v('g_team')}`);
-            
-            let spList = [];
-            for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
+            const v = (id) => document.getElementById(id).value.trim(); const checked = (id) => document.getElementById(id).checked;
+            let res = []; res.push(v('g_id')); res.push(`${v('g_level')}等${v('g_team')}`);
+            let spList = []; for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
-            
             if(v('g_rare_list')) res.push(`🔥${v('g_rare_list')}🔥`);
-            
             if(v('st_old_poke')) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
             if(v('st_old_leg')) res.push(`‼️${v('st_old_leg')} 隻 16–20年神獸‼️`);
             if(checked('chk_kyurem')) res.push(v('sel_kyurem'));
@@ -380,38 +357,23 @@
             if(checked('chk_kyogre')) res.push(`蓋歐卡有開根源波動`);
             if(checked('chk_rayquaza')) res.push(`烈空坐有開畫龍點睛`);
             
-            if(v('g_xp')) res.push(`經驗 ${v('g_xp')}萬`);
-            if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}萬`);
-            
-            if(v('st_hundo_leg')) {
-                let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : '';
-                res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`);
-            }
-            if(v('st_legend')) res.push(`✅神獸總數${v('st_legend')}隻`);
-            if(v('st_shiny')) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
-            if(v('st_shiny_leg')) res.push(`✅色違神獸${v('st_shiny_leg')}隻`);
-            if(v('st_costume')) res.push(`✅裝扮寶可夢${v('st_costume')}隻`);
-            if(v('st_bg_comm')) res.push(`✅紀念背卡${v('st_bg_comm')}隻`);
-            if(v('st_bg_special')) res.push(`✅特別背卡${v('st_bg_special')}隻`);
-            if(v('st_dyna')) res.push(`✅極巨化${v('st_dyna')}隻`);
-            if(v('st_giga')) res.push(`✅超極巨化${v('st_giga')}隻`);
+            if(v('g_xp')) res.push(`經驗 ${v('g_xp')}萬`); if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}萬`);
+            if(v('st_hundo_leg')) { let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
+            if(v('st_legend')) res.push(`✅神獸總數${v('st_legend')}隻`); if(v('st_shiny')) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
+            if(v('st_shiny_leg')) res.push(`✅色違神獸${v('st_shiny_leg')}隻`); if(v('st_costume')) res.push(`✅裝扮寶可夢${v('st_costume')}隻`);
+            if(v('st_bg_comm')) res.push(`✅紀念背卡${v('st_bg_comm')}隻`); if(v('st_bg_special')) res.push(`✅特別背卡${v('st_bg_special')}隻`);
+            if(v('st_dyna')) res.push(`✅極巨化${v('st_dyna')}隻`); if(v('st_giga')) res.push(`✅超極巨化${v('st_giga')}隻`);
             if(v('st_perfect')) res.push(`✅完美${v('st_perfect')}隻`);
-            
-            if(v('st_bag')) res.push(`背包${v('st_bag')}`);
-            if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
-            if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`);
-            if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
-            if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`);
-            if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
-            
+            if(v('st_bag')) res.push(`背包${v('st_bag')}`); if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
+            if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`); if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
+            if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`); if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
             return res.join('\n');
         };
 
         window.copyInventoryText = function(txt, btn) {
-            const area = document.getElementById('hiddenCopyArea');
-            area.style.display = 'block'; area.value = decodeURIComponent(txt);
+            const area = document.getElementById('hiddenCopyArea'); area.style.display = 'block'; area.value = decodeURIComponent(txt);
             area.select(); document.execCommand('copy'); area.style.display = 'none';
-            btn.innerHTML = '已複製'; setTimeout(() => btn.innerHTML = '複製文案', 1500);
+            btn.innerHTML = '已複製'; setTimeout(() => btn.innerHTML = '複製', 1500);
         };
     </script>
 </body>
