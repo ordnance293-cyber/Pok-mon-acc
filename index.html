@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V17 排序升級版</title>
+    <title>寶可夢頂級帳號庫 - V18 終極旗艦版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -34,7 +34,389 @@
                     inventoryData.push({ uid: key, ...data[key] });
                 });
             }
-            renderInventory(); // 資料更新時重新渲染並排序
+            renderInventory(); 
+        });
+
+        // 單筆拋轉
+        window.syncToGoogleSheets = async function(accountId, fullText, btn) {
+            const sheetId = document.getElementById('googleSheetId').value.trim();
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
+            if(!sheetId || !scriptUrl) { alert("請填寫頂部試算表設定！"); return; }
+            
+            const oldText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 傳送中...';
+            btn.disabled = true;
+            
+            try {
+                await fetch(scriptUrl, {
+                    method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(fullText) })
+                });
+                btn.innerHTML = '✅ 已拋轉';
+                setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 2000);
+            } catch (e) { alert("同步失敗！"); btn.innerHTML = oldText; btn.disabled = false; }
+        };
+
+        // 🌟 批次一鍵拋轉
+        window.syncAllToSheets = async function(btn) {
+            if(inventoryData.length === 0) { alert('目前沒有資料可以拋轉喔！'); return; }
+            if(!confirm(`確定要將雲端列表上的【${inventoryData.length}】個帳號，全部一次拋轉到試算表嗎？\n(這會將清單整批新增在表格最下方)`)) return;
+            
+            const sheetId = document.getElementById('googleSheetId').value.trim();
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
+            if(!sheetId || !scriptUrl) { alert("請填寫頂部試算表設定！"); return; }
+            
+            const oldText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 全部拋轉中...';
+            btn.disabled = true;
+            
+            // 將所有資料打包
+            const allData = inventoryData.map(item => ({
+                accountId: item.accountId,
+                data: decodeURIComponent(item.fullText)
+            }));
+            
+            try {
+                await fetch(scriptUrl, {
+                    method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'syncAll', id: sheetId, allData: allData })
+                });
+                btn.innerHTML = '✅ 全部拋轉成功！';
+                setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
+            } catch (e) { alert("批次同步失敗！"); btn.innerHTML = oldText; btn.disabled = false; }
+        };
+
+        window.addAccountToInventory = function() {
+            const accountId = document.getElementById('g_id').value.trim();
+            if(!accountId) { alert("請輸入帳號代碼！"); return; }
+            const newItem = {
+                accountId: accountId, level: document.getElementById('g_level').value, team: document.getElementById('g_team').value, price: document.getElementById('g_price').value || "未標價", stardust: document.getElementById('g_stardust').value || "未知", fullText: encodeURIComponent(window.generateText()), timestamp: Date.now()
+            };
+            push(inventoryRef, newItem);
+            document.querySelectorAll('input, textarea').forEach(el => {
+                if(!['geminiApiKey','googleSheetId','gasUrl','g_level'].includes(el.id) && el.type !== 'checkbox') el.value = '';
+                if(el.type === 'checkbox') el.checked = false;
+            });
+            document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden'));
+            window.clearImage();
+        };
+
+        window.deleteAccount = async function(uid, accountId) {
+            if(confirm('確定要刪除嗎？\n\n注意：這會同時從「雲端庫存」與「試算表」中刪除這筆資料！')) { 
+                remove(ref(db, `inventory/${uid}`)); 
+                const sheetId = document.getElementById('googleSheetId').value.trim();
+                const scriptUrl = document.getElementById('gasUrl').value.trim();
+                if(sheetId && scriptUrl) {
+                    try {
+                        await fetch(scriptUrl, {
+                            method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'delete', id: sheetId, accountId: accountId })
+                        });
+                    } catch(e) {}
+                }
+            }
+        };
+
+        window.renderInventory = function() {
+            const tbody = document.getElementById('inventoryBody');
+            if(!tbody) return;
+            tbody.innerHTML = ''; 
+            
+            const sortMode = document.getElementById('sortMode') ? document.getElementById('sortMode').value : 'priceDesc';
+            let displayData = [...inventoryData];
+            
+            displayData.sort((a, b) => {
+                if (sortMode === 'priceDesc') {
+                    let pA = parseInt(a.price); pA = isNaN(pA) ? -1 : pA; let pB = parseInt(b.price); pB = isNaN(pB) ? -1 : pB;
+                    if(pA !== pB) return pB - pA; return b.timestamp - a.timestamp;
+                } else if (sortMode === 'priceAsc') {
+                    let pA = parseInt(a.price); pA = isNaN(pA) ? Infinity : pA; let pB = parseInt(b.price); pB = isNaN(pB) ? Infinity : pB;
+                    if(pA !== pB) return pA - pB; return b.timestamp - a.timestamp;
+                } else { return b.timestamp - a.timestamp; }
+            });
+
+            displayData.forEach(item => {
+                const newRow = document.createElement('tr');
+                newRow.className = 'hover:bg-blue-50 bg-white border-b border-gray-100';
+                let teamColor = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
+                newRow.innerHTML = `
+                    <td class="px-6 py-4 font-mono font-bold uppercase">${item.accountId}</td>
+                    <td class="px-6 py-4 text-sm font-bold ${teamColor}">${item.level}等 ${item.team}</td>
+                    <td class="px-6 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td>
+                    <td class="px-6 py-4 text-center flex gap-2 justify-center">
+                        <button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs shadow">複製</button>
+                        <button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs shadow">拋轉</button>
+                    </td>
+                    <td class="px-6 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-400 hover:text-red-600 p-2"><i class="fas fa-trash-alt"></i></button></td>
+                `;
+                tbody.appendChild(newRow);
+            });
+            const countEl = document.getElementById('inventoryCount');
+            if(countEl) countEl.innerText = inventoryData.length;
+        }
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
+        <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-700">
+            <i class="fas fa-rocket"></i> 全自動進銷存 V18
+        </h1>
+        <div class="flex gap-2 items-center flex-wrap">
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32">
+            <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28">
+            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">💾 儲存設定</button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-4 py-8">
+        <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8">
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 class="text-lg font-bold">快速建檔區</h2>
+                <button type="button" onclick="addAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition">同步至雲端列表</button>
+            </div>
+
+            <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div class="col-span-1 space-y-3 bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
+                    <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
+                    <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm font-bold">選擇多張截圖</label>
+                    <div id="imagePreviewContainer" class="flex flex-wrap gap-2 w-full py-2 justify-center"></div>
+                    <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold">🤖 AI 自動填數量</button>
+                </div>
+
+                <div class="col-span-1 space-y-3">
+                    <label class="text-xs font-bold text-gray-500 border-b block">基本資訊</label>
+                    <input type="text" id="g_id" placeholder="代碼 (自動截取前6字)" class="w-full p-2 border rounded font-bold uppercase" oninput="this.value = this.value.substring(0, 6)">
+                    <div class="flex gap-2"><input type="number" id="g_level" value="70" class="w-1/2 p-2 border rounded text-sm"><select id="g_team" class="w-1/2 p-2 border rounded text-sm"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
+                    <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm">
+                    <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm">
+                    <input type="number" id="g_price" placeholder="價格" class="w-full p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm">
+                </div>
+
+                <div class="col-span-1 space-y-3">
+                    <label class="text-xs font-bold text-gray-500 border-b block">資源老怪</label>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div>16-20怪<input type="number" id="st_old_poke" class="w-full p-1 border rounded"></div>
+                        <div>16-20神<input type="number" id="st_old_leg" class="w-full p-1 border rounded"></div>
+                        <div>大師球<input type="number" id="st_masterball" class="w-full p-1 border rounded"></div>
+                        <div>綠票<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
+                        <div>神奇糖果<input type="number" id="st_rarecandy" class="w-full p-1 border rounded"></div>
+                        <div>寶可幣<input type="number" id="st_coin" class="w-full p-1 border rounded"></div>
+                        <div class="col-span-2">背包上限<input type="number" id="st_bag" class="w-full p-1 border rounded"></div>
+                    </div>
+                </div>
+
+                <div class="col-span-1 space-y-2 bg-red-50 p-2 rounded-lg border">
+                    <label class="text-xs font-bold text-red-800 border-b block pb-1">特殊調查</label>
+                    <div class="flex flex-col gap-1 text-[10px]">
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_3" value="凱路迪歐">凱路迪歐</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_4" value="至尊鳳王">至尊鳳王</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_5" value="至尊洛奇亞">至尊洛奇亞</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_6" value="瑪夏多">瑪夏多</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_7" value="色違基拉祈">色違基拉祈</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_8" value="色違謝米">色違謝米</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_9" value="波爾凱尼恩">波爾凱尼恩</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_10" value="薩戮德">薩戮德</label>
+                    </div>
+                </div>
+
+                <div class="col-span-1 space-y-2 bg-purple-50 p-2 rounded-lg border text-[10px]">
+                    <label class="text-xs font-bold text-purple-800 border-b block pb-1">合體與 Mega</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label>
+                    <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label>
+                    <select id="sel_dogs" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪合體</label>
+                    <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
+                    <select id="sel_lati" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
+                    <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option><option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option><option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option><option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_dyna">可打極巨化</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多有開斷崖之劍</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡有開根源波動</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐有開畫龍點睛</label>
+                </div>
+
+                <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
+                    <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會獨立顯示..." class="w-full p-2 border rounded text-xs h-10"></textarea>
+                    <textarea id="g_hundos" placeholder="AI 盤點結果..." class="w-full p-2 border border-blue-200 bg-blue-50 rounded text-xs h-16"></textarea>
+                    <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
+                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold"></div>
+                        <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded"></div>
+                        <div>色違寶可夢<input type="number" id="st_shiny" class="w-full p-1 border rounded"></div>
+                        <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded"></div>
+                        <div>裝扮寶可夢<input type="number" id="st_costume" class="w-full p-1 border rounded"></div>
+                        <div>紀念背卡<input type="number" id="st_bg_comm" class="w-full p-1 border rounded"></div>
+                        <div>特別背卡<input type="number" id="st_bg_special" class="w-full p-1 border rounded"></div>
+                        <div>極巨化<input type="number" id="st_dyna" class="w-full p-1 border rounded"></div>
+                        <div>超極巨化<input type="number" id="st_giga" class="w-full p-1 border rounded"></div>
+                        <div>完美<input type="number" id="st_perfect" class="w-full p-1 border rounded"></div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
+            <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
+                <span>雲端同步總表 (<span id="inventoryCount">0</span>)</span>
+                <div class="flex items-center gap-2">
+                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">
+                        <i class="fas fa-rocket mr-1"></i> 一鍵全部拋轉
+                    </button>
+                    <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer">
+                        <option value="priceDesc">💰 售價：高 ➔ 低</option>
+                        <option value="priceAsc">💰 售價：低 ➔ 高</option>
+                        <option value="newest">🆕 最新加入時間</option>
+                    </select>
+                </div>
+            </div>
+            <table class="w-full text-left text-sm">
+                <thead class="bg-gray-50"><tr><th class="px-6 py-3 border-b">代碼</th><th class="px-6 py-3 border-b">資訊</th><th class="px-6 py-3 border-b">售價</th><th class="px-6 py-3 border-b text-center">自動化</th><th class="px-6 py-3 border-b text-center">刪除</th></tr></thead>
+                <tbody id="inventoryBody"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <textarea id="hiddenCopyArea" class="hidden"></textarea>
+
+    <script>
+        ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => {
+            document.getElementById(id).value = localStorage.getItem(id) || '';
+        });
+        window.saveApiKey = function() {
+            ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => {
+                localStorage.setItem(id, document.getElementById(id).value.trim());
+            });
+            alert('設定已儲存！');
+        };
+
+        window.previewImages = function(event) {
+            const files = event.target.files;
+            const container = document.getElementById('imagePreviewContainer');
+            container.innerHTML = ''; 
+            if(files.length === 0) return;
+            for(let i = 0; i < files.length; i++) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = document.createElement('img');
+                    img.src = e.target.result; img.className = 'rounded h-12 border';
+                    container.appendChild(img);
+                }
+                reader.readAsDataURL(files[i]);
+            }
+            document.getElementById('aiBtn').classList.remove('hidden');
+        };
+
+        window.clearImage = function() {
+            document.getElementById('imageInput').value = '';
+            document.getElementById('imagePreviewContainer').innerHTML = '';
+            document.getElementById('aiBtn').classList.add('hidden');
+        };
+
+        window.analyzeMultipleImages = async function() {
+            const apiKey = document.getElementById('geminiApiKey').value.trim();
+            const files = document.getElementById('imageInput').files;
+            if(!apiKey || files.length === 0) return;
+            const aiBtn = document.getElementById('aiBtn');
+            aiBtn.disabled = true; aiBtn.innerHTML = '辨識中...';
+            try {
+                let parts = [{ text: "辨識寶可夢型態(起源等)、色違、暗影，統計數量。抓出截圖最上方『寶可夢 XX/YY』的 XX 數字。輸出 JSON: {pokemon_list: '字串', total_perfect: 數字}" }];
+                for(let i=0; i<files.length; i++){
+                    const base64 = await new Promise(r => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = 800; canvas.height = 800 * (img.height/img.width);
+                                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                                r(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+                            };
+                            img.src = e.target.result;
+                        };
+                        reader.readAsDataURL(files[i]);
+                    });
+                    parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
+                }
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts }] })
+                });
+                const data = await resp.json();
+                let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim();
+                let res = JSON.parse(cleanText);
+                
+                document.getElementById('g_hundos').value = res.pokemon_list || '';
+                if(res.total_perfect) document.getElementById('st_hundo_leg').value = res.total_perfect;
+            } catch (e) { alert("AI辨識異常"); }
+            aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
+        };
+
+        window.generateText = function() {
+            const v = (id) => document.getElementById(id).value.trim();
+            const checked = (id) => document.getElementById(id).checked;
+            let res = [];
+            
+            res.push(v('g_id'));
+            res.push(`${v('g_level')}等${v('g_team')}`);
+            
+            let spList = [];
+            for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
+            if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
+            
+            if(v('g_rare_list')) res.push(`🔥${v('g_rare_list')}🔥`);
+            
+            if(v('st_old_poke')) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
+            if(v('st_old_leg')) res.push(`‼️${v('st_old_leg')} 隻 16–20年神獸‼️`);
+            if(checked('chk_kyurem')) res.push(v('sel_kyurem'));
+            if(checked('chk_zamazenta')) res.push(v('sel_dogs'));
+            if(checked('chk_necrozma')) res.push(v('sel_necrozma'));
+            if(checked('chk_dyna')) res.push(`✨可打極巨化／超極巨化✨`);
+            if(checked('chk_lati')) res.push(v('sel_lati'));
+            if(checked('chk_hoenn')) res.push(v('sel_hoenn'));
+            if(checked('chk_groudon')) res.push(`固拉多有開斷崖之劍`);
+            if(checked('chk_kyogre')) res.push(`蓋歐卡有開根源波動`);
+            if(checked('chk_rayquaza')) res.push(`烈空坐有開畫龍點睛`);
+            
+            if(v('g_xp')) res.push(`經驗 ${v('g_xp')}萬`);
+            if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}萬`);
+            
+            if(v('st_hundo_leg')) {
+                let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : '';
+                res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`);
+            }
+            if(v('st_legend')) res.push(`✅神獸總數${v('st_legend')}隻`);
+            if(v('st_shiny')) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
+            if(v('st_shiny_leg')) res.push(`✅色違神獸${v('st_shiny_leg')}隻`);
+            if(v('st_costume')) res.push(`✅裝扮寶可夢${v('st_costume')}隻`);
+            if(v('st_bg_comm')) res.push(`✅紀念背卡${v('st_bg_comm')}隻`);
+            if(v('st_bg_special')) res.push(`✅特別背卡${v('st_bg_special')}隻`);
+            if(v('st_dyna')) res.push(`✅極巨化${v('st_dyna')}隻`);
+            if(v('st_giga')) res.push(`✅超極巨化${v('st_giga')}隻`);
+            if(v('st_perfect')) res.push(`✅完美${v('st_perfect')}隻`);
+            
+            if(v('st_bag')) res.push(`背包${v('st_bag')}`);
+            if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
+            if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`);
+            if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
+            if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`);
+            if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
+            
+            return res.join('\n');
+        };
+
+        window.copyInventoryText = function(txt, btn) {
+            const area = document.getElementById('hiddenCopyArea');
+            area.style.display = 'block'; area.value = decodeURIComponent(txt);
+            area.select(); document.execCommand('copy'); area.style.display = 'none';
+            btn.innerHTML = '已複製'; setTimeout(() => btn.innerHTML = '複製文案', 1500);
+        };
+    </script>
+</body>
+</html>            renderInventory(); // 資料更新時重新渲染並排序
         });
 
         // 🌟 新增到 Google 試算表
