@@ -174,7 +174,7 @@
 
     <main class="max-w-7xl mx-auto p-4 py-8">
         <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
-            <div class="flex justify-between items-center mb-6 border-b pb-4">
+            <div class="flex justify-between items-center mb-4 border-b pb-4">
                 <h2 class="text-lg font-bold">快速建檔區</h2>
                 <div class="flex gap-2">
                     <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-300 transition">🧹 清除</button>
@@ -182,7 +182,7 @@
                 </div>
             </div>
 
-            <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100 mb-4">
+            <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100 mb-5">
                 <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
                 <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
                 <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
@@ -367,13 +367,15 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
+        // 🔥 更新了這裡的 AI 辨識邏輯，加強神獸總數、百神與色違神獸的精準度 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先填寫 AI Key！"); return; }
             if(files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 辨識中...';
             try {
-                let parts = [{ text: "分析寶可夢截圖，輸出純 JSON（不含 Markdown）。1. 搜尋「傳說的寶可夢,幻,究極異獸」-> legendary (神獸總數)。2. 搜尋「...&4*」 -> hundo_leg (百神數量)。3. 搜尋「...&異色」 -> shiny_leg (色違神獸)。4. 標籤數字：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。5. 提取數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、綠券(greenpass)、寶可夢包(poke_bag)、道具包(item_bag)。6. 玩家等級(level)、星塵(stardust)、經驗(xp)。7. 盤點網格清單合併加總（如：超夢*3）。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\",\"masterball\":\"\",\"rarecandy\":\"\",\"coin\":\"\",\"greenpass\":\"\",\"poke_bag\":\"\",\"item_bag\":\"\",\"level\":\"\",\"stardust\":\"\",\"xp\":\"\"}" }];
+                let parts = [{ text: "分析寶可夢截圖，輸出純 JSON（不含 Markdown）。【關鍵數量精確提取】：1. 若截圖上方搜尋列完整出現「傳說的寶可夢,幻,究極異獸」，讀取該畫面顯示的總數字填入 legendary (神獸總數)。2. 若搜尋列完整出現「傳說的寶可夢,幻,究極異獸&4*」，這是最高優先級！務必精準讀取數字並填入 hundo_leg (百神數量)。3. 若搜尋列完整出現「傳說的寶可夢,幻,究極異獸&異色」，讀取數字填入 shiny_leg (色違神獸)。【其他數據提取】：4. 標籤總數：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。5. 道具數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、綠券(greenpass)、寶可夢包(poke_bag)、道具包(item_bag)。6. 基本資訊：玩家等級(level)、星塵(stardust)、經驗(xp)。7. 網格盤點：辨識畫面中寶可夢並合併同類數量（如：超夢*3），填入 pokemon_list。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\",\"masterball\":\"\",\"rarecandy\":\"\",\"coin\":\"\",\"greenpass\":\"\",\"poke_bag\":\"\",\"item_bag\":\"\",\"level\":\"\",\"stardust\":\"\",\"xp\":\"\"}" }];
+                
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
@@ -420,7 +422,7 @@
                 if (fX >= 800000) { document.getElementById('g_xp').value = Math.floor(fX / 10000); highlightInput('g_xp'); }
 
                 window.updateHundoCount(); 
-            } catch (e) { alert("AI辨識異常"); }
+            } catch (e) { alert("AI辨識異常，請檢查圖片或網路連線"); console.error(e); }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
