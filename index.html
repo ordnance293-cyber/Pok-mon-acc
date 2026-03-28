@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V23 指令複製版</title>
+    <title>寶可夢頂級帳號庫 - V24 自動連線版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -40,7 +40,7 @@
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("請填寫頂部試算表設定！"); return; }
+            if(!sheetId || !scriptUrl) { alert("試算表連線異常！"); return; }
             
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 傳送中...'; btn.disabled = true;
             try {
@@ -55,7 +55,7 @@
             if(!confirm(`確定要將【${activeData.length}】個現貨帳號一次拋轉嗎？`)) return;
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("請填寫設定！"); return; }
+            if(!sheetId || !scriptUrl) { alert("試算表連線異常！"); return; }
             
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 拋轉中...'; btn.disabled = true;
             const allData = activeData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
@@ -181,13 +181,14 @@
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-search"></i> 寶可夢進銷存 V23 指令複製版
+            <i class="fas fa-link"></i> 寶可夢進銷存 V24 自動連線版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32">
+            <input type="text" id="googleSheetId" value="1Ng_1f1WMngTjprIej417T-OJUZHAJt5UzNh7-EuqzqM" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 bg-gray-100 text-gray-500" readonly>
+            <input type="text" id="gasUrl" value="https://script.google.com/macros/s/AKfycbwyLkzy5L8TMl7qfbiUg7dBXi7wTtxV-X3OD_JuGtnxf4fRmyWH1g8m-UkjSRV3r9_iFw/exec" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 bg-gray-100 text-gray-500" readonly>
+            
             <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28">
-            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">💾 儲存設定</button>
+            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">💾 儲存 AI Key</button>
         </div>
     </header>
 
@@ -328,8 +329,13 @@
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { document.getElementById(id).value = localStorage.getItem(id) || ''; });
-        window.saveApiKey = function() { ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { localStorage.setItem(id, document.getElementById(id).value.trim()); }); alert('設定已儲存！'); };
+        // 🌟 初始化：只從 localStorage 讀取 AI Key。表單跟 GAS 已經寫死了！
+        document.getElementById('geminiApiKey').value = localStorage.getItem('geminiApiKey') || '';
+        
+        window.saveApiKey = function() { 
+            localStorage.setItem('geminiApiKey', document.getElementById('geminiApiKey').value.trim()); 
+            alert('AI Key 設定已儲存！(試算表連線已自動綁定)'); 
+        };
 
         window.previewImages = function(event) {
             const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
@@ -403,7 +409,6 @@
             btn.innerHTML = '已複製'; setTimeout(() => btn.innerHTML = '複製', 1500);
         };
 
-        // 🌟 專屬的「簡單字串複製」功能 (給遊戲內指令用的)
         window.copySimpleText = function(txt, btn) {
             const area = document.getElementById('hiddenCopyArea');
             area.style.display = 'block'; area.value = txt;
