@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - 雲端同步系統</title>
+    <title>寶可夢頂級帳號庫 - V3 終極版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -11,7 +11,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // 你的 Firebase 配置
         const firebaseConfig = {
             apiKey: "AIzaSyAXHqvXLLTmYl8kVV1fR0gJRFangwV85n8",
             authDomain: "pokemon-acc.firebaseapp.com",
@@ -25,10 +24,8 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const inventoryRef = ref(db, 'inventory');
-
         let inventoryData = [];
 
-        // 監聽雲端資料
         onValue(inventoryRef, (snapshot) => {
             const data = snapshot.val();
             inventoryData = [];
@@ -41,10 +38,9 @@
             renderInventory();
         });
 
-        // 新增到雲端
         window.addAccountToInventory = function() {
             const accountId = document.getElementById('g_id').value.trim();
-            if(!accountId) { alert("請至少輸入帳號代碼！"); return; }
+            if(!accountId) { alert("請輸入帳號代碼！"); return; }
 
             const newItem = {
                 accountId: accountId,
@@ -55,125 +51,97 @@
                 fullText: encodeURIComponent(window.generateText()),
                 timestamp: Date.now()
             };
-
             push(inventoryRef, newItem);
-
-            // 清理
             document.getElementById('g_id').value = '';
             document.getElementById('g_hundos').value = '';
             window.clearImage();
         };
 
-        // 從雲端刪除
         window.deleteAccount = function(uid) {
-            if(confirm('確定要從雲端刪除這筆資料嗎？所有裝置都會同步消失喔！')) {
-                remove(ref(db, `inventory/${uid}`));
-            }
+            if(confirm('確定要從雲端刪除嗎？')) { remove(ref(db, `inventory/${uid}`)); }
         };
 
-        // 渲染表格
         function renderInventory() {
             const tbody = document.getElementById('inventoryBody');
             tbody.innerHTML = ''; 
-
             inventoryData.forEach(item => {
                 const newRow = document.createElement('tr');
-                newRow.className = 'hover:bg-blue-50 transition-colors bg-white border-b border-gray-100';
+                newRow.className = 'hover:bg-blue-50 bg-white border-b border-gray-100';
                 let teamColor = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
-
                 newRow.innerHTML = `
-                    <td class="px-6 py-4 font-mono font-bold text-gray-900 uppercase">${item.accountId}</td>
+                    <td class="px-6 py-4 font-mono font-bold uppercase">${item.accountId}</td>
                     <td class="px-6 py-4 text-sm font-bold ${teamColor}">${item.level}等 ${item.team}</td>
                     <td class="px-6 py-4 text-sm text-gray-600">${item.stardust}</td>
                     <td class="px-6 py-4 text-sm font-bold text-red-600">$ ${item.price}</td>
-                    <td class="px-6 py-4 text-center">
-                        <button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-xs font-medium">複製文案</button>
-                    </td>
-                    <td class="px-6 py-4 text-center">
-                        <button onclick="window.deleteAccount('${item.uid}')" class="text-red-400 hover:text-red-600 p-2"><i class="fas fa-trash-alt"></i></button>
-                    </td>
+                    <td class="px-6 py-4 text-center"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">複製</button></td>
+                    <td class="px-6 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}')" class="text-red-400 hover:text-red-600"><i class="fas fa-trash-alt"></i></button></td>
                 `;
                 tbody.appendChild(newRow);
             });
             document.getElementById('inventoryCount').innerText = inventoryData.length;
         }
     </script>
-
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', 'PingFang TC', sans-serif; background-color: #f9fafb; }
-        .poke-checkbox { width: 1rem; height: 1rem; cursor: pointer; }
-    </style>
 </head>
-<body class="text-gray-800 antialiased">
+<body class="bg-gray-50 text-gray-800">
 
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
-            <h1 class="text-xl font-bold"><i class="fas fa-cloud text-blue-600 mr-2"></i>寶可夢雲端同步系統</h1>
-            <div class="flex items-center gap-2">
-                <input type="password" id="geminiApiKey" placeholder="Google AI Key" class="p-1.5 border border-gray-300 rounded text-xs w-32 focus:ring-2 focus:ring-blue-500">
-                <button onclick="saveApiKey()" class="bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded text-xs">儲存金鑰</button>
-                <button onclick="exportTableToCSV('寶可夢庫存.csv')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded text-sm flex items-center gap-2 ml-2">
-                    <i class="fas fa-file-excel"></i>匯出 CSV
-                </button>
-            </div>
+    <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center">
+        <h1 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-cloud text-blue-600"></i>寶可夢雲端庫存 
+            <span class="bg-red-500 text-white text-[10px] px-2 py-1 rounded-full">V3 修復版</span>
+        </h1>
+        <div class="flex gap-2">
+            <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28">
+            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">儲存</button>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 py-8">
+    <main class="max-w-7xl mx-auto p-4 py-8">
         <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8">
             <div class="flex justify-between items-center mb-6 border-b pb-4">
-                <h2 class="text-xl font-bold"><i class="fas fa-cloud-upload-alt text-blue-500 mr-2"></i>雲端建檔</h2>
-                <button type="button" onclick="addAccountToInventory()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-bold shadow-md flex items-center gap-2">
-                    <i class="fas fa-plus-circle"></i> 同步至雲端
-                </button>
+                <h2 class="text-lg font-bold">快速建檔區</h2>
+                <button type="button" onclick="addAccountToInventory()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-bold shadow-md">同步至雲端</button>
             </div>
 
-            <form id="generatorForm" class="grid grid-cols-1 md:grid-cols-5 gap-6">
-                <div class="space-y-3 bg-gray-50 p-3 rounded-lg border border-dashed flex flex-col items-center justify-center relative">
+            <form class="grid grid-cols-1 md:grid-cols-5 gap-6">
+                <div class="space-y-3 bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center relative">
                     <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="previewImage(event)">
-                    <label for="imageInput" class="cursor-pointer bg-white border px-3 py-1.5 rounded text-xs hover:bg-gray-100 w-full text-center font-bold">
-                        <i class="fas fa-upload mr-1"></i>上傳截圖
+                    <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm hover:bg-gray-100 w-full text-center font-bold">
+                        <i class="fas fa-image mr-1"></i>選擇截圖
                     </label>
-                    <img id="imagePreview" src="" class="hidden rounded shadow-sm w-full object-contain max-h-40">
-                    <span id="imagePlaceholder" class="text-xs text-gray-400 py-8">尚未上傳圖片</span>
-                    <button type="button" id="aiBtn" onclick="analyzeImage()" class="hidden w-full bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-xs font-bold mt-2 shadow-md">
-                        <i class="fas fa-bolt mr-1"></i>AI 自動辨識 (圖片壓縮版)
+                    <img id="imagePreview" src="" class="hidden rounded shadow-sm w-full object-contain max-h-48 mt-2">
+                    <span id="imagePlaceholder" class="text-xs text-gray-400 py-8">尚未選擇圖片</span>
+                    
+                    <button type="button" id="aiBtn" onclick="analyzeImage()" class="hidden w-full bg-gradient-to-r from-purple-600 to-blue-500 text-white px-4 py-3 rounded-xl text-sm font-bold mt-3 shadow-lg transform transition active:scale-95">
+                        <i class="fas fa-magic mr-1"></i>🚀 V3 AI 智能辨識
                     </button>
-                    <button type="button" id="clearImageBtn" onclick="clearImage()" class="hidden absolute top-2 right-2 text-red-500 bg-white rounded-full w-6 h-6 flex items-center justify-center shadow"><i class="fas fa-times"></i></button>
+                    
+                    <button type="button" id="clearImageBtn" onclick="clearImage()" class="hidden absolute top-2 right-2 text-red-500 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow"><i class="fas fa-times"></i></button>
                 </div>
 
                 <div class="space-y-3">
-                    <h3 class="font-bold text-sm text-gray-500">1. 基本資訊</h3>
-                    <div><input type="text" id="g_id" placeholder="帳號代碼" class="w-full p-2 border rounded text-sm uppercase"></div>
+                    <label class="text-xs font-bold text-gray-500">基本資訊</label>
+                    <input type="text" id="g_id" placeholder="帳號代碼" class="w-full p-2 border rounded uppercase">
                     <div class="flex gap-2">
-                        <div class="w-1/2"><input type="number" id="g_level" value="70" class="w-full p-2 border rounded text-sm"></div>
-                        <div class="w-1/2">
-                            <select id="g_team" class="w-full p-2 border rounded text-sm">
-                                <option>藍隊</option><option>紅隊</option><option>黃隊</option>
-                            </select>
-                        </div>
+                        <input type="number" id="g_level" value="70" class="w-1/2 p-2 border rounded">
+                        <select id="g_team" class="w-1/2 p-2 border rounded"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select>
                     </div>
-                    <div><input type="number" id="g_price" placeholder="售價" class="w-full p-2 border border-yellow-400 rounded text-sm bg-yellow-50"></div>
-                    <div><input type="text" id="g_stardust" placeholder="星塵數量" class="w-full p-2 border rounded text-sm"></div>
+                    <input type="number" id="g_price" placeholder="售價" class="w-full p-2 border-yellow-400 bg-yellow-50 rounded">
+                    <input type="text" id="g_stardust" placeholder="星塵" class="w-full p-2 border rounded">
                 </div>
 
                 <div class="space-y-2">
-                    <h3 class="font-bold text-sm text-gray-500">2. 亮點特徵</h3>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_marshadow" class="poke-checkbox">瑪夏多調查</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_kyurem" class="poke-checkbox">酋雷姆合體</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_zamazenta" class="poke-checkbox">蒼響劍盾</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_necrozma" class="poke-checkbox">奈克洛茲瑪合體</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_dyna" class="poke-checkbox">極巨化系統</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_mega_ray" class="poke-checkbox">烈空坐能量</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_move_groudon" class="poke-checkbox">斷崖之劍</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_move_kyogre" class="poke-checkbox">根源波動</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_move_ray" class="poke-checkbox">畫龍點睛</label>
+                    <label class="text-xs font-bold text-gray-500">亮點特徵</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="chk_marshadow">瑪夏多調查</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="chk_kyurem">酋雷姆合體</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="chk_zamazenta">蒼響劍盾</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="chk_necrozma">奈克洛茲瑪合體</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="chk_dyna">極巨化</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="chk_mega_ray">烈空坐能量</label>
                 </div>
 
                 <div class="col-span-1 md:col-span-2 space-y-3">
-                    <h3 class="font-bold text-sm text-gray-500">3. 詳細數據</h3>
-                    <input type="text" id="g_hundos" placeholder="AI 辨識出的百神名單會在這裡..." class="w-full p-2 border border-purple-200 rounded text-sm bg-purple-50">
+                    <label class="text-xs font-bold text-gray-500">詳細數據</label>
+                    <textarea id="g_hundos" placeholder="AI 辨識結果..." class="w-full p-3 border-2 border-purple-300 bg-purple-50 rounded-xl text-sm h-24"></textarea>
                     <div class="grid grid-cols-5 gap-2">
                         <div><label class="block text-[10px]">神獸</label><input type="number" id="st_legend" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">色違神</label><input type="number" id="st_shiny_leg" class="w-full p-1 border rounded text-sm"></div>
@@ -182,30 +150,21 @@
                         <div><label class="block text-[10px]">特背</label><input type="number" id="st_bg_special" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">紀背</label><input type="number" id="st_bg_comm" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">極巨</label><input type="number" id="st_dyna" class="w-full p-1 border rounded text-sm"></div>
-                        <div><label class="block text-[10px]">超極</label><input type="number" id="st_giga" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">完美</label><input type="number" id="st_perfect" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">色違完</label><input type="number" id="st_shundo" class="w-full p-1 border rounded text-sm"></div>
                     </div>
-                    <textarea id="g_custom_fire" rows="2" class="w-full p-2 border rounded text-sm" placeholder="自訂稀有怪..."></textarea>
                 </div>
             </form>
         </div>
 
         <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
             <div class="p-4 bg-gray-50 border-b font-bold text-gray-800">雲端同步總表 (<span id="inventoryCount">0</span>)</div>
-            <table class="w-full text-left">
-                <thead class="text-xs text-gray-500 border-b">
-                    <tr><th class="px-6 py-4">代碼</th><th class="px-6 py-4">資訊</th><th class="px-6 py-4">星塵</th><th class="px-6 py-4">售價</th><th class="px-6 py-4 text-center">文案</th><th class="px-6 py-4 text-center">操作</th></tr>
-                </thead>
-                <tbody id="inventoryBody" class="divide-y divide-gray-100"></tbody>
-            </table>
+            <table class="w-full text-left"><tbody id="inventoryBody" class="divide-y"></tbody></table>
         </div>
     </main>
-
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 輔助功能
         document.getElementById('geminiApiKey').value = localStorage.getItem('geminiApiKey') || '';
         window.saveApiKey = function() {
             localStorage.setItem('geminiApiKey', document.getElementById('geminiApiKey').value.trim());
@@ -234,20 +193,21 @@
             document.getElementById('clearImageBtn').classList.add('hidden');
         };
 
-        // 🌟 強化的圖片壓縮與 AI 辨識
+        // V3 極致防呆版 AI 辨識
         window.analyzeImage = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim();
-            if(!apiKey) { alert('請填寫右上角的 AI Key！'); return; }
+            if(!apiKey) { alert('【錯誤】請先在右上角填寫 AI Key 並按儲存！'); return; }
+            
             const fileInput = document.getElementById('imageInput');
             if(!fileInput.files || fileInput.files.length === 0) return;
             const file = fileInput.files[0];
 
             const aiBtn = document.getElementById('aiBtn');
             aiBtn.disabled = true; 
-            aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>正在壓縮與辨識...';
+            aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>V3 正在極速辨識中...';
 
             try {
-                // 壓縮圖片邏輯
+                // 強制壓縮
                 const base64 = await new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onload = (e) => {
@@ -261,21 +221,21 @@
                             canvas.width = w; canvas.height = h;
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0, w, h);
-                            resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
+                            resolve(canvas.toDataURL('image/jpeg', 0.6).split(',')[1]); // 壓得更小
                         };
                         img.src = e.target.result;
                     };
                     reader.readAsDataURL(file);
                 });
 
-                // 傳給 Google AI
+                // 呼叫 API
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{
                             parts: [
-                                { text: "這是一張寶可夢遊戲的截圖。請幫我辨識圖中出現的所有寶可夢的「中文名稱」，用半形逗號隔開，只要名字就好。" },
+                                { text: "辨識圖中寶可夢的中文名稱，用逗號隔開，只要名字。" },
                                 { inlineData: { mimeType: "image/jpeg", data: base64 } }
                             ]
                         }]
@@ -283,45 +243,41 @@
                 });
 
                 const data = await resp.json();
+                
+                // V3 專屬詳細報錯
                 if(data.error) {
-                    alert('辨識失敗：' + data.error.message);
-                } else {
+                    alert('【V3 系統回報：API 拒絕連線】\n原因：' + data.error.message);
+                } else if (data.candidates && data.candidates[0].content) {
                     document.getElementById('g_hundos').value = data.candidates[0].content.parts[0].text.trim();
+                } else {
+                    alert('【V3 系統回報】回傳資料異常，請再試一次。');
                 }
             } catch (e) { 
-                alert('網路連線失敗，請檢查網路或 API Key！'); 
+                alert('【V3 系統回報：網路崩潰】\n無法連上 Google，請確認：\n1. AI Key 是否正確\n2. 手機網路是否順暢\n\n系統訊息：' + e.message); 
             } finally {
                 aiBtn.disabled = false; 
-                aiBtn.innerHTML = '<i class="fas fa-bolt mr-1"></i>AI 自動辨識 (圖片壓縮版)';
+                aiBtn.innerHTML = '<i class="fas fa-magic mr-1"></i>🚀 V3 AI 智能辨識';
             }
         };
 
-        // 產生文案
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim();
             const checked = (id) => document.getElementById(id).checked;
             let res = [v('g_id'), `${v('g_level')}等${v('g_team')}`];
             if(checked('chk_marshadow')) res.push(`🔥瑪夏多特殊調查🔥`);
-            if(v('g_custom_fire')) v('g_custom_fire').split('\n').forEach(l => res.push(`🔥${l.trim()}🔥`));
             if(checked('chk_kyurem')) res.push(`‼️酋雷姆合體‼️`);
-            if(checked('chk_zamazenta')) res.push(`‼️蒼響劍盾‼️`);
-            if(checked('chk_necrozma')) res.push(`‼️奈克洛茲瑪合體‼️`);
-            if(checked('chk_dyna')) res.push(`✨可極巨化✨`);
-            if(checked('chk_mega_ray')) res.push(`⭐️烈空坐能量夠⭐️`);
-            if(checked('chk_move_groudon')) res.push(`固拉多開斷崖之劍`);
-            if(checked('chk_move_kyogre')) res.push(`蓋歐卡開根源波動`);
-            if(checked('chk_move_ray')) res.push(`烈空坐開畫龍點睛`);
             if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}`);
             if(v('g_hundos')) res.push(`✅${v('g_hundos')}`);
-            ['st_legend','st_shiny_leg','st_costume','st_shiny_costume','st_bg_special','st_bg_comm','st_dyna','st_giga','st_perfect','st_shundo'].forEach(id => {
-                if(v(id)) res.push(`✅數據: ${v(id)}`);
-            });
             if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
             return res.join('\n');
         };
 
-        // 複製文案
-        window.copyInventoryText = function(encodedText, btn) {
+        window.copyInventoryText = function(txt, btn) {
             const area = document.getElementById('hiddenCopyArea');
-            area.style.display = 'block';
-            area.value = decodeURIComponent(encodedText);
+            area.style.display = 'block'; area.value = decodeURIComponent(txt);
+            area.select(); document.execCommand('copy'); area.style.display = 'none';
+            btn.innerHTML = '已複製'; setTimeout(() => btn.innerHTML = '複製', 1500);
+        };
+    </script>
+</body>
+</html>
