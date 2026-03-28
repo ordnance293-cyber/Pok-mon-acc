@@ -234,10 +234,9 @@
             <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V35 旗艦全綁定版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" value="1Ng_1f1WMngTjprIej417T-OJUZHAJt5UzNh7-EuqzqM" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" value="https://script.google.com/macros/s/AKfycbwyLkzy5L8TMl7qfbiUg7dBXi7wTtxV-X3OD_JuGtnxf4fRmyWH1g8m-UkjSRV3r9_iFw/exec" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="password" id="geminiApiKey" placeholder="AI Key" value="AIzaSyDsh6soeBNlD9iVdeAvyJ4DFbc6W8ACRzY" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-28 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <button id="saveBtn" onclick="window.autoSaveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm active:scale-90">💾 儲存</button>
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
+            <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
         </div>
     </header>
 
@@ -389,35 +388,6 @@
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 初始化功能：優先載入記憶體值
-        (function init() {
-            ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => {
-                const savedValue = localStorage.getItem(id);
-                const el = document.getElementById(id);
-                if(savedValue && el) { el.value = savedValue; }
-            });
-        })();
-        
-        // 自動存檔：一打字就同步到記憶體
-        window.autoSaveSettings = function(inputEl) {
-            ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { 
-                const el = document.getElementById(id);
-                if(el) localStorage.setItem(id, el.value.trim()); 
-            });
-            
-            if(inputEl) {
-                inputEl.classList.add('ring-2', 'ring-green-400');
-                setTimeout(() => { inputEl.classList.remove('ring-2', 'ring-green-400'); }, 400);
-            }
-
-            const btn = document.getElementById('saveBtn');
-            btn.innerHTML = '✅ 已存'; btn.classList.replace('bg-gray-800', 'bg-green-600');
-            clearTimeout(window.saveTimer);
-            window.saveTimer = setTimeout(() => {
-                btn.innerHTML = '💾 儲存'; btn.classList.replace('bg-green-600', 'bg-gray-800');
-            }, 1000);
-        };
-
         window.previewImages = function(event) {
             const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
             for(let i = 0; i < files.length; i++) {
@@ -453,10 +423,10 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 辨識：已升級為 gemini-1.5-pro 旗艦模型，並調高圖片解析度至 1080px 🔥
+        // 🔥 AI 視覺解析：使用 flash 模型，並捕捉真實官方錯誤訊息 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
-            if(!apiKey) { alert("請先填寫 AI Key！"); return; }
+            if(!apiKey) { alert("請先在上方填寫 AI Key！"); return; }
             if(files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 視覺解析中...';
             try {
@@ -466,7 +436,6 @@
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
-                                // 配合 Pro 模型，提升圖片解析度至 1080px，保留更多細節
                                 const maxSize = 1080;
                                 let width = img.width;
                                 let height = img.height;
@@ -479,7 +448,6 @@
                                 canvas.width = width; 
                                 canvas.height = height;
                                 canvas.getContext('2d').drawImage(img, 0, 0, width, height); 
-                                // 採用 0.75 壓縮率，兼顧畫質與傳輸速度
                                 r(canvas.toDataURL('image/jpeg', 0.75).split(',')[1]);
                             }; img.src = e.target.result;
                         }; reader.readAsDataURL(files[i]);
@@ -487,11 +455,11 @@
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 🔥 已經將模型端點更新為 gemini-1.5-pro 🔥
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 
                 if (!resp.ok) {
-                    throw new Error(`API 回傳錯誤: ${resp.status}`);
+                    const errData = await resp.text(); 
+                    throw new Error(`錯誤代碼 ${resp.status}\nGoogle 官方原因：${errData}`);
                 }
 
                 const data = await resp.json(); let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim(); let res = JSON.parse(cleanText);
@@ -529,7 +497,7 @@
 
                 window.updateHundoCount(); 
             } catch (e) { 
-                alert("AI辨識異常：" + e.message + "\n可能是免費 API 限制或網路不穩，請稍後再試。"); 
+                alert("🚨 AI 辨識異常 🚨\n\n" + e.message); 
                 console.error(e); 
             }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
