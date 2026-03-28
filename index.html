@@ -388,6 +388,7 @@
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
+        // 🚨 取消所有自動儲存機制 🚨
         window.previewImages = function(event) {
             const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
             for(let i = 0; i < files.length; i++) {
@@ -423,7 +424,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 視覺解析：使用 flash 模型，並捕捉真實官方錯誤訊息 🔥
+        // 🔥 AI 視覺解析：升級至 gemini-2.5-pro 旗艦模型，支援 1080px 超清解析度 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在上方填寫 AI Key！"); return; }
@@ -436,6 +437,7 @@
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
+                                // 提升至 1080px 讓 Pro 模型能看清楚細節
                                 const maxSize = 1080;
                                 let width = img.width;
                                 let height = img.height;
@@ -455,7 +457,8 @@
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+                // 🔥 將模型端點更新為 gemini-2.5-pro 🔥
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 
                 if (!resp.ok) {
                     const errData = await resp.text(); 
