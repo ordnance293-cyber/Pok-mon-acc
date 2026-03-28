@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V30 自動預估算力版</title>
+    <title>寶可夢頂級帳號庫 - V31 自動存檔版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -182,13 +182,15 @@
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-calculator"></i> 寶可夢進銷存 V30 自動算力版
+            <i class="fas fa-save"></i> 寶可夢進銷存 V31 自動存檔版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32">
-            <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28">
-            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">💾 儲存設定</button>
+            <!-- 🌟 這裡加上了 oninput="window.autoSaveSettings()"，你只要貼上文字就會瞬間自動存檔！ -->
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" oninput="window.autoSaveSettings()" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-green-400 transition">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" oninput="window.autoSaveSettings()" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-green-400 transition">
+            <input type="password" id="geminiApiKey" placeholder="AI Key" oninput="window.autoSaveSettings()" class="border p-1.5 rounded text-xs w-28 focus:ring-2 focus:ring-green-400 transition">
+            
+            <button id="saveBtn" onclick="window.autoSaveSettings()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs transition-colors duration-300">💾 儲存設定</button>
         </div>
     </header>
 
@@ -273,7 +275,6 @@
                     <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐有開畫龍點睛</label>
                 </div>
 
-                <!-- 數據表格區塊 -->
                 <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
                     
                     <div class="flex flex-wrap gap-2 items-center text-xs bg-blue-50 p-2.5 rounded-lg border border-blue-200">
@@ -337,8 +338,27 @@
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
+        // 🌟 網頁載入時自動讀取記憶體
         ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { document.getElementById(id).value = localStorage.getItem(id) || ''; });
-        window.saveApiKey = function() { ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { localStorage.setItem(id, document.getElementById(id).value.trim()); }); alert('設定已儲存！'); };
+        
+        // 🌟 自動存檔核心程式：一打字就存！
+        window.autoSaveSettings = function() {
+            ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { 
+                localStorage.setItem(id, document.getElementById(id).value.trim()); 
+            });
+            const btn = document.getElementById('saveBtn');
+            if(btn) {
+                btn.innerHTML = '✅ 已自動儲存';
+                btn.classList.remove('bg-gray-800');
+                btn.classList.add('bg-green-600');
+                clearTimeout(window.saveTimer);
+                window.saveTimer = setTimeout(() => {
+                    btn.innerHTML = '💾 儲存設定';
+                    btn.classList.remove('bg-green-600');
+                    btn.classList.add('bg-gray-800');
+                }, 1500);
+            }
+        };
 
         window.previewImages = function(event) {
             const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
@@ -365,26 +385,20 @@
             countInput.classList.add('bg-green-200'); setTimeout(() => countInput.classList.remove('bg-green-200'), 300);
         };
 
-        // 🌟 處理帶逗號的數字，將其轉換為乾淨的整數
         const parseNum = (val) => {
             if(!val) return NaN;
             return parseInt(String(val).replace(/,/g, '').replace(/\D/g, ''), 10);
         };
 
-        // 🌟 觸發輸入框特效的小工具
         const highlightInput = (id) => {
             const el = document.getElementById(id);
-            if(el) {
-                el.classList.add('bg-green-200');
-                setTimeout(() => el.classList.remove('bg-green-200'), 400);
-            }
+            if(el) { el.classList.add('bg-green-200'); setTimeout(() => el.classList.remove('bg-green-200'), 400); }
         };
 
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; if(!apiKey || files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '辨識中...';
             try {
-                // 🌟 AI 提示詞擴充：要求找尋 玩家等級、星塵、經驗值
                 let parts = [{ text: "請分析寶可夢截圖，輸出純 JSON 格式（不可包含 Markdown）。\n1. 搜尋列顯示「傳說的寶可夢,幻,究極異獸」(無後綴) -> legendary (神獸總數)。\n2. 搜尋列顯示「...&4*」 -> hundo_leg (百神數量)。\n3. 搜尋列顯示「...&異色」 -> shiny_leg (色違神獸)。\n4. 標籤圓圈下數字：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。\n5. 若圖片為道具/商店/個人畫面，提取數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、綠票或綠券(greenpass)、寶可夢背包上限(poke_bag)、道具包包上限(item_bag)。\n6. 提取玩家數值：玩家等級(level)、星塵數量(stardust)、經驗值(xp)。\n7. 若圖片是寶可夢「網格清單」，精準辨識種類並合併加總（如：超夢*3），以頓號分隔填入 pokemon_list 欄位。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\",\"masterball\":\"\",\"rarecandy\":\"\",\"coin\":\"\",\"greenpass\":\"\",\"poke_bag\":\"\",\"item_bag\":\"\",\"level\":\"\",\"stardust\":\"\",\"xp\":\"\"}" }];
                 
                 for(let i=0; i<files.length; i++){
@@ -401,7 +415,6 @@
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 const data = await resp.json(); let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim(); let res = JSON.parse(cleanText);
                 
-                // 填入寶可夢資料
                 document.getElementById('g_hundos').value = res.pokemon_list || ''; 
                 if(res.hundo_leg) document.getElementById('st_hundo_leg').value = res.hundo_leg;
                 if(res.legendary) document.getElementById('st_legend').value = res.legendary;
@@ -414,7 +427,6 @@
                 if(res.giga) document.getElementById('st_giga').value = res.giga;
                 if(res.perfect) document.getElementById('st_perfect').value = res.perfect;
                 
-                // 填入道具資料與門檻過濾
                 if(res.masterball) document.getElementById('st_masterball').value = parseNum(res.masterball) || res.masterball;
                 let rc = parseNum(res.rarecandy); if(!isNaN(rc) && rc >= 100) document.getElementById('st_rarecandy').value = rc;
                 let coin = parseNum(res.coin); if(!isNaN(coin) && coin >= 200) document.getElementById('st_coin').value = coin;
@@ -422,7 +434,6 @@
                 if(res.poke_bag) document.getElementById('st_poke_bag').value = parseNum(res.poke_bag) || res.poke_bag;
                 if(res.item_bag) document.getElementById('st_item_bag').value = parseNum(res.item_bag) || res.item_bag;
 
-                // 🌟 等級、星塵、經驗值的【智慧預估演算法】
                 let origLevel = parseNum(res.level);
                 let origStardust = parseNum(res.stardust);
                 let origXp = parseNum(res.xp);
@@ -434,35 +445,24 @@
                     if (origLevel < 60) {
                         document.getElementById('g_level').value = 60;
                         finalStardust += 200000;
-                        finalXp = 0; // 不足60等，經驗清空不寫
+                        finalXp = 0; 
                     } else if (origLevel >= 68) {
                         document.getElementById('g_level').value = 70;
                         finalStardust += 300000;
                     } else {
-                        // 60~67 等，照實填寫
                         document.getElementById('g_level').value = origLevel;
                     }
                     highlightInput('g_level');
                 }
 
-                // 🌟 星塵門檻判斷 (超過 80萬 才會轉成 萬 為單位填入)
                 if (finalStardust > 0) {
-                    if (finalStardust >= 800000) {
-                        document.getElementById('g_stardust').value = Math.floor(finalStardust / 10000);
-                        highlightInput('g_stardust');
-                    } else {
-                        document.getElementById('g_stardust').value = '';
-                    }
+                    if (finalStardust >= 800000) { document.getElementById('g_stardust').value = Math.floor(finalStardust / 10000); highlightInput('g_stardust'); } 
+                    else { document.getElementById('g_stardust').value = ''; }
                 }
 
-                // 🌟 經驗門檻判斷 (超過 80萬 才會轉成 萬 為單位填入)
                 if (finalXp > 0) {
-                    if (finalXp >= 800000) {
-                        document.getElementById('g_xp').value = Math.floor(finalXp / 10000);
-                        highlightInput('g_xp');
-                    } else {
-                        document.getElementById('g_xp').value = '';
-                    }
+                    if (finalXp >= 800000) { document.getElementById('g_xp').value = Math.floor(finalXp / 10000); highlightInput('g_xp'); } 
+                    else { document.getElementById('g_xp').value = ''; }
                 }
 
                 window.updateHundoCount(); 
@@ -493,7 +493,6 @@
             if(checked('chk_kyogre')) res.push(`蓋歐卡有開根源波動`);
             if(checked('chk_rayquaza')) res.push(`烈空坐有開畫龍點睛`);
             
-            // 經驗與星塵的文案輸出
             if(v('g_xp')) res.push(`經驗 ${v('g_xp')}萬`); 
             if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}萬`);
             
