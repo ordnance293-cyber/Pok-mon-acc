@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V15.3 完美無瑕版</title>
+    <title>寶可夢頂級帳號庫 - V15.3 邏輯分離版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -188,7 +188,7 @@
                 </div>
 
                 <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
-                    <textarea id="g_rare_list" placeholder="填入額外稀有怪..." class="w-full p-2 border rounded text-xs h-10"></textarea>
+                    <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會獨立顯示..." class="w-full p-2 border rounded text-xs h-10"></textarea>
                     <textarea id="g_hundos" placeholder="AI 盤點結果..." class="w-full p-2 border border-blue-200 bg-blue-50 rounded text-xs h-16"></textarea>
                     <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
                         <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold"></div>
@@ -218,7 +218,6 @@
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 設定儲存
         ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => {
             document.getElementById(id).value = localStorage.getItem(id) || '';
         });
@@ -229,7 +228,6 @@
             alert('設定已儲存！');
         };
 
-        // 預覽與辨識
         window.previewImages = function(event) {
             const files = event.target.files;
             const container = document.getElementById('imagePreviewContainer');
@@ -285,13 +283,14 @@
                 const data = await resp.json();
                 let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim();
                 let res = JSON.parse(cleanText);
-                document.getElementById('g_hundos').value = res.pokemon_list;
-                document.getElementById('st_hundo_leg').value = res.total_perfect;
+                
+                // 這裡修復了 id 錯誤 (hundos -> g_hundos)
+                document.getElementById('g_hundos').value = res.pokemon_list || '';
+                if(res.total_perfect) document.getElementById('st_hundo_leg').value = res.total_perfect;
             } catch (e) { alert("AI辨識異常"); }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
-        // 🌟 最終文案邏輯 (無稀有內容字眼 + 神奇糖果 Bug 修復)
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim();
             const checked = (id) => document.getElementById(id).checked;
@@ -300,10 +299,13 @@
             res.push(v('g_id'));
             res.push(`${v('g_level')}等${v('g_team')}`);
             
+            // 🌟 1. 處理特殊調查打勾區
             let spList = [];
             for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
-            if(v('g_rare_list')) spList.push(v('g_rare_list'));
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
+            
+            // 🌟 2. 處理自訂稀有怪 (完全獨立，不再強加特殊調查)
+            if(v('g_rare_list')) res.push(`🔥${v('g_rare_list')}🔥`);
             
             if(v('st_old_poke')) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
             if(v('st_old_leg')) res.push(`‼️${v('st_old_leg')} 隻 16–20年神獸‼️`);
@@ -337,8 +339,10 @@
             if(v('st_bag')) res.push(`背包${v('st_bag')}`);
             if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
             if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`);
-            // 👇 這裡的 st_rarecandy 修復完成了！
+            
+            // 🌟 修復了這裡的 id 錯誤 (rarecandy -> st_rarecandy)
             if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
+            
             if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`);
             if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
             
