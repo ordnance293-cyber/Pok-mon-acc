@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V24 自動連線版</title>
+    <title>寶可夢頂級帳號庫 - V25 智能精準辨識版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -40,7 +40,7 @@
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("試算表連線異常！"); return; }
+            if(!sheetId || !scriptUrl) { alert("請填寫頂部試算表設定！"); return; }
             
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 傳送中...'; btn.disabled = true;
             try {
@@ -55,7 +55,7 @@
             if(!confirm(`確定要將【${activeData.length}】個現貨帳號一次拋轉嗎？`)) return;
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("試算表連線異常！"); return; }
+            if(!sheetId || !scriptUrl) { alert("請填寫設定！"); return; }
             
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 拋轉中...'; btn.disabled = true;
             const allData = activeData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
@@ -181,14 +181,13 @@
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-link"></i> 寶可夢進銷存 V24 自動連線版
+            <i class="fas fa-brain"></i> 寶可夢進銷存 V25 智能辨識版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" value="1Ng_1f1WMngTjprIej417T-OJUZHAJt5UzNh7-EuqzqM" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 bg-gray-100 text-gray-500" readonly>
-            <input type="text" id="gasUrl" value="https://script.google.com/macros/s/AKfycbwyLkzy5L8TMl7qfbiUg7dBXi7wTtxV-X3OD_JuGtnxf4fRmyWH1g8m-UkjSRV3r9_iFw/exec" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 bg-gray-100 text-gray-500" readonly>
-            
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32">
             <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28">
-            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">💾 儲存 AI Key</button>
+            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">💾 儲存設定</button>
         </div>
     </header>
 
@@ -269,12 +268,14 @@
                     <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐有開畫龍點睛</label>
                 </div>
 
+                <!-- 數據表格區塊 -->
                 <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
                     
                     <div class="flex flex-wrap gap-2 items-center text-xs bg-blue-50 p-2.5 rounded-lg border border-blue-200">
                         <span class="font-bold text-blue-800"><i class="fas fa-gamepad"></i> 遊戲內快速搜尋指令：</span>
                         <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-900 px-3 py-1.5 rounded shadow-sm transition font-bold active:scale-95">傳說的寶可夢,幻,究極異獸</button>
                         <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-900 px-3 py-1.5 rounded shadow-sm transition font-bold active:scale-95">傳說的寶可夢,幻,究極異獸&4*</button>
+                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-900 px-3 py-1.5 rounded shadow-sm transition font-bold active:scale-95">傳說的寶可夢,幻,究極異獸&異色</button>
                     </div>
 
                     <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會獨立顯示..." class="w-full p-2 border rounded text-xs h-10"></textarea>
@@ -329,13 +330,8 @@
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 🌟 初始化：只從 localStorage 讀取 AI Key。表單跟 GAS 已經寫死了！
-        document.getElementById('geminiApiKey').value = localStorage.getItem('geminiApiKey') || '';
-        
-        window.saveApiKey = function() { 
-            localStorage.setItem('geminiApiKey', document.getElementById('geminiApiKey').value.trim()); 
-            alert('AI Key 設定已儲存！(試算表連線已自動綁定)'); 
-        };
+        ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { document.getElementById(id).value = localStorage.getItem(id) || ''; });
+        window.saveApiKey = function() { ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { localStorage.setItem(id, document.getElementById(id).value.trim()); }); alert('設定已儲存！'); };
 
         window.previewImages = function(event) {
             const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
@@ -348,11 +344,13 @@
 
         window.clearImage = function() { document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; document.getElementById('aiBtn').classList.add('hidden'); };
 
+        // 🌟 重新調教的超精準 AI 辨識大腦
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; if(!apiKey || files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '辨識中...';
             try {
-                let parts = [{ text: "辨識寶可夢型態(起源等)、色違、暗影，統計數量。抓出截圖最上方『寶可夢 XX/YY』的 XX 數字。輸出 JSON: {pokemon_list: '字串', total_perfect: 數字}" }];
+                let parts = [{ text: "請分析寶可夢截圖，並輸出純 JSON 格式（不含 Markdown 標記）。\n1. 如果圖片上方搜尋列顯示「傳說的寶可夢,幻,究極異獸」(無其他後綴)，提取數量填入 legendary (神獸總數)。\n2. 如果搜尋列顯示「傳說的寶可夢,幻,究極異獸&4*」，提取數量填入 hundo_leg (百神數量)。\n3. 如果搜尋列顯示「傳說的寶可夢,幻,究極異獸&異色」，提取數量填入 shiny_leg (色違神獸)。\n4. 若為標籤頁面，提取圓圈下數字：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。找不到填空字串。\n5. 盤點稀有怪成文字(pokemon_list)。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\"}" }];
+                
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
@@ -366,7 +364,19 @@
                 }
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 const data = await resp.json(); let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim(); let res = JSON.parse(cleanText);
-                document.getElementById('g_hundos').value = res.pokemon_list || ''; if(res.total_perfect) document.getElementById('st_hundo_leg').value = res.total_perfect;
+                
+                // 精準填入對應的格子
+                document.getElementById('g_hundos').value = res.pokemon_list || ''; 
+                if(res.hundo_leg) document.getElementById('st_hundo_leg').value = res.hundo_leg;
+                if(res.legendary) document.getElementById('st_legend').value = res.legendary;
+                if(res.shiny_leg) document.getElementById('st_shiny_leg').value = res.shiny_leg; // 🌟 色違神獸
+                if(res.shiny) document.getElementById('st_shiny').value = res.shiny;
+                if(res.costume) document.getElementById('st_costume').value = res.costume;
+                if(res.bg_comm) document.getElementById('st_bg_comm').value = res.bg_comm;
+                if(res.bg_special) document.getElementById('st_bg_special').value = res.bg_special;
+                if(res.dyna) document.getElementById('st_dyna').value = res.dyna;
+                if(res.giga) document.getElementById('st_giga').value = res.giga;
+                if(res.perfect) document.getElementById('st_perfect').value = res.perfect;
             } catch (e) { alert("AI辨識異常"); }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
@@ -420,3 +430,5 @@
     </script>
 </body>
 </html>
+
+
