@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V20 終極細節版</title>
+    <title>寶可夢頂級帳號庫 - V22 終極搜尋版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -50,13 +50,15 @@
         };
 
         window.syncAllToSheets = async function(btn) {
-            if(inventoryData.length === 0) { alert('沒有資料可拋轉！'); return; }
-            if(!confirm(`確定要將【${inventoryData.length}】個帳號一次拋轉嗎？`)) return;
+            const activeData = inventoryData.filter(item => item.status !== 'sold');
+            if(activeData.length === 0) { alert('沒有現貨資料可拋轉！'); return; }
+            if(!confirm(`確定要將【${activeData.length}】個現貨帳號一次拋轉嗎？`)) return;
+            
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(!sheetId || !scriptUrl) { alert("請填寫設定！"); return; }
             
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 拋轉中...'; btn.disabled = true;
-            const allData = inventoryData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
+            const allData = activeData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
             try {
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'syncAll', id: sheetId, allData: allData }) });
                 btn.innerHTML = '✅ 全部拋轉成功！'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
@@ -64,37 +66,44 @@
         };
 
         window.markAsSold = async function(uid, accountId, btn) {
-            if(!confirm(`確定要將此帳號標記為已售出嗎？\n這會將試算表中所有分頁的該筆資料標示為黃色！`)) return;
-            update(ref(db, `inventory/${uid}`), { status: 'sold' });
+            const isAlreadySold = btn.innerText.includes('補塗');
+            if(!isAlreadySold) {
+                if(!confirm(`確定要將此帳號標記為已售出嗎？\n這會將試算表中所有分頁的該筆資料標示為黃色！`)) return;
+                update(ref(db, `inventory/${uid}`), { status: 'sold' });
+            }
+            
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
+                const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 處理中...'; btn.disabled = true;
                 try {
                     await fetch(scriptUrl, {
                         method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'sold', id: sheetId, accountId: accountId })
                     });
-                } catch(e) {}
+                    btn.innerHTML = '✅ 已塗黃'; setTimeout(() => { btn.innerHTML = isAlreadySold ? '🟡 補塗黃色' : '💰 售出'; btn.disabled = false; }, 2000);
+                } catch(e) { btn.innerHTML = oldText; btn.disabled = false; }
             }
         };
 
         window.addAccountToInventory = function() {
-            // 🌟 這裡取得完整的一長串代碼
             const accountId = document.getElementById('g_id').value.trim();
             if(!accountId) { alert("請輸入帳號代碼！"); return; }
             
             const newItem = {
-                accountId: accountId, // 儲存完整代碼給系統認人
+                accountId: accountId, 
                 level: document.getElementById('g_level').value, team: document.getElementById('g_team').value, price: document.getElementById('g_price').value || "未標價", stardust: document.getElementById('g_stardust').value || "未知", 
-                fullText: encodeURIComponent(window.generateText()), // 文案裡面只會存前6碼
+                fullText: encodeURIComponent(window.generateText()), 
                 timestamp: Date.now(),
-                status: 'active'
+                status: document.getElementById('g_item_status').value
             };
             push(inventoryRef, newItem);
+            
             document.querySelectorAll('input, textarea').forEach(el => {
                 if(!['geminiApiKey','googleSheetId','gasUrl','g_level'].includes(el.id) && el.type !== 'checkbox') el.value = '';
                 if(el.type === 'checkbox') el.checked = false;
             });
+            document.getElementById('g_item_status').value = 'active'; 
             document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); window.clearImage();
         };
 
@@ -112,8 +121,21 @@
             const tbody = document.getElementById('inventoryBody');
             if(!tbody) return; tbody.innerHTML = ''; 
             
+            const filterStatus = document.getElementById('filterStatus') ? document.getElementById('filterStatus').value : 'all';
             const sortMode = document.getElementById('sortMode') ? document.getElementById('sortMode').value : 'priceDesc';
-            let displayData = [...inventoryData];
+            // 🌟 抓取搜尋框的文字
+            const searchQuery = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase().trim() : '';
+            
+            let displayData = inventoryData.filter(item => {
+                // 1. 狀態過濾
+                if (filterStatus === 'active' && item.status === 'sold') return false;
+                if (filterStatus === 'sold' && item.status !== 'sold') return false;
+                
+                // 2. 搜尋過濾 (如果輸入框有字，而且代碼裡面不包含這個字，就隱藏它)
+                if (searchQuery && !item.accountId.toLowerCase().includes(searchQuery)) return false;
+                
+                return true;
+            });
             
             displayData.sort((a, b) => {
                 if (sortMode === 'priceDesc') {
@@ -132,17 +154,17 @@
                 newRow.className = `${rowBg} border-b border-gray-100 transition duration-300`;
                 let teamColor = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
                 
-                const soldLabel = isSold ? '<span class="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">已售出</span>' : '';
+                const soldLabel = isSold ? '<span class="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">已售出</span>' : '<span class="ml-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">現貨</span>';
+                
                 const actionBtns = isSold 
-                    ? `<span class="bg-gray-200 text-gray-500 px-3 py-1.5 rounded text-xs font-bold cursor-not-allowed">成交</span>`
+                    ? `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 px-3 py-1.5 rounded text-xs shadow font-bold">🟡 補塗黃色</button>`
                     : `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-1.5 rounded text-xs shadow font-bold">💰 售出</button>`;
 
-                // 🌟 UI優化：大字顯示前6碼，小字顯示完整代碼
                 const shortDisplayId = item.accountId.substring(0, 6).toUpperCase();
 
                 newRow.innerHTML = `
                     <td class="px-6 py-4">
-                        <div class="font-mono font-bold text-lg uppercase">${shortDisplayId}${soldLabel}</div>
+                        <div class="font-mono font-bold text-lg uppercase flex items-center">${shortDisplayId}${soldLabel}</div>
                         <div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div>
                     </td>
                     <td class="px-6 py-4 text-sm font-bold ${teamColor}">${item.level}等 ${item.team}</td>
@@ -157,14 +179,14 @@
                 tbody.appendChild(newRow);
             });
             const countEl = document.getElementById('inventoryCount');
-            if(countEl) countEl.innerText = inventoryData.length;
+            if(countEl) countEl.innerText = displayData.length;
         }
     </script>
 </head>
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
-        <h1 class="text-xl font-bold flex items-center gap-2 text-blue-700">
-            <i class="fas fa-gem"></i> 全自動進銷存 V20 完整版
+        <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
+            <i class="fas fa-search"></i> 寶可夢進銷存 V22 終極搜尋版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
@@ -191,11 +213,17 @@
 
                 <div class="col-span-1 space-y-3">
                     <label class="text-xs font-bold text-gray-500 border-b block">基本資訊</label>
-                    <input type="text" id="g_id" placeholder="貼上完整代碼 (文案自動取前6碼)" class="w-full p-2 border rounded font-bold text-sm">
+                    <input type="text" id="g_id" placeholder="貼上完整代碼 (自動取前6碼)" class="w-full p-2 border rounded font-bold text-sm">
                     <div class="flex gap-2"><input type="number" id="g_level" value="70" class="w-1/2 p-2 border rounded text-sm"><select id="g_team" class="w-1/2 p-2 border rounded text-sm"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
                     <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm">
                     <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm">
-                    <input type="number" id="g_price" placeholder="價格" class="w-full p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm">
+                    <div class="flex gap-2">
+                        <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm">
+                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700">
+                            <option value="active">🟢 現貨</option>
+                            <option value="sold">🔴 售出</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="col-span-1 space-y-3">
@@ -267,10 +295,21 @@
         <div class="bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
             <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
                 <span>雲端同步總表 (<span id="inventoryCount">0</span>)</span>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                    
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400"><i class="fas fa-search"></i></span>
+                        <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner">
+                    </div>
+
                     <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">
-                        <i class="fas fa-rocket mr-1"></i> 一鍵全部拋轉
+                        <i class="fas fa-rocket mr-1"></i> 拋轉所有現貨
                     </button>
+                    <select id="filterStatus" onchange="renderInventory()" class="border border-indigo-200 p-1.5 rounded font-bold text-xs text-indigo-700 bg-indigo-50 cursor-pointer">
+                        <option value="all">📦 顯示全部</option>
+                        <option value="active">🟢 僅現貨</option>
+                        <option value="sold">🔴 僅售出</option>
+                    </select>
                     <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer">
                         <option value="priceDesc">💰 售價：高 ➔ 低</option>
                         <option value="priceAsc">💰 售價：低 ➔ 高</option>
@@ -328,12 +367,7 @@
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim(); const checked = (id) => document.getElementById(id).checked;
             let res = []; 
-            
-            // 🌟 這裡自動把長長的代碼砍成前 6 碼放在文案裡！
-            const fullId = v('g_id');
-            const shortId = fullId.substring(0, 6).toUpperCase();
-            res.push(shortId); 
-            
+            const fullId = v('g_id'); const shortId = fullId.substring(0, 6).toUpperCase(); res.push(shortId); 
             res.push(`${v('g_level')}等${v('g_team')}`);
             let spList = []; for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
