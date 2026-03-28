@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V12.1 完美符號版</title>
+    <title>寶可夢頂級帳號庫 - V13.1 邏輯修正版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -57,6 +57,7 @@
                 if(el.id !== 'geminiApiKey' && el.id !== 'g_level' && el.type !== 'file' && el.type !== 'checkbox') el.value = '';
                 if(el.type === 'checkbox') el.checked = false;
             });
+            document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden'));
             window.clearImage();
         };
 
@@ -90,7 +91,7 @@
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center">
         <h1 class="text-xl font-bold flex items-center gap-2">
             <i class="fas fa-cloud text-blue-600"></i>寶可夢雲端庫存 
-            <span class="bg-gradient-to-r from-red-600 to-pink-500 text-white text-[10px] px-2 py-1 rounded-full font-bold">V12.1 完美符號版</span>
+            <span class="bg-gradient-to-r from-blue-700 to-indigo-600 text-white text-[10px] px-2 py-1 rounded-full font-bold">V13.1 修正版</span>
         </h1>
         <div class="flex gap-2">
             <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28">
@@ -115,7 +116,7 @@
                     <div id="imagePreviewContainer" class="flex gap-2 overflow-x-auto w-full py-2"></div>
                     <span id="imagePlaceholder" class="text-xs text-gray-400 py-8">上傳後按下方按鈕辨識</span>
                     
-                    <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-gradient-to-r from-red-500 to-pink-500 text-white px-4 py-3 rounded-xl text-sm font-bold mt-3 shadow-lg transform transition active:scale-95">
+                    <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 rounded-xl text-sm font-bold mt-3 shadow-lg transform transition active:scale-95">
                         <i class="fas fa-robot mr-1"></i>🤖 AI 自動填入數量
                     </button>
                     <button type="button" id="clearImageBtn" onclick="clearImage()" class="hidden absolute top-2 right-2 text-red-500 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow"><i class="fas fa-times"></i></button>
@@ -123,7 +124,7 @@
 
                 <div class="col-span-1 space-y-3">
                     <label class="text-xs font-bold text-gray-500 border-b pb-1 block">基本資訊</label>
-                    <input type="text" id="g_id" placeholder="帳號代碼 (如: Wiwmm)" class="w-full p-2 border rounded font-bold uppercase">
+                    <input type="text" id="g_id" placeholder="代碼 (自動截取前6字)" class="w-full p-2 border rounded font-bold uppercase" oninput="this.value = this.value.substring(0, 6)">
                     <div class="flex gap-2">
                         <input type="number" id="g_level" value="70" class="w-1/2 p-2 border rounded">
                         <select id="g_team" class="w-1/2 p-2 border rounded"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select>
@@ -146,11 +147,43 @@
                     </div>
                 </div>
 
-                <div class="col-span-1 space-y-2">
+                <div class="col-span-1 space-y-3">
                     <label class="text-xs font-bold text-gray-500 border-b pb-1 block">技能與亮點</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_kyurem">酋雷姆雙型態合體</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_zamazenta">雙狗劍盾型態</label>
-                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_necrozma">奈克洛茲瑪雙型態合體</label>
+                    <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_marshadow">瑪夏多調查</label>
+                    
+                    <div class="space-y-1">
+                        <label class="flex items-center gap-2 text-xs">
+                            <input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體
+                        </label>
+                        <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded text-xs ml-5 bg-purple-50">
+                            <option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option>
+                            <option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option>
+                            <option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="flex items-center gap-2 text-xs">
+                            <input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾型態
+                        </label>
+                        <select id="sel_dogs" class="dynamic-select hidden w-full p-1 border rounded text-xs ml-5 bg-purple-50">
+                            <option value="‼️雙狗劍盾型態‼️">雙狗劍盾型態</option>
+                            <option value="‼️蒼響劍盾型態‼️">蒼響劍盾型態</option>
+                            <option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特劍盾型態</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="flex items-center gap-2 text-xs">
+                            <input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪合體
+                        </label>
+                        <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded text-xs ml-5 bg-purple-50">
+                            <option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option>
+                            <option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態合體</option>
+                            <option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態合體</option>
+                        </select>
+                    </div>
+
                     <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_dyna">可打極巨化／超極巨化</label>
                     <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_lati">飛機兄妹可Mega</label>
                     <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="chk_hoenn">豐原三神可 Mega</label>
@@ -163,7 +196,7 @@
                     <label class="text-xs font-bold text-gray-500 block">稀有幻獸與百神名單 (第一行文字)</label>
                     <textarea id="g_rare_list" placeholder="填入稀有怪 (如: 色違美洛耶塔, 色違夢幻...)" class="w-full p-2 border rounded text-sm h-12"></textarea>
                     
-                    <textarea id="g_hundos" placeholder="AI 盤點的百神詳細名單會在這裡..." class="w-full p-3 border-2 border-red-300 bg-red-50 rounded-xl text-sm h-20"></textarea>
+                    <textarea id="g_hundos" placeholder="AI 盤點的百神詳細名單會在這裡..." class="w-full p-3 border-2 border-blue-300 bg-blue-50 rounded-xl text-sm h-20"></textarea>
                     
                     <label class="text-xs font-bold text-gray-500 block">各項數據總數 (配合 ✅ 模板)</label>
                     <div class="grid grid-cols-5 md:grid-cols-10 gap-2">
@@ -176,7 +209,7 @@
                         <div><label class="block text-[10px]">特別背卡</label><input type="number" id="st_bg_special" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">極巨化</label><input type="number" id="st_dyna" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">超極巨化</label><input type="number" id="st_giga" class="w-full p-1 border rounded text-sm"></div>
-                        <div><label class="block text-[10px]">完美</label><input type="number" id="st_perfect" class="w-full p-1 border rounded text-sm bg-yellow-100 font-bold"></div>
+                        <div><label class="block text-[10px]">完美</label><input type="number" id="st_perfect" class="w-full p-1 border rounded text-sm"></div>
                     </div>
                 </div>
 
@@ -291,8 +324,8 @@
 
                     document.getElementById('g_hundos').value = aiResult.pokemon_list || '';
                     if(aiResult.total_perfect) {
-                        document.getElementById('st_perfect').value = aiResult.total_perfect;
-                        document.getElementById('st_hundo_leg').value = aiResult.total_perfect; 
+                        // 🌟 修正：只填入「百神數量」這一格
+                        document.getElementById('st_hundo_leg').value = aiResult.total_perfect;
                     }
                 }
             } catch (e) { 
@@ -303,7 +336,6 @@
             }
         };
 
-        // 🌟 100% 複製你的 Emoji 模板
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim();
             const checked = (id) => document.getElementById(id).checked;
@@ -321,9 +353,11 @@
             
             if(v('st_old_poke')) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
             if(v('st_old_leg')) res.push(`‼️${v('st_old_leg')} 隻 16–20年神獸‼️`);
-            if(checked('chk_kyurem')) res.push(`‼️酋雷姆雙型態合體‼️`);
-            if(checked('chk_zamazenta')) res.push(`‼️雙狗劍盾型態‼️`);
-            if(checked('chk_necrozma')) res.push(`‼️奈克洛茲瑪雙型態合體‼️`);
+            
+            if(checked('chk_kyurem')) res.push(v('sel_kyurem'));
+            if(checked('chk_zamazenta')) res.push(v('sel_dogs'));
+            if(checked('chk_necrozma')) res.push(v('sel_necrozma'));
+            
             if(checked('chk_dyna')) res.push(`✨可打極巨化／超極巨化✨`);
             if(checked('chk_lati')) res.push(`⭐️飛機兄妹可Mega⭐️`);
             if(checked('chk_hoenn')) res.push(`⭐️豐原三神可 Mega⭐️`);
@@ -335,7 +369,7 @@
             if(v('g_xp')) res.push(`經驗 ${v('g_xp')}萬`);
             if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}萬`);
             
-            // 🌟 10 格資料全數加上 ✅
+            // 10 格資料全數加上 ✅
             if(v('st_hundo_leg')) {
                 let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : '';
                 res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`);
@@ -352,7 +386,7 @@
             if(v('st_giga')) res.push(`✅超極巨化${v('st_giga')}隻`);
             if(v('st_perfect')) res.push(`✅完美${v('st_perfect')}隻`);
             
-            // 🌟 資源道具全數加上 🩷 (除了背包與寶可幣)
+            // 資源道具全數加上 🩷 (除了背包與寶可幣)
             if(v('st_bag')) res.push(`背包${v('st_bag')}`);
             if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
             if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`);
