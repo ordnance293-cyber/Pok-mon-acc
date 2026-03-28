@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V15.2 精簡文案版</title>
+    <title>寶可夢頂級帳號庫 - V15.3 完美無瑕版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -107,7 +107,7 @@
 </head>
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
-        <h1 class="text-xl font-bold flex items-center gap-2">寶可夢雲端庫存 V15.2</h1>
+        <h1 class="text-xl font-bold flex items-center gap-2">寶可夢雲端庫存 V15.3</h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-28">
             <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-28">
@@ -285,13 +285,13 @@
                 const data = await resp.json();
                 let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim();
                 let res = JSON.parse(cleanText);
-                document.getElementById('hundos').value = res.pokemon_list;
+                document.getElementById('g_hundos').value = res.pokemon_list;
                 document.getElementById('st_hundo_leg').value = res.total_perfect;
             } catch (e) { alert("AI辨識異常"); }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
-        // 🌟 最終文案邏輯 (拿掉 稀有內容 那行)
+        // 🌟 最終文案邏輯 (無稀有內容字眼 + 神奇糖果 Bug 修復)
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim();
             const checked = (id) => document.getElementById(id).checked;
@@ -305,7 +305,6 @@
             if(v('g_rare_list')) spList.push(v('g_rare_list'));
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
             
-            // 這裡直接放項目，不再輸出「🔥稀有內容🔥」這行
             if(v('st_old_poke')) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
             if(v('st_old_leg')) res.push(`‼️${v('st_old_leg')} 隻 16–20年神獸‼️`);
             if(checked('chk_kyurem')) res.push(v('sel_kyurem'));
@@ -338,7 +337,8 @@
             if(v('st_bag')) res.push(`背包${v('st_bag')}`);
             if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
             if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`);
-            if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('rarecandy')} 顆`);
+            // 👇 這裡的 st_rarecandy 修復完成了！
+            if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
             if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`);
             if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
             
