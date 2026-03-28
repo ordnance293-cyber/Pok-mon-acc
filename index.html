@@ -94,17 +94,33 @@
             }
         };
 
-        // 新增資料到 Firebase
-        window.addAccountToInventory = function() {
+        // 🔥 新增/更新資料到 Firebase
+        let currentEditUid = null;
+        window.saveAccountToInventory = async function() {
             const accountId = document.getElementById('g_id').value.trim();
-            if(!accountId) { 
-                showMsg("請輸入帳號代碼！", "red");
-                return; 
-            }
+            if(!accountId) { showMsg("請輸入帳號代碼！", "red"); return; }
+            
             const newItem = {
-                accountId: accountId, level: document.getElementById('g_level').value, team: document.getElementById('g_team').value, price: document.getElementById('g_price').value || "未標價", stardust: document.getElementById('g_stardust').value || "", xp: document.getElementById('g_xp').value || "", rarecandy: document.getElementById('st_rarecandy').value || "", coin: document.getElementById('st_coin').value || "", greenpass: document.getElementById('st_greenpass').value || "", masterball: document.getElementById('st_masterball').value || "", poke_bag: document.getElementById('st_poke_bag').value || "", item_bag: document.getElementById('st_item_bag').value || "", rare_list: document.getElementById('g_rare_list').value || "", hundos: document.getElementById('g_hundos').value || "", st_hundo_leg: document.getElementById('st_hundo_leg').value || "", st_legend: document.getElementById('st_legend').value || "", st_shiny: document.getElementById('st_shiny').value || "", st_shiny_leg: document.getElementById('st_shiny_leg').value || "", st_costume: document.getElementById('st_costume').value || "", st_bg_comm: document.getElementById('st_bg_comm').value || "", st_bg_special: document.getElementById('st_bg_special').value || "", st_dyna: document.getElementById('st_dyna').value || "", st_giga: document.getElementById('st_giga').value || "", st_perfect: document.getElementById('st_perfect').value || "", fullText: encodeURIComponent(window.generateText()), timestamp: Date.now(), status: document.getElementById('g_item_status').value
+                accountId: accountId, level: document.getElementById('g_level').value, team: document.getElementById('g_team').value, price: document.getElementById('g_price').value || "未標價", stardust: document.getElementById('g_stardust').value || "", xp: document.getElementById('g_xp').value || "", rarecandy: document.getElementById('st_rarecandy').value || "", coin: document.getElementById('st_coin').value || "", greenpass: document.getElementById('st_greenpass').value || "", masterball: document.getElementById('st_masterball').value || "", poke_bag: document.getElementById('st_poke_bag').value || "", item_bag: document.getElementById('st_item_bag').value || "", rare_list: document.getElementById('g_rare_list').value || "", hundos: document.getElementById('g_hundos').value || "", st_hundo_leg: document.getElementById('st_hundo_leg').value || "", st_legend: document.getElementById('st_legend').value || "", st_shiny: document.getElementById('st_shiny').value || "", st_shiny_leg: document.getElementById('st_shiny_leg').value || "", st_costume: document.getElementById('st_costume').value || "", st_bg_comm: document.getElementById('st_bg_comm').value || "", st_bg_special: document.getElementById('st_bg_special').value || "", st_dyna: document.getElementById('st_dyna').value || "", st_giga: document.getElementById('st_giga').value || "", st_perfect: document.getElementById('st_perfect').value || "", fullText: encodeURIComponent(window.generateText()), status: document.getElementById('g_item_status').value
             };
-            push(inventoryRef, newItem);
+
+            if (currentEditUid) {
+                const existingItem = inventoryData.find(i => i.uid === currentEditUid);
+                newItem.timestamp = existingItem ? existingItem.timestamp : Date.now();
+                update(ref(db, `inventory/${currentEditUid}`), newItem);
+                showMsg("✅ 帳號資料已更新！", "green");
+
+                // 自動同步更新到 Google Sheets
+                const sheetId = document.getElementById('googleSheetId').value.trim(); 
+                const scriptUrl = document.getElementById('gasUrl').value.trim();
+                if(sheetId && scriptUrl) {
+                    fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
+                }
+            } else {
+                newItem.timestamp = Date.now();
+                push(inventoryRef, newItem);
+                showMsg("✅ 帳號已新增！", "green");
+            }
             window.resetForm();
         };
 
@@ -121,7 +137,16 @@
             const item = inventoryData.find(i => i.uid === uid); if(!item) return;
             window.scrollTo({ top: 0, behavior: 'smooth' });
             document.getElementById('g_id').value = item.accountId || ''; document.getElementById('g_level').value = item.level || ''; document.getElementById('g_team').value = item.team || '藍隊'; document.getElementById('g_price').value = item.price === "未標價" ? "" : item.price; document.getElementById('g_stardust').value = item.stardust || ''; document.getElementById('g_xp').value = item.xp || ''; document.getElementById('st_rarecandy').value = item.rarecandy || ''; document.getElementById('st_coin').value = item.coin || ''; document.getElementById('st_greenpass').value = item.greenpass || ''; document.getElementById('st_masterball').value = item.masterball || ''; document.getElementById('st_poke_bag').value = item.poke_bag || ''; document.getElementById('st_item_bag').value = item.item_bag || ''; document.getElementById('g_rare_list').value = item.rare_list || ''; document.getElementById('g_hundos').value = item.hundos || ''; document.getElementById('g_item_status').value = item.status || 'active'; document.getElementById('st_hundo_leg').value = item.st_hundo_leg || ''; document.getElementById('st_legend').value = item.st_legend || ''; document.getElementById('st_shiny').value = item.st_shiny || ''; document.getElementById('st_shiny_leg').value = item.st_shiny_leg || ''; document.getElementById('st_costume').value = item.st_costume || ''; document.getElementById('st_bg_comm').value = item.st_bg_comm || ''; document.getElementById('st_bg_special').value = item.st_bg_special || ''; document.getElementById('st_dyna').value = item.st_dyna || ''; document.getElementById('st_giga').value = item.st_giga || ''; document.getElementById('st_perfect').value = item.st_perfect || '';
-            showMsg("已回填資料，修改後重新新增即可！", "blue");
+            
+            // 變更按鈕狀態為編輯模式
+            currentEditUid = uid;
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.innerText = '💾 儲存修改';
+            submitBtn.classList.replace('bg-red-600', 'bg-blue-600');
+            submitBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+            showMsg("已回填資料，修改後點擊「儲存修改」即可覆蓋！", "blue");
         };
 
         window.deleteAccount = async function(uid, accountId) {
@@ -130,6 +155,49 @@
                 const sId = document.getElementById('googleSheetId').value; const gUrl = document.getElementById('gasUrl').value; 
                 if(sId && gUrl) fetch(gUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: sId, accountId: accountId }) }); 
             }
+        };
+
+        // 🔥 開啟改文案視窗
+        let currentEditModalUid = null;
+        let currentEditModalAccountId = null;
+        window.openEditModal = function(uid, accountId) {
+            const item = inventoryData.find(i => i.uid === uid);
+            if(!item) return;
+            currentEditModalUid = uid;
+            currentEditModalAccountId = accountId;
+            document.getElementById('editModalText').value = decodeURIComponent(item.fullText);
+            document.getElementById('editModal').classList.remove('hidden');
+            document.getElementById('editModal').classList.add('flex');
+        };
+
+        // 🔥 儲存文案並同步試算表
+        window.saveEditedText = async function() {
+            if(!currentEditModalUid) return;
+            const newText = document.getElementById('editModalText').value.trim();
+            const btn = document.getElementById('saveModalBtn');
+            const oldBtnText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步儲存中...';
+            btn.disabled = true;
+
+            update(ref(db, `inventory/${currentEditModalUid}`), { fullText: encodeURIComponent(newText) });
+
+            const sheetId = document.getElementById('googleSheetId').value.trim(); 
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
+            if(sheetId && scriptUrl) {
+                try {
+                    await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: currentEditModalAccountId, data: newText }) });
+                } catch(e) {}
+            }
+
+            btn.innerHTML = oldBtnText;
+            btn.disabled = false;
+            window.closeEditModal();
+            showMsg("✅ 文案修改成功，已同步至試算表！", "green");
+        };
+
+        window.closeEditModal = function() {
+            document.getElementById('editModal').classList.add('hidden');
+            document.getElementById('editModal').classList.remove('flex');
         };
 
         window.renderInventory = function() {
@@ -152,7 +220,9 @@
                 const sB = isS ? '<span class="ml-2 bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-bold border border-red-200">SOLD</span>' : '<span class="ml-2 bg-green-100 text-green-600 text-[10px] px-2 py-0.5 rounded-full font-bold border border-green-200">STOCK</span>';
                 const aB = isS ? `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1 rounded text-[10px] shadow-sm font-bold">🟡 補塗</button>` : `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-amber-400 text-gray-900 px-2 py-1 rounded text-[10px] shadow-sm font-bold">💰 售出</button>`;
                 const sId = item.accountId.substring(0, 6).toUpperCase(); const lD = item.level ? `${item.level}等 ` : '';
-                nR.innerHTML = `<td class="px-4 py-4"><div class="font-mono font-bold text-base uppercase flex items-center">${sId}${sB}</div><div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div></td><td class="px-4 py-4 text-sm font-bold ${tC}">${lD}${item.team}</td><td class="px-4 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td><td class="px-4 py-4 text-center"><div class="flex gap-1 justify-center flex-wrap"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-2 py-1 rounded text-[10px]">複製</button><button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 text-white px-2 py-1 rounded text-[10px]">拋轉</button>${aB}<button onclick="window.editAccount('${item.uid}')" class="bg-blue-500 text-white px-2 py-1 rounded text-[10px]">✏️</button></div></td><td class="px-4 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-300 hover:text-red-600 p-1"><i class="fas fa-trash-alt"></i></button></td>`;
+                
+                // 加入了 📝 改文 按鈕
+                nR.innerHTML = `<td class="px-4 py-4"><div class="font-mono font-bold text-base uppercase flex items-center">${sId}${sB}</div><div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div></td><td class="px-4 py-4 text-sm font-bold ${tC}">${lD}${item.team}</td><td class="px-4 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td><td class="px-4 py-4 text-center"><div class="flex gap-1 justify-center flex-wrap"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-2 py-1 rounded text-[10px] shadow-sm">複製</button><button onclick="window.openEditModal('${item.uid}', '${item.accountId}')" class="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-[10px] shadow-sm font-bold transition">📝 改文</button><button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 text-white px-2 py-1 rounded text-[10px] shadow-sm">拋轉</button>${aB}<button onclick="window.editAccount('${item.uid}')" class="bg-blue-500 text-white px-2 py-1 rounded text-[10px] shadow-sm">✏️</button></div></td><td class="px-4 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-300 hover:text-red-600 p-1"><i class="fas fa-trash-alt"></i></button></td>`;
                 tbody.appendChild(nR);
             });
             const cEl = document.getElementById('inventoryCount'); if(cEl) cEl.innerText = displayData.length;
@@ -178,7 +248,8 @@
                 <h2 class="text-lg font-bold">快速建檔區</h2>
                 <div class="flex gap-2">
                     <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-300 transition">🧹 清除</button>
-                    <button type="button" onclick="addAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
+                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-gray-600 transition">取消編輯</button>
+                    <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
                 </div>
             </div>
 
@@ -300,10 +371,26 @@
         </div>
     </main>
 
+    <div id="editModal" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col overflow-hidden">
+            <div class="p-4 border-b bg-gray-50 flex justify-between items-center">
+                <h3 class="font-bold text-lg text-indigo-900"><i class="fas fa-edit mr-2"></i>📝 修改帳號介紹文案</h3>
+                <button onclick="window.closeEditModal()" class="text-gray-400 hover:text-gray-700 text-xl"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-4">
+                <textarea id="editModalText" class="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none text-sm font-mono leading-relaxed" placeholder="在這裡修改文案..."></textarea>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex justify-end gap-3">
+                <button onclick="window.closeEditModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition">取消</button>
+                <button id="saveModalBtn" onclick="window.saveEditedText()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold shadow-md hover:bg-indigo-700 transition">儲存並同步試算表</button>
+            </div>
+        </div>
+    </div>
+
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 🌟 初始化功能：優先載入記憶體值
+        // 初始化功能：優先載入記憶體值
         (function init() {
             ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => {
                 const savedValue = localStorage.getItem(id);
@@ -312,7 +399,7 @@
             });
         })();
         
-        // 🌟 自動存檔：一打字就同步到記憶體
+        // 自動存檔：一打字就同步到記憶體
         window.autoSaveSettings = function(inputEl) {
             ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { 
                 const el = document.getElementById(id);
@@ -367,7 +454,6 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 更新了這裡的 AI 辨識邏輯，加強神獸總數、百神與色違神獸的精準度 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先填寫 AI Key！"); return; }
@@ -430,6 +516,17 @@
             document.querySelectorAll('input, textarea').forEach(el => { if(!['geminiApiKey','googleSheetId','gasUrl'].includes(el.id) && el.type !== 'checkbox') el.value = ''; if(el.type === 'checkbox') el.checked = false; });
             document.getElementById('g_item_status').value = 'active'; document.getElementById('g_team').value = '藍隊';
             document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); window.clearImage();
+            
+            // 重置按鈕狀態
+            currentEditUid = null;
+            const submitBtn = document.getElementById('submitBtn');
+            if(submitBtn) {
+                submitBtn.innerText = '同步至雲端列表';
+                submitBtn.classList.replace('bg-blue-600', 'bg-red-600');
+                submitBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
+            }
+            const cancelEditBtn = document.getElementById('cancelEditBtn');
+            if(cancelEditBtn) cancelEditBtn.classList.add('hidden');
         };
 
         window.generateText = function() {
@@ -457,7 +554,11 @@
             if(v('st_bg_comm')) res.push(`✅紀念背卡${v('st_bg_comm')}隻`); if(v('st_bg_special')) res.push(`✅特別背卡${v('st_bg_special')}隻`);
             if(v('st_dyna')) res.push(`✅極巨化${v('st_dyna')}隻`); if(v('st_giga')) res.push(`✅超極巨化${v('st_giga')}隻`);
             if(v('st_perfect')) res.push(`✅完美${v('st_perfect')}隻`);
-            if(v('st_poke_bag')) res.push(`🎒寶可夢背包 ${v('st_poke_bag')}`); if(v('st_item_bag')) res.push(`🎒道具背包 ${v('st_item_bag')}`);
+            
+            // 🔥 背包數量小於 1000 隱藏邏輯 🔥
+            let pb = parseNum(v('st_poke_bag')); if(!isNaN(pb) && pb >= 1000) res.push(`🎒寶可夢背包 ${v('st_poke_bag')}`);
+            let ib = parseNum(v('st_item_bag')); if(!isNaN(ib) && ib >= 1000) res.push(`🎒道具背包 ${v('st_item_bag')}`);
+            
             if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
             if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`); if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
             if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`); if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
