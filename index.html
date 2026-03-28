@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V22 終極搜尋版</title>
+    <title>寶可夢頂級帳號庫 - V23 指令複製版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -123,17 +123,12 @@
             
             const filterStatus = document.getElementById('filterStatus') ? document.getElementById('filterStatus').value : 'all';
             const sortMode = document.getElementById('sortMode') ? document.getElementById('sortMode').value : 'priceDesc';
-            // 🌟 抓取搜尋框的文字
             const searchQuery = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase().trim() : '';
             
             let displayData = inventoryData.filter(item => {
-                // 1. 狀態過濾
                 if (filterStatus === 'active' && item.status === 'sold') return false;
                 if (filterStatus === 'sold' && item.status !== 'sold') return false;
-                
-                // 2. 搜尋過濾 (如果輸入框有字，而且代碼裡面不包含這個字，就隱藏它)
                 if (searchQuery && !item.accountId.toLowerCase().includes(searchQuery)) return false;
-                
                 return true;
             });
             
@@ -186,7 +181,7 @@
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-search"></i> 寶可夢進銷存 V22 終極搜尋版
+            <i class="fas fa-search"></i> 寶可夢進銷存 V23 指令複製版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
@@ -274,6 +269,13 @@
                 </div>
 
                 <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
+                    
+                    <div class="flex flex-wrap gap-2 items-center text-xs bg-blue-50 p-2.5 rounded-lg border border-blue-200">
+                        <span class="font-bold text-blue-800"><i class="fas fa-gamepad"></i> 遊戲內快速搜尋指令：</span>
+                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-900 px-3 py-1.5 rounded shadow-sm transition font-bold active:scale-95">傳說的寶可夢,幻,究極異獸</button>
+                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-900 px-3 py-1.5 rounded shadow-sm transition font-bold active:scale-95">傳說的寶可夢,幻,究極異獸&4*</button>
+                    </div>
+
                     <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會獨立顯示..." class="w-full p-2 border rounded text-xs h-10"></textarea>
                     <textarea id="g_hundos" placeholder="AI 盤點結果..." class="w-full p-2 border border-blue-200 bg-blue-50 rounded text-xs h-16"></textarea>
                     <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
@@ -296,7 +298,6 @@
             <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
                 <span>雲端同步總表 (<span id="inventoryCount">0</span>)</span>
                 <div class="flex items-center gap-2 flex-wrap">
-                    
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400"><i class="fas fa-search"></i></span>
                         <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner">
@@ -400,6 +401,16 @@
             const area = document.getElementById('hiddenCopyArea'); area.style.display = 'block'; area.value = decodeURIComponent(txt);
             area.select(); document.execCommand('copy'); area.style.display = 'none';
             btn.innerHTML = '已複製'; setTimeout(() => btn.innerHTML = '複製', 1500);
+        };
+
+        // 🌟 專屬的「簡單字串複製」功能 (給遊戲內指令用的)
+        window.copySimpleText = function(txt, btn) {
+            const area = document.getElementById('hiddenCopyArea');
+            area.style.display = 'block'; area.value = txt;
+            area.select(); document.execCommand('copy'); area.style.display = 'none';
+            const oldText = btn.innerHTML; 
+            btn.innerHTML = '✅ 已複製！'; 
+            setTimeout(() => btn.innerHTML = oldText, 1500);
         };
     </script>
 </body>
