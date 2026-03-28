@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V15.3 邏輯分離版</title>
+    <title>寶可夢頂級帳號庫 - V17 排序升級版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -33,26 +33,33 @@
                 Object.keys(data).forEach(key => {
                     inventoryData.push({ uid: key, ...data[key] });
                 });
-                inventoryData.sort((a, b) => b.timestamp - a.timestamp);
             }
-            renderInventory();
+            renderInventory(); // 資料更新時重新渲染並排序
         });
 
-        window.syncToGoogleSheets = async function(fullText, btn) {
+        // 🌟 新增到 Google 試算表
+        window.syncToGoogleSheets = async function(accountId, fullText, btn) {
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(!sheetId || !scriptUrl) { alert("請填寫頂部試算表設定！"); return; }
+            
             const oldText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 傳送中...';
             btn.disabled = true;
+            
             try {
                 await fetch(scriptUrl, {
                     method: 'POST',
                     mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: sheetId, data: decodeURIComponent(fullText).split('\n') })
+                    body: JSON.stringify({ 
+                        action: 'add', 
+                        id: sheetId, 
+                        accountId: accountId, 
+                        data: decodeURIComponent(fullText) 
+                    })
                 });
-                btn.innerHTML = '✅ 已填入試算表';
+                btn.innerHTML = '✅ 已新增至表單';
                 setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 2000);
             } catch (e) { alert("同步失敗！"); btn.innerHTML = oldText; btn.disabled = false; }
         };
@@ -78,14 +85,52 @@
             window.clearImage();
         };
 
-        window.deleteAccount = function(uid) {
-            if(confirm('確定要從雲端刪除嗎？')) { remove(ref(db, `inventory/${uid}`)); }
+        // 🌟 刪除時，同時刪除 Google 試算表的資料
+        window.deleteAccount = async function(uid, accountId) {
+            if(confirm('確定要刪除嗎？\n\n注意：這會同時從「雲端庫存」與「試算表」中刪除這筆資料！')) { 
+                remove(ref(db, `inventory/${uid}`)); 
+                const sheetId = document.getElementById('googleSheetId').value.trim();
+                const scriptUrl = document.getElementById('gasUrl').value.trim();
+                if(sheetId && scriptUrl) {
+                    try {
+                        await fetch(scriptUrl, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'delete', id: sheetId, accountId: accountId })
+                        });
+                    } catch(e) { console.error("試算表刪除異常", e); }
+                }
+            }
         };
 
-        function renderInventory() {
+        // 🌟 渲染與排序邏輯
+        window.renderInventory = function() {
             const tbody = document.getElementById('inventoryBody');
+            if(!tbody) return;
             tbody.innerHTML = ''; 
-            inventoryData.forEach(item => {
+            
+            const sortMode = document.getElementById('sortMode') ? document.getElementById('sortMode').value : 'priceDesc';
+            let displayData = [...inventoryData];
+            
+            // 排序魔法
+            displayData.sort((a, b) => {
+                if (sortMode === 'priceDesc') {
+                    let pA = parseInt(a.price); pA = isNaN(pA) ? -1 : pA;
+                    let pB = parseInt(b.price); pB = isNaN(pB) ? -1 : pB;
+                    if(pA !== pB) return pB - pA;
+                    return b.timestamp - a.timestamp;
+                } else if (sortMode === 'priceAsc') {
+                    let pA = parseInt(a.price); pA = isNaN(pA) ? Infinity : pA;
+                    let pB = parseInt(b.price); pB = isNaN(pB) ? Infinity : pB;
+                    if(pA !== pB) return pA - pB;
+                    return b.timestamp - a.timestamp;
+                } else {
+                    return b.timestamp - a.timestamp; // 最新加入
+                }
+            });
+
+            displayData.forEach(item => {
                 const newRow = document.createElement('tr');
                 newRow.className = 'hover:bg-blue-50 bg-white border-b border-gray-100';
                 let teamColor = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
@@ -94,25 +139,28 @@
                     <td class="px-6 py-4 text-sm font-bold ${teamColor}">${item.level}等 ${item.team}</td>
                     <td class="px-6 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td>
                     <td class="px-6 py-4 text-center flex gap-2 justify-center">
-                        <button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">複製文案</button>
-                        <button onclick="window.syncToGoogleSheets('${item.fullText}', this)" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs">🚀 同步試算表</button>
+                        <button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs shadow">複製文案</button>
+                        <button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs shadow">🚀 拋轉試算表</button>
                     </td>
-                    <td class="px-6 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}')" class="text-red-400 hover:text-red-600"><i class="fas fa-trash-alt"></i></button></td>
+                    <td class="px-6 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-400 hover:text-red-600 p-2"><i class="fas fa-trash-alt"></i></button></td>
                 `;
                 tbody.appendChild(newRow);
             });
-            document.getElementById('inventoryCount').innerText = inventoryData.length;
+            const countEl = document.getElementById('inventoryCount');
+            if(countEl) countEl.innerText = inventoryData.length;
         }
     </script>
 </head>
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
-        <h1 class="text-xl font-bold flex items-center gap-2">寶可夢雲端庫存 V15.3</h1>
+        <h1 class="text-xl font-bold flex items-center gap-2 text-green-700">
+            <i class="fas fa-database"></i> 全自動進銷存 V17
+        </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-28">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-28">
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32">
             <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28">
-            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">儲存設定</button>
+            <button onclick="saveApiKey()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs">💾 儲存設定</button>
         </div>
     </header>
 
@@ -120,7 +168,7 @@
         <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8">
             <div class="flex justify-between items-center mb-6 border-b pb-4">
                 <h2 class="text-lg font-bold">快速建檔區</h2>
-                <button type="button" onclick="addAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md">同步至雲端</button>
+                <button type="button" onclick="addAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition">同步至雲端列表</button>
             </div>
 
             <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -207,9 +255,16 @@
         </div>
 
         <div class="bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
-            <div class="p-4 bg-gray-50 border-b font-bold">雲端同步總表 (<span id="inventoryCount">0</span>)</div>
+            <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
+                <span>雲端同步總表 (<span id="inventoryCount">0</span>)</span>
+                <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white focus:ring-blue-500 focus:border-blue-500 shadow-sm cursor-pointer">
+                    <option value="priceDesc">💰 售價：高 ➔ 低</option>
+                    <option value="priceAsc">💰 售價：低 ➔ 高</option>
+                    <option value="newest">🆕 最新加入時間</option>
+                </select>
+            </div>
             <table class="w-full text-left text-sm">
-                <thead class="bg-gray-50"><tr><th class="px-6 py-3 border-b">代碼</th><th class="px-6 py-3 border-b">資訊</th><th class="px-6 py-3 border-b">售價</th><th class="px-6 py-3 border-b text-center">操作</th><th class="px-6 py-3 border-b text-center">刪除</th></tr></thead>
+                <thead class="bg-gray-50"><tr><th class="px-6 py-3 border-b">代碼</th><th class="px-6 py-3 border-b">資訊</th><th class="px-6 py-3 border-b">售價</th><th class="px-6 py-3 border-b text-center">自動化</th><th class="px-6 py-3 border-b text-center">刪除</th></tr></thead>
                 <tbody id="inventoryBody"></tbody>
             </table>
         </div>
@@ -284,7 +339,6 @@
                 let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim();
                 let res = JSON.parse(cleanText);
                 
-                // 這裡修復了 id 錯誤 (hundos -> g_hundos)
                 document.getElementById('g_hundos').value = res.pokemon_list || '';
                 if(res.total_perfect) document.getElementById('st_hundo_leg').value = res.total_perfect;
             } catch (e) { alert("AI辨識異常"); }
@@ -299,12 +353,10 @@
             res.push(v('g_id'));
             res.push(`${v('g_level')}等${v('g_team')}`);
             
-            // 🌟 1. 處理特殊調查打勾區
             let spList = [];
             for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
             
-            // 🌟 2. 處理自訂稀有怪 (完全獨立，不再強加特殊調查)
             if(v('g_rare_list')) res.push(`🔥${v('g_rare_list')}🔥`);
             
             if(v('st_old_poke')) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
@@ -339,10 +391,7 @@
             if(v('st_bag')) res.push(`背包${v('st_bag')}`);
             if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
             if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`);
-            
-            // 🌟 修復了這裡的 id 錯誤 (rarecandy -> st_rarecandy)
             if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
-            
             if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`);
             if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
             
