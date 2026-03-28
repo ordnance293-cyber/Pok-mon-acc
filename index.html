@@ -165,7 +165,6 @@
             <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V35 旗艦全綁定版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <!-- 🌟 三大核心參數已全面綁定預設值 -->
             <input type="text" id="googleSheetId" placeholder="試算表 ID" value="1Ng_1f1WMngTjprIej417T-OJUZHAJt5UzNh7-EuqzqM" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
             <input type="text" id="gasUrl" placeholder="GAS 連結" value="https://script.google.com/macros/s/AKfycbwyLkzy5L8TMl7qfbiUg7dBXi7wTtxV-X3OD_JuGtnxf4fRmyWH1g8m-UkjSRV3r9_iFw/exec" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
             <input type="password" id="geminiApiKey" placeholder="AI Key" value="AIzaSyDsh6soeBNlD9iVdeAvyJ4DFbc6W8ACRzY" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-28 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
@@ -181,6 +180,13 @@
                     <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-300 transition">🧹 清除</button>
                     <button type="button" onclick="addAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
                 </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100 mb-4">
+                <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
             </div>
 
             <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -252,13 +258,6 @@
                 </div>
 
                 <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
-                    <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100">
-                        <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
-                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
-                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
-                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
-                    </div>
-
                     <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會顯示在最前面..." class="w-full p-2 border rounded text-xs h-10 bg-white outline-none"></textarea>
                     
                     <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神清單 (支援自動加總，如：超夢*3)，底下的數量會自動累計！" class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-16 font-bold outline-none"></textarea>
@@ -477,4 +476,3 @@
     </script>
 </body>
 </html>
-
