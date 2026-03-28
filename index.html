@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V26 智慧連動版</title>
+    <title>寶可夢頂級帳號庫 - V27 頂級視覺盤點版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -181,7 +181,7 @@
 <body class="bg-gray-50 text-gray-800">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-bolt"></i> 寶可夢進銷存 V26 智慧連動版
+            <i class="fas fa-dragon"></i> 寶可夢進銷存 V27 視覺盤點版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32">
@@ -280,8 +280,7 @@
 
                     <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會獨立顯示..." class="w-full p-2 border rounded text-xs h-10"></textarea>
                     
-                    <!-- 🌟 這裡加上了 oninput 監聽，只要你打字就會觸發 updateHundoCount 函數 -->
-                    <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神名單 (以逗號或頓號分隔)，底下的數量會自動計算！" class="w-full p-2 border border-blue-200 bg-blue-50 rounded text-xs h-16"></textarea>
+                    <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神名單 (支援自動加總，如：超夢*3、洛奇亞*2)，底下的數量會超精準計算！" class="w-full p-2 border border-blue-200 bg-blue-50 rounded text-xs h-16 font-bold"></textarea>
                     
                     <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
                         <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold transition-colors duration-300"></div>
@@ -347,7 +346,7 @@
 
         window.clearImage = function() { document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; document.getElementById('aiBtn').classList.add('hidden'); };
 
-        // 🌟 新增：手動修改名單時，自動計算數量的函數
+        // 🌟 會算數學的超強防呆計數器！看得懂 *2 或 x3
         window.updateHundoCount = function() {
             const text = document.getElementById('g_hundos').value.trim();
             const countInput = document.getElementById('st_hundo_leg');
@@ -355,20 +354,32 @@
                 countInput.value = '';
                 return;
             }
-            // 利用全形逗號、半形逗號、頓號、換行符號 來切割字串並計算數量
-            const items = text.split(/[,，、\n]+/).filter(item => item.trim() !== '');
-            countInput.value = items.length;
             
-            // 給輸入框一個小閃爍特效，讓你知道它有自動更新
+            const items = text.split(/[,，、\n]+/).filter(item => item.trim() !== '');
+            let total = 0;
+            
+            items.forEach(item => {
+                // 尋找字串裡有沒有 *數字 或 x數字 或 X數字
+                const match = item.match(/[*xXｘＸ]\s*(\d+)/);
+                if (match) {
+                    total += parseInt(match[1], 10);
+                } else {
+                    total += 1;
+                }
+            });
+            
+            countInput.value = total;
+            
             countInput.classList.add('bg-green-200');
             setTimeout(() => countInput.classList.remove('bg-green-200'), 300);
         };
 
+        // 🌟 重新撰寫的超嚴謹 AI 大腦指令
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; if(!apiKey || files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '辨識中...';
             try {
-                let parts = [{ text: "請分析寶可夢截圖，並輸出純 JSON 格式（不含 Markdown 標記）。\n1. 如果圖片上方搜尋列顯示「傳說的寶可夢,幻,究極異獸」(無其他後綴)，提取數量填入 legendary (神獸總數)。\n2. 如果搜尋列顯示「傳說的寶可夢,幻,究極異獸&4*」，提取數量填入 hundo_leg (百神數量)。\n3. 如果搜尋列顯示「傳說的寶可夢,幻,究極異獸&異色」，提取數量填入 shiny_leg (色違神獸)。\n4. 若為標籤頁面，提取圓圈下數字：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。找不到填空字串。\n5. 盤點稀有怪成文字(pokemon_list)。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\"}" }];
+                let parts = [{ text: "請分析寶可夢截圖，輸出純 JSON 格式（不可包含 Markdown）。\n1. 搜尋列顯示「傳說的寶可夢,幻,究極異獸」(無後綴) -> legendary (神獸總數)。\n2. 搜尋列顯示「...&4*」 -> hundo_leg (百神數量)。\n3. 搜尋列顯示「...&異色」 -> shiny_leg (色違神獸)。\n4. 標籤圓圈下數字：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。找不到填空字串。\n5. 【最重要指令】若圖片是寶可夢的「網格清單（例如百神清單）」，請一隻一隻精準辨識所有的寶可夢種類名稱。並將相同的寶可夢合併加總（例如：超夢*3、洛奇亞*2、烈空坐），將這個清單用頓號分隔，填入 pokemon_list 欄位。若無則填空字串。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\"}" }];
                 
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
@@ -396,8 +407,7 @@
                 if(res.giga) document.getElementById('st_giga').value = res.giga;
                 if(res.perfect) document.getElementById('st_perfect').value = res.perfect;
                 
-                // 觸發一次更新數量，確保文字跟數量一致
-                window.updateHundoCount();
+                window.updateHundoCount(); // AI填寫完畢後，強制觸發一次數學計算
             } catch (e) { alert("AI辨識異常"); }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
