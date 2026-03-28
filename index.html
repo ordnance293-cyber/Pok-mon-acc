@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V10 穩定版</title>
+    <title>寶可夢頂級帳號庫 - V11 批量自動化版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -52,8 +52,13 @@
                 timestamp: Date.now()
             };
             push(inventoryRef, newItem);
+            
+            // 清空輸入框
             document.getElementById('g_id').value = '';
             document.getElementById('g_hundos').value = '';
+            document.querySelectorAll('input[type="number"]').forEach(input => {
+                if(input.id !== 'g_level') input.value = '';
+            });
             window.clearImage();
         };
 
@@ -87,7 +92,7 @@
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center">
         <h1 class="text-xl font-bold flex items-center gap-2">
             <i class="fas fa-cloud text-blue-600"></i>寶可夢雲端庫存 
-            <span class="bg-gray-800 text-white text-[10px] px-2 py-1 rounded-full font-bold">V10 穩定版</span>
+            <span class="bg-gradient-to-r from-green-600 to-emerald-500 text-white text-[10px] px-2 py-1 rounded-full font-bold">V11 批量版</span>
         </h1>
         <div class="flex gap-2">
             <input type="password" id="geminiApiKey" placeholder="AI Key" class="border p-1.5 rounded text-xs w-28">
@@ -104,15 +109,16 @@
 
             <form class="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div class="space-y-3 bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center relative">
-                    <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="previewImage(event)">
+                    <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
                     <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm hover:bg-gray-100 w-full text-center font-bold">
-                        <i class="fas fa-image mr-1"></i>選擇截圖
+                        <i class="fas fa-images mr-1"></i>選擇多張截圖
                     </label>
-                    <img id="imagePreview" src="" class="hidden rounded shadow-sm w-full object-contain max-h-48 mt-2">
-                    <span id="imagePlaceholder" class="text-xs text-gray-400 py-8">尚未選擇圖片</span>
                     
-                    <button type="button" id="aiBtn" onclick="analyzeImage()" class="hidden w-full bg-gray-800 hover:bg-black text-white px-4 py-3 rounded-xl text-sm font-bold mt-3 shadow-lg transform transition active:scale-95">
-                        <i class="fas fa-search-plus mr-1"></i>🔍 V10 高清防瞎掰辨識
+                    <div id="imagePreviewContainer" class="flex gap-2 overflow-x-auto w-full py-2"></div>
+                    <span id="imagePlaceholder" class="text-xs text-gray-400 py-8">可一次選多張圖片</span>
+                    
+                    <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-xl text-sm font-bold mt-3 shadow-lg transform transition active:scale-95">
+                        <i class="fas fa-robot mr-1"></i>🤖 批量自動讀取
                     </button>
                     
                     <button type="button" id="clearImageBtn" onclick="clearImage()" class="hidden absolute top-2 right-2 text-red-500 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow"><i class="fas fa-times"></i></button>
@@ -140,8 +146,9 @@
                 </div>
 
                 <div class="col-span-1 md:col-span-2 space-y-3">
-                    <label class="text-xs font-bold text-gray-500">詳細數據</label>
-                    <textarea id="g_hundos" placeholder="AI 盤點結果會在這裡出現..." class="w-full p-3 border-2 border-gray-300 bg-gray-50 rounded-xl text-sm h-24"></textarea>
+                    <label class="text-xs font-bold text-gray-500">詳細數據 (AI 會自動填寫完美數量)</label>
+                    <textarea id="g_hundos" placeholder="AI 盤點結果會在這裡出現..." class="w-full p-3 border-2 border-emerald-300 bg-emerald-50 rounded-xl text-sm h-24"></textarea>
+                    
                     <div class="grid grid-cols-5 gap-2">
                         <div><label class="block text-[10px]">神獸</label><input type="number" id="st_legend" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">色違神</label><input type="number" id="st_shiny_leg" class="w-full p-1 border rounded text-sm"></div>
@@ -150,7 +157,8 @@
                         <div><label class="block text-[10px]">特背</label><input type="number" id="st_bg_special" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">紀背</label><input type="number" id="st_bg_comm" class="w-full p-1 border rounded text-sm"></div>
                         <div><label class="block text-[10px]">極巨</label><input type="number" id="st_dyna" class="w-full p-1 border rounded text-sm"></div>
-                        <div><label class="block text-[10px]">完美</label><input type="number" id="st_perfect" class="w-full p-1 border rounded text-sm"></div>
+                        <div><label class="block text-[10px]">超極</label><input type="number" id="st_giga" class="w-full p-1 border rounded text-sm"></div>
+                        <div><label class="block text-[10px]">完美</label><input type="number" id="st_perfect" class="w-full p-1 border rounded text-sm bg-yellow-100 font-bold"></div>
                         <div><label class="block text-[10px]">色違完</label><input type="number" id="st_shundo" class="w-full p-1 border rounded text-sm"></div>
                     </div>
                 </div>
@@ -171,86 +179,101 @@
             alert('AI Key 已儲存！');
         };
 
-        window.previewImage = function(event) {
-            const file = event.target.files[0];
-            if(!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                document.getElementById('imagePreview').src = e.target.result;
-                document.getElementById('imagePreview').classList.remove('hidden');
-                document.getElementById('imagePlaceholder').classList.add('hidden');
-                document.getElementById('aiBtn').classList.remove('hidden');
-                document.getElementById('clearImageBtn').classList.remove('hidden');
+        // 🌟 支援多張圖片預覽
+        window.previewImages = function(event) {
+            const files = event.target.files;
+            const container = document.getElementById('imagePreviewContainer');
+            container.innerHTML = ''; // 清空預覽
+            
+            if(files.length === 0) return;
+
+            for(let i = 0; i < files.length; i++) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.className = 'rounded shadow-sm h-24 object-contain border';
+                    container.appendChild(img);
+                }
+                reader.readAsDataURL(files[i]);
             }
-            reader.readAsDataURL(file);
+
+            document.getElementById('imagePlaceholder').classList.add('hidden');
+            document.getElementById('aiBtn').classList.remove('hidden');
+            document.getElementById('clearImageBtn').classList.remove('hidden');
+            document.getElementById('aiBtn').innerHTML = `<i class="fas fa-robot mr-1"></i>🤖 批量讀取 (${files.length}張)`;
         };
 
         window.clearImage = function() {
             document.getElementById('imageInput').value = '';
-            document.getElementById('imagePreview').classList.add('hidden');
+            document.getElementById('imagePreviewContainer').innerHTML = '';
             document.getElementById('imagePlaceholder').classList.remove('hidden');
             document.getElementById('aiBtn').classList.add('hidden');
             document.getElementById('clearImageBtn').classList.add('hidden');
         };
 
-        window.analyzeImage = async function() {
+        // 壓縮圖片模組
+        function compressImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_SIZE = 1200;
+                        let w = img.width, h = img.height;
+                        if (w > h && w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; }
+                        else if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; }
+                        canvas.width = w; canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 🌟 批量傳送給 AI 並要求 JSON 格式自動填表
+        window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim();
             if(!apiKey) { alert('【錯誤】請先填寫 AI Key 並按儲存！'); return; }
             
-            const fileInput = document.getElementById('imageInput');
-            if(!fileInput.files || fileInput.files.length === 0) return;
-            const file = fileInput.files[0];
+            const files = document.getElementById('imageInput').files;
+            if(files.length === 0) return;
 
             const aiBtn = document.getElementById('aiBtn');
             aiBtn.disabled = true; 
-            aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>🔍 高清掃描與精準比對中...';
+            aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>多圖掃描中...請稍候';
 
             try {
-                // 🔥 把壓縮尺寸放大，畫質調高，讓 AI 不會瞎掉
-                const base64 = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const img = new Image();
-                        img.onload = () => {
-                            const canvas = document.createElement('canvas');
-                            const MAX_SIZE = 1200; // 放大解析度
-                            let w = img.width, h = img.height;
-                            if (w > h && w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; }
-                            else if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; }
-                            canvas.width = w; canvas.height = h;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0, w, h);
-                            resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]); // 提高畫質
-                        };
-                        img.src = e.target.result;
-                    };
-                    reader.readAsDataURL(file);
-                });
+                // 1. 處理所有圖片
+                let partsArray = [];
+                
+                // 2. 加入超級指令（要求輸出 JSON 以便自動填入格子）
+                const promptText = `這是一組同一個寶可夢GO帳號的遊戲截圖。請嚴格執行以下任務，並【只能】輸出合法的 JSON 格式，不要有任何 Markdown 標記或其他廢話：
+1. 觀察所有圖片中的寶可夢。精準辨識具體型態（如：起源帕路奇亞）、色違、暗影。淨化視同普通。合併完全相同的寶可夢並加上「*數量」。將所有結果用半形逗號隔開成一個字串。
+2. 觀察第一張截圖最上方的「數量顯示」（例如寫著「寶可夢 25/450」或單純數字）。抓出這個總數量（例如 25）。
 
-                // 🔥 終極嚴格咒語：恐嚇 AI 不准瞎猜
-                const promptText = `你現在是一位極度嚴格的寶可夢GO圖鑑審查員。請幫我精準盤點這張截圖中出現的寶可夢。
-【嚴格遵守以下規則，違規將被判定失敗】：
-1. 絕對不准瞎猜！絕對不准瞎猜！畫面裡沒有的寶可夢絕對不能寫出來！
-2. 仔細觀察「寶可夢的實際圖形與特效」，不要只依賴下方的文字。
-3. 辨識具體型態（例如：看到起源型態的帕路奇亞，就必須寫「起源帕路奇亞」；看到原始回歸，就寫「原始固拉多/蓋歐卡」）。
-4. 如果有色違（異色），請在名字前加上「色違」。
-5. 如果有暗影（身邊有紫火），請在名字前加上「暗影」。
-6. 如果是淨化寶可夢，請直接視為「普通」寶可夢，【不要】寫出淨化兩個字。
-7. 將「外觀型態、色違、暗影」完全相同的寶可夢合併統計，並在名字後方加上「*數量」。
-8. 最後只輸出結果，用半形逗號「,」隔開，【絕對不要】有換行、標點符號或其他的廢話。
-格式範例：色違起源帕路奇亞*2, 暗影超夢*1, 固拉多*3`;
+請嚴格輸出以下 JSON 格式：
+{
+  "pokemon_list": "色違起源帕路奇亞*2, 暗影超夢*1",
+  "total_perfect": 25
+}`;
+                partsArray.push({ text: promptText });
 
+                // 3. 把每一張壓縮後的圖片塞進去
+                for(let i=0; i<files.length; i++){
+                    const base64 = await compressImage(files[i]);
+                    partsArray.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
+                }
+
+                // 4. 呼叫 AI
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: promptText },
-                                { inlineData: { mimeType: "image/jpeg", data: base64 } }
-                            ]
-                        }]
-                    })
+                    body: JSON.stringify({ contents: [{ parts: partsArray }] })
                 });
 
                 const data = await resp.json();
@@ -258,15 +281,24 @@
                 if(data.error) {
                     alert('【系統回報】\n' + data.error.message);
                 } else if (data.candidates && data.candidates[0].content) {
-                    document.getElementById('g_hundos').value = data.candidates[0].content.parts[0].text.trim();
-                } else {
-                    alert('【系統回報】回傳資料異常，請再試一次。');
+                    // 解析 AI 吐回來的 JSON
+                    let rawText = data.candidates[0].content.parts[0].text;
+                    // 清除可能出現的 markdown 標籤
+                    let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                    let aiResult = JSON.parse(cleanText);
+
+                    // 自動填寫到你的格子裡！
+                    document.getElementById('g_hundos').value = aiResult.pokemon_list || '';
+                    if(aiResult.total_perfect) {
+                        document.getElementById('st_perfect').value = aiResult.total_perfect;
+                    }
+                    
                 }
             } catch (e) { 
-                alert('【系統回報：網路錯誤】\n' + e.message); 
+                alert('【系統回報：發生錯誤】請確認截圖是否正確，或重新辨識。\n' + e.message); 
             } finally {
                 aiBtn.disabled = false; 
-                aiBtn.innerHTML = '<i class="fas fa-search-plus mr-1"></i>🔍 V10 高清防瞎掰辨識';
+                aiBtn.innerHTML = `<i class="fas fa-robot mr-1"></i>🤖 批量讀取 (${files.length}張)`;
             }
         };
 
@@ -276,9 +308,23 @@
             let res = [v('g_id'), `${v('g_level')}等${v('g_team')}`];
             if(checked('chk_marshadow')) res.push(`🔥瑪夏多特殊調查🔥`);
             if(checked('chk_kyurem')) res.push(`‼️酋雷姆合體‼️`);
+            if(checked('chk_zamazenta')) res.push(`‼️蒼響劍盾‼️`);
+            if(checked('chk_necrozma')) res.push(`‼️奈克洛茲瑪合體‼️`);
+            if(checked('chk_dyna')) res.push(`✨極巨化✨`);
+            if(checked('chk_mega_ray')) res.push(`⭐️烈空坐能量⭐️`);
             if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}`);
-            if(v('g_hundos')) res.push(`✅${v('g_hundos')}`);
-            if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
+            if(v('g_hundos')) res.push(`✅百神名單:\n${v('g_hundos')}`);
+            
+            // 讀取 10 個格子的資料
+            ['st_legend','st_shiny_leg','st_costume','st_shiny_costume','st_bg_special','st_bg_comm','st_dyna','st_giga','st_perfect','st_shundo'].forEach(id => {
+                if(v(id)) {
+                    const label = document.querySelector(`label[for="${id}"]`) || document.getElementById(id).previousElementSibling;
+                    const labelName = label ? label.innerText : '';
+                    res.push(`👉 ${labelName}: ${v(id)} 隻`);
+                }
+            });
+            
+            if(v('g_price')) res.push(`💰售價: $${v('g_price')}`);
             return res.join('\n');
         };
 
