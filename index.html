@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V31 自動存檔版</title>
+    <title>寶可夢頂級帳號庫 - V35 旗艦全綁定版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -11,6 +11,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
+        // Firebase 設定 (不變)
         const firebaseConfig = {
             apiKey: "AIzaSyAXHqvXLLTmYl8kVV1fR0gJRFangwV85n8",
             authDomain: "pokemon-acc.firebaseapp.com",
@@ -26,6 +27,7 @@
         const inventoryRef = ref(db, 'inventory');
         let inventoryData = [];
 
+        // 監聽 Firebase 資料庫變動
         onValue(inventoryRef, (snapshot) => {
             const data = snapshot.val();
             inventoryData = [];
@@ -37,212 +39,186 @@
             renderInventory(); 
         });
 
+        // 同步至 Google 試算表 (單筆)
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("請填寫頂部試算表設定！"); return; }
+            if(!sheetId || !scriptUrl) { 
+                showMsg("❌ 請檢查試算表設定是否完整！", "red");
+                return; 
+            }
             
-            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 傳送中...'; btn.disabled = true;
+            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
             try {
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(fullText) }) });
-                btn.innerHTML = '✅ 已拋轉'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 2000);
-            } catch (e) { alert("同步失敗！"); btn.innerHTML = oldText; btn.disabled = false; }
+                btn.innerHTML = '<i class="fas fa-check"></i>'; 
+                setTimeout(() => { btn.innerHTML = '拋轉'; btn.disabled = false; }, 2000);
+            } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
+        // 一鍵拋轉所有現貨
         window.syncAllToSheets = async function(btn) {
             const activeData = inventoryData.filter(item => item.status !== 'sold');
-            if(activeData.length === 0) { alert('沒有現貨資料可拋轉！'); return; }
+            if(activeData.length === 0) { 
+                showMsg("目前沒有現貨可以拋轉！", "amber");
+                return; 
+            }
             if(!confirm(`確定要將【${activeData.length}】個現貨帳號一次拋轉嗎？`)) return;
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("請填寫設定！"); return; }
+            if(!sheetId || !scriptUrl) { alert("請填寫頂部設定！"); return; }
             
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 拋轉中...'; btn.disabled = true;
             const allData = activeData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
             try {
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'syncAll', id: sheetId, allData: allData }) });
                 btn.innerHTML = '✅ 全部拋轉成功！'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
-            } catch (e) { alert("失敗！"); btn.innerHTML = oldText; btn.disabled = false; }
+            } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
+        // 標記售出
         window.markAsSold = async function(uid, accountId, btn) {
             const isAlreadySold = btn.innerText.includes('補塗');
             if(!isAlreadySold) {
-                if(!confirm(`確定要將此帳號標記為已售出嗎？\n這會將試算表中所有分頁的該筆資料標示為黃色！`)) return;
+                if(!confirm(`確定標記為售出？\n這會將試算表塗黃並從工作表13移除！`)) return;
                 update(ref(db, `inventory/${uid}`), { status: 'sold' });
             }
-            
-            const sheetId = document.getElementById('googleSheetId').value.trim();
-            const scriptUrl = document.getElementById('gasUrl').value.trim();
+            const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
-                const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 處理中...'; btn.disabled = true;
+                btn.disabled = true;
+                const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 try {
-                    await fetch(scriptUrl, {
-                        method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'sold', id: sheetId, accountId: accountId })
-                    });
-                    btn.innerHTML = '✅ 已塗黃'; setTimeout(() => { btn.innerHTML = isAlreadySold ? '🟡 補塗黃色' : '💰 售出'; btn.disabled = false; }, 2000);
-                } catch(e) { btn.innerHTML = oldText; btn.disabled = false; }
+                    await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sold', id: sheetId, accountId: accountId }) });
+                    btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = isAlreadySold ? '🟡 補塗' : '💰 售出'; btn.disabled = false; }, 2000);
+                } catch(e) { btn.innerHTML = oldIcon; btn.disabled = false; }
             }
         };
 
+        // 新增資料到 Firebase
         window.addAccountToInventory = function() {
             const accountId = document.getElementById('g_id').value.trim();
-            if(!accountId) { alert("請輸入帳號代碼！"); return; }
-            
+            if(!accountId) { 
+                showMsg("請輸入帳號代碼！", "red");
+                return; 
+            }
             const newItem = {
-                accountId: accountId, 
-                level: document.getElementById('g_level').value, team: document.getElementById('g_team').value, price: document.getElementById('g_price').value || "未標價", stardust: document.getElementById('g_stardust').value || "未知", 
-                fullText: encodeURIComponent(window.generateText()), 
-                timestamp: Date.now(),
-                status: document.getElementById('g_item_status').value
+                accountId: accountId, level: document.getElementById('g_level').value, team: document.getElementById('g_team').value, price: document.getElementById('g_price').value || "未標價", stardust: document.getElementById('g_stardust').value || "", xp: document.getElementById('g_xp').value || "", rarecandy: document.getElementById('st_rarecandy').value || "", coin: document.getElementById('st_coin').value || "", greenpass: document.getElementById('st_greenpass').value || "", masterball: document.getElementById('st_masterball').value || "", poke_bag: document.getElementById('st_poke_bag').value || "", item_bag: document.getElementById('st_item_bag').value || "", rare_list: document.getElementById('g_rare_list').value || "", hundos: document.getElementById('g_hundos').value || "", st_hundo_leg: document.getElementById('st_hundo_leg').value || "", st_legend: document.getElementById('st_legend').value || "", st_shiny: document.getElementById('st_shiny').value || "", st_shiny_leg: document.getElementById('st_shiny_leg').value || "", st_costume: document.getElementById('st_costume').value || "", st_bg_comm: document.getElementById('st_bg_comm').value || "", st_bg_special: document.getElementById('st_bg_special').value || "", st_dyna: document.getElementById('st_dyna').value || "", st_giga: document.getElementById('st_giga').value || "", st_perfect: document.getElementById('st_perfect').value || "", fullText: encodeURIComponent(window.generateText()), timestamp: Date.now(), status: document.getElementById('g_item_status').value
             };
             push(inventoryRef, newItem);
-            
-            document.querySelectorAll('input, textarea').forEach(el => {
-                if(!['geminiApiKey','googleSheetId','gasUrl'].includes(el.id) && el.type !== 'checkbox') el.value = '';
-                if(el.type === 'checkbox') el.checked = false;
-            });
-            document.getElementById('g_item_status').value = 'active'; 
-            document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); window.clearImage();
+            window.resetForm();
+        };
+
+        // 訊息提示小工具
+        function showMsg(text, color) {
+            const msg = document.createElement('div');
+            msg.className = `fixed top-20 left-1/2 -translate-x-1/2 bg-${color}-600 text-white px-6 py-2 rounded-full shadow-lg z-[100] animate-bounce`;
+            msg.innerHTML = text;
+            document.body.appendChild(msg);
+            setTimeout(() => msg.remove(), 2500);
+        }
+
+        window.editAccount = function(uid) {
+            const item = inventoryData.find(i => i.uid === uid); if(!item) return;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            document.getElementById('g_id').value = item.accountId || ''; document.getElementById('g_level').value = item.level || ''; document.getElementById('g_team').value = item.team || '藍隊'; document.getElementById('g_price').value = item.price === "未標價" ? "" : item.price; document.getElementById('g_stardust').value = item.stardust || ''; document.getElementById('g_xp').value = item.xp || ''; document.getElementById('st_rarecandy').value = item.rarecandy || ''; document.getElementById('st_coin').value = item.coin || ''; document.getElementById('st_greenpass').value = item.greenpass || ''; document.getElementById('st_masterball').value = item.masterball || ''; document.getElementById('st_poke_bag').value = item.poke_bag || ''; document.getElementById('st_item_bag').value = item.item_bag || ''; document.getElementById('g_rare_list').value = item.rare_list || ''; document.getElementById('g_hundos').value = item.hundos || ''; document.getElementById('g_item_status').value = item.status || 'active'; document.getElementById('st_hundo_leg').value = item.st_hundo_leg || ''; document.getElementById('st_legend').value = item.st_legend || ''; document.getElementById('st_shiny').value = item.st_shiny || ''; document.getElementById('st_shiny_leg').value = item.st_shiny_leg || ''; document.getElementById('st_costume').value = item.st_costume || ''; document.getElementById('st_bg_comm').value = item.st_bg_comm || ''; document.getElementById('st_bg_special').value = item.st_bg_special || ''; document.getElementById('st_dyna').value = item.st_dyna || ''; document.getElementById('st_giga').value = item.st_giga || ''; document.getElementById('st_perfect').value = item.st_perfect || '';
+            showMsg("已回填資料，修改後重新新增即可！", "blue");
         };
 
         window.deleteAccount = async function(uid, accountId) {
-            if(confirm('確定要刪除嗎？這會同時從試算表刪除喔！')) { 
+            if(confirm('確定要永久刪除此紀錄嗎？')) { 
                 remove(ref(db, `inventory/${uid}`)); 
-                const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-                if(sheetId && scriptUrl) {
-                    try { fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: sheetId, accountId: accountId }) }); } catch(e) {}
-                }
+                const sId = document.getElementById('googleSheetId').value; const gUrl = document.getElementById('gasUrl').value; 
+                if(sId && gUrl) fetch(gUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: sId, accountId: accountId }) }); 
             }
         };
 
         window.renderInventory = function() {
-            const tbody = document.getElementById('inventoryBody');
-            if(!tbody) return; tbody.innerHTML = ''; 
-            
-            const filterStatus = document.getElementById('filterStatus') ? document.getElementById('filterStatus').value : 'all';
-            const sortMode = document.getElementById('sortMode') ? document.getElementById('sortMode').value : 'priceDesc';
-            const searchQuery = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase().trim() : '';
-            
+            const tbody = document.getElementById('inventoryBody'); if(!tbody) return; tbody.innerHTML = ''; 
+            const filterStatus = document.getElementById('filterStatus')?.value || 'all'; const sortMode = document.getElementById('sortMode')?.value || 'priceDesc'; const searchQuery = document.getElementById('searchInput')?.value.toLowerCase().trim() || '';
             let displayData = inventoryData.filter(item => {
                 if (filterStatus === 'active' && item.status === 'sold') return false;
                 if (filterStatus === 'sold' && item.status !== 'sold') return false;
                 if (searchQuery && !item.accountId.toLowerCase().includes(searchQuery)) return false;
                 return true;
             });
-            
             displayData.sort((a, b) => {
-                if (sortMode === 'priceDesc') {
-                    let pA = parseInt(a.price); pA = isNaN(pA) ? -1 : pA; let pB = parseInt(b.price); pB = isNaN(pB) ? -1 : pB;
-                    if(pA !== pB) return pB - pA; return b.timestamp - a.timestamp;
-                } else if (sortMode === 'priceAsc') {
-                    let pA = parseInt(a.price); pA = isNaN(pA) ? Infinity : pA; let pB = parseInt(b.price); pB = isNaN(pB) ? Infinity : pB;
-                    if(pA !== pB) return pA - pB; return b.timestamp - a.timestamp;
-                } else { return b.timestamp - a.timestamp; }
+                if (sortMode === 'priceDesc') { let pA = parseInt(a.price)||0; let pB = parseInt(b.price)||0; return pB - pA || b.timestamp - a.timestamp; } 
+                else if (sortMode === 'priceAsc') { let pA = parseInt(a.price)||Infinity; let pB = parseInt(b.price)||Infinity; return pA - pB || b.timestamp - a.timestamp; } 
+                else return b.timestamp - a.timestamp;
             });
-
             displayData.forEach(item => {
-                const isSold = item.status === 'sold';
-                const rowBg = isSold ? 'bg-yellow-50 opacity-80' : 'hover:bg-blue-50 bg-white';
-                const newRow = document.createElement('tr');
-                newRow.className = `${rowBg} border-b border-gray-100 transition duration-300`;
-                let teamColor = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
-                
-                const soldLabel = isSold ? '<span class="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">已售出</span>' : '<span class="ml-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">現貨</span>';
-                
-                const actionBtns = isSold 
-                    ? `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 px-3 py-1.5 rounded text-xs shadow font-bold">🟡 補塗黃色</button>`
-                    : `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-1.5 rounded text-xs shadow font-bold">💰 售出</button>`;
-
-                const shortDisplayId = item.accountId.substring(0, 6).toUpperCase();
-                const levelDisplay = item.level ? `${item.level}等 ` : '';
-
-                newRow.innerHTML = `
-                    <td class="px-6 py-4">
-                        <div class="font-mono font-bold text-lg uppercase flex items-center">${shortDisplayId}${soldLabel}</div>
-                        <div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div>
-                    </td>
-                    <td class="px-6 py-4 text-sm font-bold ${teamColor}">${levelDisplay}${item.team}</td>
-                    <td class="px-6 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td>
-                    <td class="px-6 py-4 text-center flex gap-2 justify-center flex-wrap">
-                        <button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs shadow">複製</button>
-                        <button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs shadow">拋轉</button>
-                        ${actionBtns}
-                    </td>
-                    <td class="px-6 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-400 hover:text-red-600 p-2"><i class="fas fa-trash-alt"></i></button></td>
-                `;
-                tbody.appendChild(newRow);
+                const isS = item.status === 'sold'; const rC = isS ? 'bg-amber-50 opacity-80' : 'hover:bg-blue-50 bg-white'; const nR = document.createElement('tr'); nR.className = `${rC} border-b border-gray-100 transition duration-300`;
+                let tC = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
+                const sB = isS ? '<span class="ml-2 bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-bold border border-red-200">SOLD</span>' : '<span class="ml-2 bg-green-100 text-green-600 text-[10px] px-2 py-0.5 rounded-full font-bold border border-green-200">STOCK</span>';
+                const aB = isS ? `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1 rounded text-[10px] shadow-sm font-bold">🟡 補塗</button>` : `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-amber-400 text-gray-900 px-2 py-1 rounded text-[10px] shadow-sm font-bold">💰 售出</button>`;
+                const sId = item.accountId.substring(0, 6).toUpperCase(); const lD = item.level ? `${item.level}等 ` : '';
+                nR.innerHTML = `<td class="px-4 py-4"><div class="font-mono font-bold text-base uppercase flex items-center">${sId}${sB}</div><div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div></td><td class="px-4 py-4 text-sm font-bold ${tC}">${lD}${item.team}</td><td class="px-4 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td><td class="px-4 py-4 text-center"><div class="flex gap-1 justify-center flex-wrap"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-2 py-1 rounded text-[10px]">複製</button><button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 text-white px-2 py-1 rounded text-[10px]">拋轉</button>${aB}<button onclick="window.editAccount('${item.uid}')" class="bg-blue-500 text-white px-2 py-1 rounded text-[10px]">✏️</button></div></td><td class="px-4 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-300 hover:text-red-600 p-1"><i class="fas fa-trash-alt"></i></button></td>`;
+                tbody.appendChild(nR);
             });
-            const countEl = document.getElementById('inventoryCount');
-            if(countEl) countEl.innerText = displayData.length;
+            const cEl = document.getElementById('inventoryCount'); if(cEl) cEl.innerText = displayData.length;
         }
     </script>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-save"></i> 寶可夢進銷存 V31 自動存檔版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V35 旗艦全綁定版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <!-- 🌟 這裡加上了 oninput="window.autoSaveSettings()"，你只要貼上文字就會瞬間自動存檔！ -->
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" oninput="window.autoSaveSettings()" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-green-400 transition">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" oninput="window.autoSaveSettings()" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-green-400 transition">
-            <input type="password" id="geminiApiKey" placeholder="AI Key" oninput="window.autoSaveSettings()" class="border p-1.5 rounded text-xs w-28 focus:ring-2 focus:ring-green-400 transition">
-            
-            <button id="saveBtn" onclick="window.autoSaveSettings()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-xs transition-colors duration-300">💾 儲存設定</button>
+            <!-- 🌟 三大核心參數已全面綁定預設值 -->
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" value="1Ng_1f1WMngTjprIej417T-OJUZHAJt5UzNh7-EuqzqM" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" value="https://script.google.com/macros/s/AKfycbwyLkzy5L8TMl7qfbiUg7dBXi7wTtxV-X3OD_JuGtnxf4fRmyWH1g8m-UkjSRV3r9_iFw/exec" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
+            <input type="password" id="geminiApiKey" placeholder="AI Key" value="AIzaSyDsh6soeBNlD9iVdeAvyJ4DFbc6W8ACRzY" oninput="window.autoSaveSettings(this)" class="border p-1.5 rounded text-xs w-28 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
+            <button id="saveBtn" onclick="window.autoSaveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm active:scale-90">💾 儲存</button>
         </div>
     </header>
 
     <main class="max-w-7xl mx-auto p-4 py-8">
-        <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8">
+        <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
             <div class="flex justify-between items-center mb-6 border-b pb-4">
                 <h2 class="text-lg font-bold">快速建檔區</h2>
-                <button type="button" onclick="addAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition">同步至雲端列表</button>
+                <div class="flex gap-2">
+                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-300 transition">🧹 清除</button>
+                    <button type="button" onclick="addAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
+                </div>
             </div>
 
             <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div class="col-span-1 space-y-3 bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
                     <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
-                    <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm font-bold">選擇多張截圖</label>
+                    <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm font-bold hover:bg-gray-50 transition text-center">選擇多張截圖</label>
                     <div id="imagePreviewContainer" class="flex flex-wrap gap-2 w-full py-2 justify-center"></div>
-                    <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold">🤖 AI 自動填數量</button>
+                    <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition">🤖 AI 自動填數量</button>
                 </div>
 
                 <div class="col-span-1 space-y-3">
-                    <label class="text-xs font-bold text-gray-500 border-b block">基本資訊</label>
-                    <input type="text" id="g_id" placeholder="貼上完整代碼 (自動取前6碼)" class="w-full p-2 border rounded font-bold text-sm">
+                    <label class="text-xs font-bold text-gray-400 border-b block pb-1">基本資訊</label>
+                    <input type="text" id="g_id" placeholder="貼上完整帳號代碼" class="w-full p-2 border rounded font-bold text-sm bg-white outline-none focus:border-indigo-400">
+                    <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white cursor-pointer"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
+                    <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm outline-none">
+                    <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm outline-none">
                     <div class="flex gap-2">
-                        <input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm bg-blue-50 transition-colors duration-300">
-                        <select id="g_team" class="w-1/2 p-2 border rounded text-sm"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select>
-                    </div>
-                    <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm bg-blue-50 transition-colors duration-300">
-                    <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm bg-blue-50 transition-colors duration-300">
-                    <div class="flex gap-2">
-                        <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm">
-                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700">
-                            <option value="active">🟢 現貨</option>
-                            <option value="sold">🔴 售出</option>
-                        </select>
+                        <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm outline-none">
+                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700 cursor-pointer"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
                     </div>
                 </div>
 
                 <div class="col-span-1 space-y-3">
-                    <label class="text-xs font-bold text-gray-500 border-b block">資源老怪</label>
-                    <div class="grid grid-cols-2 gap-2 text-xs">
+                    <label class="text-xs font-bold text-gray-400 border-b block pb-1">資源數據</label>
+                    <div class="grid grid-cols-2 gap-2 text-[11px]">
                         <div>16-20怪<input type="number" id="st_old_poke" class="w-full p-1 border rounded"></div>
                         <div>16-20神<input type="number" id="st_old_leg" class="w-full p-1 border rounded"></div>
                         <div>大師球<input type="number" id="st_masterball" class="w-full p-1 border rounded"></div>
-                        <div>綠票/綠券<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
+                        <div>綠票/卷<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
                         <div>神奇糖果<input type="number" id="st_rarecandy" class="w-full p-1 border rounded"></div>
                         <div>寶可幣<input type="number" id="st_coin" class="w-full p-1 border rounded"></div>
-                        <div>寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
-                        <div>道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
+                        <div class="col-span-1">寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
+                        <div class="col-span-1">道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
                     </div>
                 </div>
 
-                <div class="col-span-1 space-y-2 bg-red-50 p-2 rounded-lg border">
-                    <label class="text-xs font-bold text-red-800 border-b block pb-1">特殊調查</label>
+                <div class="col-span-1 space-y-2 bg-red-50/30 p-2 rounded-lg border border-red-100">
+                    <label class="text-xs font-bold text-red-800 border-b border-red-200 block pb-1">特殊調查</label>
                     <div class="flex flex-col gap-1 text-[10px]">
                         <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label>
                         <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label>
@@ -257,8 +233,8 @@
                     </div>
                 </div>
 
-                <div class="col-span-1 space-y-2 bg-purple-50 p-2 rounded-lg border text-[10px]">
-                    <label class="text-xs font-bold text-purple-800 border-b block pb-1">合體與 Mega</label>
+                <div class="col-span-1 space-y-2 bg-purple-50/30 p-2 rounded-lg border border-purple-100 text-[10px]">
+                    <label class="text-xs font-bold text-purple-800 border-b border-purple-200 block pb-1">合體與 Mega</label>
                     <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label>
                     <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
                     <label class="flex items-center gap-1"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label>
@@ -270,35 +246,34 @@
                     <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
                     <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option><option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option><option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option><option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option></select>
                     <label class="flex items-center gap-1"><input type="checkbox" id="chk_dyna">可打極巨化</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多有開斷崖之劍</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡有開根源波動</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐有開畫龍點睛</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多斷崖之劍</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡根源波動</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐畫龍點睛</label>
                 </div>
 
                 <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
-                    
-                    <div class="flex flex-wrap gap-2 items-center text-xs bg-blue-50 p-2.5 rounded-lg border border-blue-200">
-                        <span class="font-bold text-blue-800"><i class="fas fa-gamepad"></i> 遊戲內快速搜尋指令：</span>
-                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-900 px-3 py-1.5 rounded shadow-sm transition font-bold active:scale-95">傳說的寶可夢,幻,究極異獸</button>
-                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-900 px-3 py-1.5 rounded shadow-sm transition font-bold active:scale-95">傳說的寶可夢,幻,究極異獸&4*</button>
-                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-900 px-3 py-1.5 rounded shadow-sm transition font-bold active:scale-95">傳說的寶可夢,幻,究極異獸&異色</button>
+                    <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100">
+                        <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
+                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
+                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
+                        <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
                     </div>
 
-                    <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會獨立顯示..." class="w-full p-2 border rounded text-xs h-10"></textarea>
+                    <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢) 會顯示在最前面..." class="w-full p-2 border rounded text-xs h-10 bg-white outline-none"></textarea>
                     
-                    <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神名單 (支援自動加總，如：超夢*3、洛奇亞*2)，底下的數量會超精準計算！" class="w-full p-2 border border-blue-200 bg-blue-50 rounded text-xs h-16 font-bold"></textarea>
+                    <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神清單 (支援自動加總，如：超夢*3)，底下的數量會自動累計！" class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-16 font-bold outline-none"></textarea>
                     
                     <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
-                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold transition-colors duration-300"></div>
-                        <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded"></div>
-                        <div>色違寶可夢<input type="number" id="st_shiny" class="w-full p-1 border rounded"></div>
-                        <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded"></div>
-                        <div>裝扮寶可夢<input type="number" id="st_costume" class="w-full p-1 border rounded"></div>
-                        <div>紀念背卡<input type="number" id="st_bg_comm" class="w-full p-1 border rounded"></div>
-                        <div>特別背卡<input type="number" id="st_bg_special" class="w-full p-1 border rounded"></div>
-                        <div>極巨化<input type="number" id="st_dyna" class="w-full p-1 border rounded"></div>
-                        <div>超極巨化<input type="number" id="st_giga" class="w-full p-1 border rounded"></div>
-                        <div>完美<input type="number" id="st_perfect" class="w-full p-1 border rounded"></div>
+                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none"></div>
+                        <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded outline-none"></div>
+                        <div>色違總數<input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none"></div>
+                        <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none"></div>
+                        <div>裝扮數量<input type="number" id="st_costume" class="w-full p-1 border rounded outline-none"></div>
+                        <div>紀念背卡<input type="number" id="st_bg_comm" class="w-full p-1 border rounded outline-none"></div>
+                        <div>特別背卡<input type="number" id="st_bg_special" class="w-full p-1 border rounded outline-none"></div>
+                        <div>極巨化數<input type="number" id="st_dyna" class="w-full p-1 border rounded outline-none"></div>
+                        <div>超極巨化<input type="number" id="st_giga" class="w-full p-1 border rounded outline-none"></div>
+                        <div>完美數量<input type="number" id="st_perfect" class="w-full p-1 border rounded outline-none"></div>
                     </div>
                 </div>
             </form>
@@ -306,64 +281,62 @@
 
         <div class="bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
             <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
-                <span>雲端同步總表 (<span id="inventoryCount">0</span>)</span>
+                <span class="text-indigo-900"><i class="fas fa-list-ul mr-1"></i> 雲端同步清單 (<span id="inventoryCount">0</span>)</span>
                 <div class="flex items-center gap-2 flex-wrap">
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400"><i class="fas fa-search"></i></span>
-                        <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner">
+                        <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
                     </div>
-
-                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">
-                        <i class="fas fa-rocket mr-1"></i> 拋轉所有現貨
-                    </button>
-                    <select id="filterStatus" onchange="renderInventory()" class="border border-indigo-200 p-1.5 rounded font-bold text-xs text-indigo-700 bg-indigo-50 cursor-pointer">
-                        <option value="all">📦 顯示全部</option>
-                        <option value="active">🟢 僅現貨</option>
-                        <option value="sold">🔴 僅售出</option>
-                    </select>
-                    <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer">
-                        <option value="priceDesc">💰 售價：高 ➔ 低</option>
-                        <option value="priceAsc">💰 售價：低 ➔ 高</option>
-                        <option value="newest">🆕 最新加入時間</option>
-                    </select>
+                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">拋轉所有現貨</button>
+                    <select id="filterStatus" onchange="renderInventory()" class="border border-indigo-200 p-1.5 rounded font-bold text-xs text-indigo-700 bg-indigo-50 cursor-pointer outline-none"><option value="all">📦 全部狀態</option><option value="active">🟢 僅現貨</option><option value="sold">🔴 僅售出</option></select>
+                    <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer outline-none"><option value="priceDesc">💰 售價高 ➔ 低</option><option value="priceAsc">💰 售價低 ➔ 高</option><option value="newest">🆕 最新加入</option></select>
                 </div>
             </div>
-            <table class="w-full text-left text-sm">
-                <thead class="bg-gray-50"><tr><th class="px-6 py-3 border-b">代碼</th><th class="px-6 py-3 border-b">資訊</th><th class="px-6 py-3 border-b">售價</th><th class="px-6 py-3 border-b text-center">自動化</th><th class="px-6 py-3 border-b text-center">刪除</th></tr></thead>
-                <tbody id="inventoryBody"></tbody>
-            </table>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-100/50"><tr><th class="px-4 py-3 border-b">代碼</th><th class="px-4 py-3 border-b">資訊</th><th class="px-4 py-3 border-b">售價</th><th class="px-4 py-3 border-b text-center">快捷操作</th><th class="px-4 py-3 border-b text-center">刪除</th></tr></thead>
+                    <tbody id="inventoryBody"></tbody>
+                </table>
+            </div>
         </div>
     </main>
 
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <script>
-        // 🌟 網頁載入時自動讀取記憶體
-        ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { document.getElementById(id).value = localStorage.getItem(id) || ''; });
-        
-        // 🌟 自動存檔核心程式：一打字就存！
-        window.autoSaveSettings = function() {
-            ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { 
-                localStorage.setItem(id, document.getElementById(id).value.trim()); 
+        // 🌟 初始化功能：優先載入記憶體值
+        (function init() {
+            ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => {
+                const savedValue = localStorage.getItem(id);
+                const el = document.getElementById(id);
+                if(savedValue && el) { el.value = savedValue; }
             });
-            const btn = document.getElementById('saveBtn');
-            if(btn) {
-                btn.innerHTML = '✅ 已自動儲存';
-                btn.classList.remove('bg-gray-800');
-                btn.classList.add('bg-green-600');
-                clearTimeout(window.saveTimer);
-                window.saveTimer = setTimeout(() => {
-                    btn.innerHTML = '💾 儲存設定';
-                    btn.classList.remove('bg-green-600');
-                    btn.classList.add('bg-gray-800');
-                }, 1500);
+        })();
+        
+        // 🌟 自動存檔：一打字就同步到記憶體
+        window.autoSaveSettings = function(inputEl) {
+            ['geminiApiKey', 'googleSheetId', 'gasUrl'].forEach(id => { 
+                const el = document.getElementById(id);
+                if(el) localStorage.setItem(id, el.value.trim()); 
+            });
+            
+            if(inputEl) {
+                inputEl.classList.add('ring-2', 'ring-green-400');
+                setTimeout(() => { inputEl.classList.remove('ring-2', 'ring-green-400'); }, 400);
             }
+
+            const btn = document.getElementById('saveBtn');
+            btn.innerHTML = '✅ 已存'; btn.classList.replace('bg-gray-800', 'bg-green-600');
+            clearTimeout(window.saveTimer);
+            window.saveTimer = setTimeout(() => {
+                btn.innerHTML = '💾 儲存'; btn.classList.replace('bg-green-600', 'bg-gray-800');
+            }, 1000);
         };
 
         window.previewImages = function(event) {
             const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
             for(let i = 0; i < files.length; i++) {
-                const reader = new FileReader(); reader.onload = (e) => { const img = document.createElement('img'); img.src = e.target.result; img.className = 'rounded h-12 border'; container.appendChild(img); }
+                const reader = new FileReader(); reader.onload = (e) => { const img = document.createElement('img'); img.src = e.target.result; img.className = 'rounded h-12 border object-cover w-12 shadow-sm'; container.appendChild(img); }
                 reader.readAsDataURL(files[i]);
             }
             document.getElementById('aiBtn').classList.remove('hidden');
@@ -382,7 +355,7 @@
                 if (match) total += parseInt(match[1], 10); else total += 1;
             });
             countInput.value = total;
-            countInput.classList.add('bg-green-200'); setTimeout(() => countInput.classList.remove('bg-green-200'), 300);
+            countInput.classList.add('bg-green-100'); setTimeout(() => countInput.classList.remove('bg-green-100'), 300);
         };
 
         const parseNum = (val) => {
@@ -392,15 +365,16 @@
 
         const highlightInput = (id) => {
             const el = document.getElementById(id);
-            if(el) { el.classList.add('bg-green-200'); setTimeout(() => el.classList.remove('bg-green-200'), 400); }
+            if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
         window.analyzeMultipleImages = async function() {
-            const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; if(!apiKey || files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '辨識中...';
+            const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
+            if(!apiKey) { alert("請先填寫 AI Key！"); return; }
+            if(files.length === 0) return;
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 辨識中...';
             try {
-                let parts = [{ text: "請分析寶可夢截圖，輸出純 JSON 格式（不可包含 Markdown）。\n1. 搜尋列顯示「傳說的寶可夢,幻,究極異獸」(無後綴) -> legendary (神獸總數)。\n2. 搜尋列顯示「...&4*」 -> hundo_leg (百神數量)。\n3. 搜尋列顯示「...&異色」 -> shiny_leg (色違神獸)。\n4. 標籤圓圈下數字：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。\n5. 若圖片為道具/商店/個人畫面，提取數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、綠票或綠券(greenpass)、寶可夢背包上限(poke_bag)、道具包包上限(item_bag)。\n6. 提取玩家數值：玩家等級(level)、星塵數量(stardust)、經驗值(xp)。\n7. 若圖片是寶可夢「網格清單」，精準辨識種類並合併加總（如：超夢*3），以頓號分隔填入 pokemon_list 欄位。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\",\"masterball\":\"\",\"rarecandy\":\"\",\"coin\":\"\",\"greenpass\":\"\",\"poke_bag\":\"\",\"item_bag\":\"\",\"level\":\"\",\"stardust\":\"\",\"xp\":\"\"}" }];
-                
+                let parts = [{ text: "分析寶可夢截圖，輸出純 JSON（不含 Markdown）。1. 搜尋「傳說的寶可夢,幻,究極異獸」-> legendary (神獸總數)。2. 搜尋「...&4*」 -> hundo_leg (百神數量)。3. 搜尋「...&異色」 -> shiny_leg (色違神獸)。4. 標籤數字：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。5. 提取數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、綠券(greenpass)、寶可夢包(poke_bag)、道具包(item_bag)。6. 玩家等級(level)、星塵(stardust)、經驗(xp)。7. 盤點網格清單合併加總（如：超夢*3）。\nJSON格式：{\"legendary\":\"\",\"shiny\":\"\",\"costume\":\"\",\"bg_comm\":\"\",\"bg_special\":\"\",\"dyna\":\"\",\"giga\":\"\",\"perfect\":\"\",\"hundo_leg\":\"\",\"shiny_leg\":\"\",\"pokemon_list\":\"\",\"masterball\":\"\",\"rarecandy\":\"\",\"coin\":\"\",\"greenpass\":\"\",\"poke_bag\":\"\",\"item_bag\":\"\",\"level\":\"\",\"stardust\":\"\",\"xp\":\"\"}" }];
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
@@ -434,50 +408,33 @@
                 if(res.poke_bag) document.getElementById('st_poke_bag').value = parseNum(res.poke_bag) || res.poke_bag;
                 if(res.item_bag) document.getElementById('st_item_bag').value = parseNum(res.item_bag) || res.item_bag;
 
-                let origLevel = parseNum(res.level);
-                let origStardust = parseNum(res.stardust);
-                let origXp = parseNum(res.xp);
+                let oL = parseNum(res.level); let oS = parseNum(res.stardust); let oX = parseNum(res.xp);
+                let fS = isNaN(oS) ? 0 : oS; let fX = isNaN(oX) ? 0 : oX;
 
-                let finalStardust = isNaN(origStardust) ? 0 : origStardust;
-                let finalXp = isNaN(origXp) ? 0 : origXp;
-
-                if (!isNaN(origLevel)) {
-                    if (origLevel < 60) {
-                        document.getElementById('g_level').value = 60;
-                        finalStardust += 200000;
-                        finalXp = 0; 
-                    } else if (origLevel >= 68) {
-                        document.getElementById('g_level').value = 70;
-                        finalStardust += 300000;
-                    } else {
-                        document.getElementById('g_level').value = origLevel;
-                    }
+                if (!isNaN(oL)) {
+                    if (oL < 60) { document.getElementById('g_level').value = 60; fS += 200000; fX = 0; } 
+                    else if (oL >= 68) { document.getElementById('g_level').value = 70; fS += 300000; } 
+                    else { document.getElementById('g_level').value = oL; }
                     highlightInput('g_level');
                 }
-
-                if (finalStardust > 0) {
-                    if (finalStardust >= 800000) { document.getElementById('g_stardust').value = Math.floor(finalStardust / 10000); highlightInput('g_stardust'); } 
-                    else { document.getElementById('g_stardust').value = ''; }
-                }
-
-                if (finalXp > 0) {
-                    if (finalXp >= 800000) { document.getElementById('g_xp').value = Math.floor(finalXp / 10000); highlightInput('g_xp'); } 
-                    else { document.getElementById('g_xp').value = ''; }
-                }
+                if (fS >= 800000) { document.getElementById('g_stardust').value = Math.floor(fS / 10000); highlightInput('g_stardust'); }
+                if (fX >= 800000) { document.getElementById('g_xp').value = Math.floor(fX / 10000); highlightInput('g_xp'); }
 
                 window.updateHundoCount(); 
             } catch (e) { alert("AI辨識異常"); }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
+        window.resetForm = function() {
+            document.querySelectorAll('input, textarea').forEach(el => { if(!['geminiApiKey','googleSheetId','gasUrl'].includes(el.id) && el.type !== 'checkbox') el.value = ''; if(el.type === 'checkbox') el.checked = false; });
+            document.getElementById('g_item_status').value = 'active'; document.getElementById('g_team').value = '藍隊';
+            document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); window.clearImage();
+        };
+
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim(); const checked = (id) => document.getElementById(id).checked;
-            let res = []; 
-            const fullId = v('g_id'); const shortId = fullId.substring(0, 6).toUpperCase(); res.push(shortId); 
-            
-            const lvlStr = v('g_level') ? v('g_level') + '等 ' : '';
-            res.push(`${lvlStr}${v('g_team')}`);
-            
+            let res = []; const fullId = v('g_id'); const shortId = fullId.substring(0, 6).toUpperCase(); res.push(shortId); 
+            const lvlStr = v('g_level') ? v('g_level') + '等 ' : ''; res.push(`${lvlStr}${v('g_team')}`);
             let spList = []; for(let i=1; i<=10; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
             if(v('g_rare_list')) res.push(`🔥${v('g_rare_list')}🔥`);
@@ -489,23 +446,17 @@
             if(checked('chk_dyna')) res.push(`✨可打極巨化／超極巨化✨`);
             if(checked('chk_lati')) res.push(v('sel_lati'));
             if(checked('chk_hoenn')) res.push(v('sel_hoenn'));
-            if(checked('chk_groudon')) res.push(`固拉多有開斷崖之劍`);
-            if(checked('chk_kyogre')) res.push(`蓋歐卡有開根源波動`);
-            if(checked('chk_rayquaza')) res.push(`烈空坐有開畫龍點睛`);
-            
-            if(v('g_xp')) res.push(`經驗 ${v('g_xp')}萬`); 
-            if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}萬`);
-            
+            if(checked('chk_groudon')) res.push(`固拉多斷崖之劍`);
+            if(checked('chk_kyogre')) res.push(`蓋歐卡根源波動`);
+            if(checked('chk_rayquaza')) res.push(`烈空坐畫龍點睛`);
+            if(v('g_xp')) res.push(`經驗 ${v('g_xp')}萬`); if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}萬`);
             if(v('st_hundo_leg')) { let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
             if(v('st_legend')) res.push(`✅神獸總數${v('st_legend')}隻`); if(v('st_shiny')) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
             if(v('st_shiny_leg')) res.push(`✅色違神獸${v('st_shiny_leg')}隻`); if(v('st_costume')) res.push(`✅裝扮寶可夢${v('st_costume')}隻`);
             if(v('st_bg_comm')) res.push(`✅紀念背卡${v('st_bg_comm')}隻`); if(v('st_bg_special')) res.push(`✅特別背卡${v('st_bg_special')}隻`);
             if(v('st_dyna')) res.push(`✅極巨化${v('st_dyna')}隻`); if(v('st_giga')) res.push(`✅超極巨化${v('st_giga')}隻`);
             if(v('st_perfect')) res.push(`✅完美${v('st_perfect')}隻`);
-            
-            if(v('st_poke_bag')) res.push(`🎒寶可夢背包 ${v('st_poke_bag')}`);
-            if(v('st_item_bag')) res.push(`🎒道具背包 ${v('st_item_bag')}`);
-            
+            if(v('st_poke_bag')) res.push(`🎒寶可夢背包 ${v('st_poke_bag')}`); if(v('st_item_bag')) res.push(`🎒道具背包 ${v('st_item_bag')}`);
             if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
             if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`); if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
             if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`); if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
@@ -519,15 +470,11 @@
         };
 
         window.copySimpleText = function(txt, btn) {
-            const area = document.getElementById('hiddenCopyArea');
-            area.style.display = 'block'; area.value = txt;
+            const area = document.getElementById('hiddenCopyArea'); area.style.display = 'block'; area.value = txt;
             area.select(); document.execCommand('copy'); area.style.display = 'none';
-            const oldText = btn.innerHTML; 
-            btn.innerHTML = '✅ 已複製！'; 
-            setTimeout(() => btn.innerHTML = oldText, 1500);
+            const oldT = btn.innerHTML; btn.innerHTML = '✅'; setTimeout(() => btn.innerHTML = oldT, 1200);
         };
     </script>
 </body>
 </html>
-
 
