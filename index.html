@@ -27,7 +27,6 @@
         const inventoryRef = ref(db, 'inventory');
         let inventoryData = [];
 
-        // 🌟 網頁載入時，自動填入上次儲存的設定
         window.addEventListener('DOMContentLoaded', () => {
             ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
                 const savedValue = localStorage.getItem(id);
@@ -35,7 +34,6 @@
             });
         });
 
-        // 🌟 按下儲存按鈕時，把設定存在瀏覽器記憶體
         window.saveSettings = function() {
             ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
                 const val = document.getElementById(id).value.trim();
@@ -50,7 +48,6 @@
             }, 2000);
         };
 
-        // 監聽 Firebase 資料庫變動
         onValue(inventoryRef, (snapshot) => {
             const data = snapshot.val();
             inventoryData = [];
@@ -62,7 +59,6 @@
             renderInventory(); 
         });
 
-        // 同步至 Google 試算表 (單筆)
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
@@ -79,7 +75,6 @@
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
-        // 一鍵拋轉所有現貨
         window.syncAllToSheets = async function(btn) {
             const activeData = inventoryData.filter(item => item.status !== 'sold');
             if(activeData.length === 0) { 
@@ -99,7 +94,6 @@
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
-        // 標記售出
         window.markAsSold = async function(uid, accountId, btn) {
             const isAlreadySold = btn.innerText.includes('補塗');
             if(!isAlreadySold) {
@@ -117,7 +111,6 @@
             }
         };
 
-        // 新增/更新資料到 Firebase
         let currentEditUid = null;
         window.saveAccountToInventory = async function() {
             const accountId = document.getElementById('g_id').value.trim();
