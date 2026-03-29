@@ -59,6 +59,7 @@
             renderInventory(); 
         });
 
+        // 拋轉單筆現貨 (觸發 GAS 的 upsert)
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
@@ -75,22 +76,23 @@
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
+        // 一鍵拋轉所有現貨 (觸發 GAS 的 updateAll)
         window.syncAllToSheets = async function(btn) {
             const activeData = inventoryData.filter(item => item.status !== 'sold');
             if(activeData.length === 0) { 
                 showMsg("目前沒有現貨可以拋轉！", "amber");
                 return; 
             }
-            if(!confirm(`確定要將【${activeData.length}】個現貨帳號一次拋轉嗎？`)) return;
+            if(!confirm(`確定要將【${activeData.length}】個現貨帳號覆蓋更新過去嗎？\n(舊帳號會被更新，新帳號會被新增)`)) return;
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(!sheetId || !scriptUrl) { alert("請先在頂部填寫並儲存設定！"); return; }
             
-            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 拋轉中...'; btn.disabled = true;
+            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 覆蓋更新中...'; btn.disabled = true;
             const allData = activeData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
             try {
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'syncAll', id: sheetId, allData: allData }) });
-                btn.innerHTML = '✅ 全部拋轉成功！'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
+                btn.innerHTML = '✅ 全部更新成功！'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
@@ -374,7 +376,7 @@
                         <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400"><i class="fas fa-search"></i></span>
                         <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
                     </div>
-                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">拋轉所有現貨</button>
+                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 覆蓋更新所有現貨</button>
                     <select id="filterStatus" onchange="renderInventory()" class="border border-indigo-200 p-1.5 rounded font-bold text-xs text-indigo-700 bg-indigo-50 cursor-pointer outline-none"><option value="all">📦 全部狀態</option><option value="active">🟢 僅現貨</option><option value="sold">🔴 僅售出</option></select>
                     <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer outline-none"><option value="priceDesc">💰 售價高 ➔ 低</option><option value="priceAsc">💰 售價低 ➔ 高</option><option value="newest">🆕 最新加入</option></select>
                 </div>
@@ -565,12 +567,10 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
             if(cancelEditBtn) cancelEditBtn.classList.add('hidden');
         };
 
-        // 🔥 過濾 0 值的邏輯更新 🔥
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim(); 
             const checked = (id) => document.getElementById(id).checked;
             
-            // 加入過濾器：只有當值存在，且不等於 '0' 時，才回傳 true
             const valid = (val) => val && val !== '0';
 
             let res = []; const fullId = v('g_id'); const shortId = fullId.substring(0, 6).toUpperCase(); res.push(shortId); 
