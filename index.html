@@ -27,7 +27,7 @@
         const inventoryRef = ref(db, 'inventory');
         let inventoryData = [];
 
-        // 🌟 網頁載入時，自動填入上次儲存的設定 🌟
+        // 🌟 網頁載入時，自動填入上次儲存的設定
         window.addEventListener('DOMContentLoaded', () => {
             ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
                 const savedValue = localStorage.getItem(id);
@@ -35,14 +35,13 @@
             });
         });
 
-        // 🌟 按下儲存按鈕時，把設定存在瀏覽器記憶體 🌟
+        // 🌟 按下儲存按鈕時，把設定存在瀏覽器記憶體
         window.saveSettings = function() {
             ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
                 const val = document.getElementById(id).value.trim();
                 localStorage.setItem(id, val);
             });
             const btn = document.getElementById('saveBtn');
-            const oldText = btn.innerHTML;
             btn.innerHTML = '✅ 已儲存';
             btn.classList.replace('bg-gray-800', 'bg-green-600');
             setTimeout(() => {
@@ -134,7 +133,6 @@
                 update(ref(db, `inventory/${currentEditUid}`), newItem);
                 showMsg("✅ 帳號資料已更新！", "green");
 
-                // 自動同步更新到 Google Sheets
                 const sheetId = document.getElementById('googleSheetId').value.trim(); 
                 const scriptUrl = document.getElementById('gasUrl').value.trim();
                 if(sheetId && scriptUrl) {
@@ -148,7 +146,6 @@
             window.resetForm();
         };
 
-        // 訊息提示小工具
         function showMsg(text, color) {
             const msg = document.createElement('div');
             msg.className = `fixed top-20 left-1/2 -translate-x-1/2 bg-${color}-600 text-white px-6 py-2 rounded-full shadow-lg z-[100] animate-bounce`;
@@ -162,7 +159,6 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
             document.getElementById('g_id').value = item.accountId || ''; document.getElementById('g_level').value = item.level || ''; document.getElementById('g_team').value = item.team || '藍隊'; document.getElementById('g_price').value = item.price === "未標價" ? "" : item.price; document.getElementById('g_stardust').value = item.stardust || ''; document.getElementById('g_xp').value = item.xp || ''; document.getElementById('st_rarecandy').value = item.rarecandy || ''; document.getElementById('st_coin').value = item.coin || ''; document.getElementById('st_greenpass').value = item.greenpass || ''; document.getElementById('st_masterball').value = item.masterball || ''; document.getElementById('st_poke_bag').value = item.poke_bag || ''; document.getElementById('st_item_bag').value = item.item_bag || ''; document.getElementById('g_rare_list').value = item.rare_list || ''; document.getElementById('g_hundos').value = item.hundos || ''; document.getElementById('g_item_status').value = item.status || 'active'; document.getElementById('st_hundo_leg').value = item.st_hundo_leg || ''; document.getElementById('st_legend').value = item.st_legend || ''; document.getElementById('st_shiny').value = item.st_shiny || ''; document.getElementById('st_shiny_leg').value = item.st_shiny_leg || ''; document.getElementById('st_costume').value = item.st_costume || ''; document.getElementById('st_bg_comm').value = item.st_bg_comm || ''; document.getElementById('st_bg_special').value = item.st_bg_special || ''; document.getElementById('st_dyna').value = item.st_dyna || ''; document.getElementById('st_giga').value = item.st_giga || ''; document.getElementById('st_perfect').value = item.st_perfect || '';
             
-            // 變更按鈕狀態為編輯模式
             currentEditUid = uid;
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.innerText = '💾 儲存修改';
@@ -255,7 +251,7 @@
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V35 旗艦記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V35 旗艦本地記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
@@ -448,10 +444,10 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 視覺解析：使用最穩定 flash 模型，降溫設定 800px 🔥
+        // 🔥 AI 視覺解析：已修正模型名稱為 gemini-1.5-flash-latest 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
-            if(!apiKey) { alert("請先在頂部填寫你的 AI Key 並按儲存設定！"); return; }
+            if(!apiKey) { alert("請先在頂部貼上你的 AI Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 視覺解析中...';
             try {
@@ -461,7 +457,7 @@
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
-                                const maxSize = 800; // 防手機發燙過載設定
+                                const maxSize = 800; // 穩定降溫版
                                 let width = img.width;
                                 let height = img.height;
                                 if (width > height) {
@@ -480,8 +476,8 @@
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 改用最穩定且免費額度最高的 gemini-1.5-flash 模型
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+                // 這裡加入了 -latest 確保 Google 伺服器能 100% 找到模型
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 
                 if (!resp.ok) {
                     const errData = await resp.text(); 
