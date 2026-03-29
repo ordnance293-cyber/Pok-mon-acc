@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V36 終極旗艦 Pro 版</title>
+    <title>寶可夢頂級帳號庫 - V37 終極鏡像版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -75,22 +75,42 @@
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
+        // 🔥 終極鏡像同步：抓取當前網頁順序，讓 GAS 清空重排 🔥
         window.syncAllToSheets = async function(btn) {
-            const activeData = inventoryData.filter(item => item.status !== 'sold');
-            if(activeData.length === 0) { 
-                showMsg("目前沒有現貨可以拋轉！", "amber");
+            const filterStatus = document.getElementById('filterStatus')?.value || 'all';
+            const sortMode = document.getElementById('sortMode')?.value || 'priceDesc';
+            const searchQuery = document.getElementById('searchInput')?.value.toLowerCase().trim() || '';
+
+            // 取得當前網頁上的排序與篩選結果
+            let displayData = inventoryData.filter(item => {
+                if (filterStatus === 'active' && item.status === 'sold') return false;
+                if (filterStatus === 'sold' && item.status !== 'sold') return false;
+                if (searchQuery && !item.accountId.toLowerCase().includes(searchQuery)) return false;
+                return true;
+            });
+
+            displayData.sort((a, b) => {
+                if (sortMode === 'priceDesc') { let pA = parseInt(a.price)||0; let pB = parseInt(b.price)||0; return pB - pA || b.timestamp - a.timestamp; } 
+                else if (sortMode === 'priceAsc') { let pA = parseInt(a.price)||Infinity; let pB = parseInt(b.price)||Infinity; return pA - pB || b.timestamp - a.timestamp; } 
+                else return b.timestamp - a.timestamp;
+            });
+
+            if(displayData.length === 0) { 
+                showMsg("目前沒有資料可以拋轉！", "amber");
                 return; 
             }
-            if(!confirm(`確定要將【${activeData.length}】個現貨帳號覆蓋更新過去嗎？\n(舊帳號會被更新，新帳號會被新增)`)) return;
+            if(!confirm(`確定要將目前的【${displayData.length}】個帳號\n完全按照「網頁上的順序」重新洗牌並覆蓋到試算表嗎？\n(注意：試算表會先被清空，然後從第一行開始往下排！)`)) return;
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(!sheetId || !scriptUrl) { alert("請先在頂部填寫並儲存設定！"); return; }
             
-            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 覆蓋更新中...'; btn.disabled = true;
-            const allData = activeData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText) }));
+            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 鏡像重排中...'; btn.disabled = true;
+            const allData = displayData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText), status: item.status }));
+            
             try {
-                await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'syncAll', id: sheetId, allData: allData }) });
-                btn.innerHTML = '✅ 全部更新成功！'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
+                // 呼叫全新的 action: syncExactOrder
+                await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'syncExactOrder', id: sheetId, allData: allData }) });
+                btn.innerHTML = '✅ 鏡像同步成功！'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
@@ -242,7 +262,7 @@
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V36 終極旗艦 Pro 版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V37 終極鏡像版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
@@ -374,7 +394,7 @@
                         <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400"><i class="fas fa-search"></i></span>
                         <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
                     </div>
-                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 覆蓋更新所有現貨</button>
+                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
                     <select id="filterStatus" onchange="renderInventory()" class="border border-indigo-200 p-1.5 rounded font-bold text-xs text-indigo-700 bg-indigo-50 cursor-pointer outline-none"><option value="all">📦 全部狀態</option><option value="active">🟢 僅現貨</option><option value="sold">🔴 僅售出</option></select>
                     <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer outline-none"><option value="priceDesc">💰 售價高 ➔ 低</option><option value="priceAsc">💰 售價低 ➔ 高</option><option value="newest">🆕 最新加入</option></select>
                 </div>
@@ -565,12 +585,10 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
             if(cancelEditBtn) cancelEditBtn.classList.add('hidden');
         };
 
-        // 🔥 終極版過濾 0 值的邏輯 🔥
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim(); 
             const checked = (id) => document.getElementById(id).checked;
             
-            // 終極防呆過濾器：空白、'0'、'00' 甚至 '0.0' 都會被判定為 false (隱藏)
             const valid = (val) => {
                 if (!val) return false;
                 const strVal = String(val).trim();
