@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V35 終極旗艦 Pro 版</title>
+    <title>寶可夢頂級帳號庫 - V36 終極旗艦 Pro 版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -242,7 +242,7 @@
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V35 終極旗艦 Pro 版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V36 終極旗艦 Pro 版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
@@ -442,7 +442,6 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 視覺解析：高畫質解封 + Gemini 2.5 Pro 最強模型 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 AI Key 並按儲存設定！"); return; }
@@ -483,7 +482,6 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
-                                // 🌟 畫質解封：提升解析度到 1500，保留更多文字細節 🌟
                                 const maxSize = 1500; 
                                 let width = img.width;
                                 let height = img.height;
@@ -496,7 +494,6 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
                                 canvas.width = width; 
                                 canvas.height = height;
                                 canvas.getContext('2d').drawImage(img, 0, 0, width, height); 
-                                // 🌟 畫質解封：壓縮率從 0.65 提升到 0.9 🌟
                                 r(canvas.toDataURL('image/jpeg', 0.9).split(',')[1]); 
                             }; img.src = e.target.result;
                         }; reader.readAsDataURL(files[i]);
@@ -504,7 +501,6 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 🌟 模型切換：換成最聰明、細節捕捉最強的 gemini-2.5-pro 🌟
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 
                 if (!resp.ok) {
@@ -569,16 +565,22 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
             if(cancelEditBtn) cancelEditBtn.classList.add('hidden');
         };
 
-        // 🔥 過濾 0 值的邏輯更新 🔥
+        // 🔥 終極版過濾 0 值的邏輯 🔥
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim(); 
             const checked = (id) => document.getElementById(id).checked;
             
-            // 加入過濾器：只有當值存在，且不等於 '0' 時，才回傳 true
-            const valid = (val) => val && val !== '0';
+            // 終極防呆過濾器：空白、'0'、'00' 甚至 '0.0' 都會被判定為 false (隱藏)
+            const valid = (val) => {
+                if (!val) return false;
+                const strVal = String(val).trim();
+                if (strVal === '0' || strVal === '00' || strVal === '0.0') return false;
+                if (!isNaN(strVal) && Number(strVal) === 0) return false;
+                return true;
+            };
 
             let res = []; const fullId = v('g_id'); const shortId = fullId.substring(0, 6).toUpperCase(); res.push(shortId); 
-            const lvlStr = v('g_level') ? v('g_level') + '等 ' : ''; res.push(`${lvlStr}${v('g_team')}`);
+            const lvlStr = valid(v('g_level')) ? v('g_level') + '等 ' : ''; res.push(`${lvlStr}${v('g_team')}`);
             
             let spList = []; for(let i=1; i<=11; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
