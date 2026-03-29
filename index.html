@@ -27,7 +27,6 @@
         const inventoryRef = ref(db, 'inventory');
         let inventoryData = [];
 
-        // 🌟 網頁載入時，自動填入上次儲存的設定
         window.addEventListener('DOMContentLoaded', () => {
             ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
                 const savedValue = localStorage.getItem(id);
@@ -35,7 +34,6 @@
             });
         });
 
-        // 🌟 按下儲存按鈕時，把設定存在瀏覽器記憶體
         window.saveSettings = function() {
             ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
                 const val = document.getElementById(id).value.trim();
@@ -50,7 +48,6 @@
             }, 2000);
         };
 
-        // 監聽 Firebase 資料庫變動
         onValue(inventoryRef, (snapshot) => {
             const data = snapshot.val();
             inventoryData = [];
@@ -62,7 +59,6 @@
             renderInventory(); 
         });
 
-        // 同步至 Google 試算表 (單筆)
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
             const sheetId = document.getElementById('googleSheetId').value.trim();
             const scriptUrl = document.getElementById('gasUrl').value.trim();
@@ -79,7 +75,6 @@
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
-        // 一鍵拋轉所有現貨
         window.syncAllToSheets = async function(btn) {
             const activeData = inventoryData.filter(item => item.status !== 'sold');
             if(activeData.length === 0) { 
@@ -99,7 +94,6 @@
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
-        // 標記售出
         window.markAsSold = async function(uid, accountId, btn) {
             const isAlreadySold = btn.innerText.includes('補塗');
             if(!isAlreadySold) {
@@ -117,7 +111,6 @@
             }
         };
 
-        // 新增/更新資料到 Firebase
         let currentEditUid = null;
         window.saveAccountToInventory = async function() {
             const accountId = document.getElementById('g_id').value.trim();
@@ -177,7 +170,6 @@
             }
         };
 
-        // 開啟改文案視窗
         let currentEditModalUid = null;
         let currentEditModalAccountId = null;
         window.openEditModal = function(uid, accountId) {
@@ -190,7 +182,6 @@
             document.getElementById('editModal').classList.add('flex');
         };
 
-        // 儲存文案並同步試算表
         window.saveEditedText = async function() {
             if(!currentEditModalUid) return;
             const newText = document.getElementById('editModalText').value.trim();
@@ -451,14 +442,12 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 視覺解析：包含特級入場券修正 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 AI Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 視覺精準解析中...';
             try {
-                // 修改了尋找「特級入場券」的指令
                 let parts = [{ text: `你是一個精準的寶可夢GO截圖OCR分析系統。請輸出純 JSON（不含 Markdown）。
 
 【防幻覺最高指導原則】：
@@ -473,10 +462,19 @@
 【網格寶可夢清單 (pokemon_list)】：
 請「嚴格」讀取圖片中每隻寶可夢圖示「正下方」的中文名字（如：基格爾德、席多藍恩、酋雷姆）。若同名出現多次請合併計數（例如：超夢*3）。如果沒有看到名字，絕對不要亂編！
 
+【標籤分類介面 (圓形圖示)】：
+請讀取圓形圖示下方的文字與數字對應：
+- 「異色」下方的數字 -> 填入 shiny (代表色違總數)
+- 「活動」下方的數字 -> 填入 costume (代表裝扮數量)
+- 「紀念背卡」下方的數字 -> 填入 bg_comm
+- 「特別背卡」下方的數字 -> 填入 bg_special
+- 「極巨化」下方的數字 -> 填入 dyna
+- 「超極巨化」下方的數字 -> 填入 giga
+- 「完美」下方的數字 -> 填入 perfect
+
 【其他數據提取】：
 - 道具數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、特級入場券(greenpass)、寶可夢包(poke_bag)、道具包(item_bag)。
 - 基本資訊：玩家等級(level)、星塵(stardust)、經驗(xp)。
-- 標籤總數：異色(shiny)、活動(costume)、紀念背卡(bg_comm)、特別背卡(bg_special)、極巨化(dyna)、超極巨化(giga)、完美(perfect)。
 
 JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
                 
@@ -567,13 +565,17 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
             if(cancelEditBtn) cancelEditBtn.classList.add('hidden');
         };
 
-        // 🔥 文案產出順序維持不變，並將新勾選項目加入判斷 🔥
+        // 🔥 過濾 0 值的邏輯更新 🔥
         window.generateText = function() {
-            const v = (id) => document.getElementById(id).value.trim(); const checked = (id) => document.getElementById(id).checked;
+            const v = (id) => document.getElementById(id).value.trim(); 
+            const checked = (id) => document.getElementById(id).checked;
+            
+            // 加入過濾器：只有當值存在，且不等於 '0' 時，才回傳 true
+            const valid = (val) => val && val !== '0';
+
             let res = []; const fullId = v('g_id'); const shortId = fullId.substring(0, 6).toUpperCase(); res.push(shortId); 
             const lvlStr = v('g_level') ? v('g_level') + '等 ' : ''; res.push(`${lvlStr}${v('g_team')}`);
             
-            // 包含新增的 chk_sp_11
             let spList = []; for(let i=1; i<=11; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
             
@@ -586,8 +588,8 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
                 });
             }
 
-            if(v('st_old_poke')) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
-            if(v('st_old_leg')) res.push(`‼️${v('st_old_leg')} 隻 16–20年神獸‼️`);
+            if(valid(v('st_old_poke'))) res.push(`‼️${v('st_old_poke')} 隻 16–20年寶可夢‼️`);
+            if(valid(v('st_old_leg'))) res.push(`‼️${v('st_old_leg')} 隻 16–20年神獸‼️`);
             if(checked('chk_kyurem')) res.push(v('sel_kyurem'));
             if(checked('chk_zamazenta')) res.push(v('sel_dogs'));
             if(checked('chk_necrozma')) res.push(v('sel_necrozma'));
@@ -597,21 +599,30 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
             if(checked('chk_groudon')) res.push(`固拉多斷崖之劍`);
             if(checked('chk_kyogre')) res.push(`蓋歐卡根源波動`);
             if(checked('chk_rayquaza')) res.push(`烈空坐畫龍點睛`);
-            if(v('g_xp')) res.push(`經驗 ${v('g_xp')}萬`); if(v('g_stardust')) res.push(`星塵 ${v('g_stardust')}萬`);
-            if(v('st_hundo_leg')) { let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
-            if(v('st_legend')) res.push(`✅神獸總數${v('st_legend')}隻`); if(v('st_shiny')) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
-            if(v('st_shiny_leg')) res.push(`✅色違神獸${v('st_shiny_leg')}隻`); if(v('st_costume')) res.push(`✅裝扮寶可夢${v('st_costume')}隻`);
-            if(v('st_bg_comm')) res.push(`✅紀念背卡${v('st_bg_comm')}隻`); if(v('st_bg_special')) res.push(`✅特別背卡${v('st_bg_special')}隻`);
-            if(v('st_dyna')) res.push(`✅極巨化${v('st_dyna')}隻`); if(v('st_giga')) res.push(`✅超極巨化${v('st_giga')}隻`);
-            if(v('st_perfect')) res.push(`✅完美${v('st_perfect')}隻`);
+            
+            if(valid(v('g_xp'))) res.push(`經驗 ${v('g_xp')}萬`); 
+            if(valid(v('g_stardust'))) res.push(`星塵 ${v('g_stardust')}萬`);
+            
+            if(valid(v('st_hundo_leg'))) { let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
+            if(valid(v('st_legend'))) res.push(`✅神獸總數${v('st_legend')}隻`); 
+            if(valid(v('st_shiny'))) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
+            if(valid(v('st_shiny_leg'))) res.push(`✅色違神獸${v('st_shiny_leg')}隻`); 
+            if(valid(v('st_costume'))) res.push(`✅裝扮寶可夢${v('st_costume')}隻`);
+            if(valid(v('st_bg_comm'))) res.push(`✅紀念背卡${v('st_bg_comm')}隻`); 
+            if(valid(v('st_bg_special'))) res.push(`✅特別背卡${v('st_bg_special')}隻`);
+            if(valid(v('st_dyna'))) res.push(`✅極巨化${v('st_dyna')}隻`); 
+            if(valid(v('st_giga'))) res.push(`✅超極巨化${v('st_giga')}隻`);
+            if(valid(v('st_perfect'))) res.push(`✅完美${v('st_perfect')}隻`);
             
             let pb = parseNum(v('st_poke_bag')); if(!isNaN(pb) && pb >= 1000) res.push(`🎒寶可夢背包 ${v('st_poke_bag')}`);
             let ib = parseNum(v('st_item_bag')); if(!isNaN(ib) && ib >= 1000) res.push(`🎒道具背包 ${v('st_item_bag')}`);
             
-            if(v('st_masterball')) res.push(`🩷大師球*${v('st_masterball')}`);
-            // 這裡一樣會輸出 🩷綠票
-            if(v('st_greenpass')) res.push(`🩷綠票${v('st_greenpass')}張`); if(v('st_rarecandy')) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
-            if(v('st_coin')) res.push(`寶可幣 ${v('st_coin')}`); if(v('g_price')) res.push(`💰價格 ${v('g_price')}`);
+            if(valid(v('st_masterball'))) res.push(`🩷大師球*${v('st_masterball')}`);
+            if(valid(v('st_greenpass'))) res.push(`🩷綠票${v('st_greenpass')}張`); 
+            if(valid(v('st_rarecandy'))) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
+            if(valid(v('st_coin'))) res.push(`寶可幣 ${v('st_coin')}`); 
+            if(valid(v('g_price'))) res.push(`💰價格 ${v('g_price')}`);
+            
             return res.join('\n');
         };
 
