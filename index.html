@@ -108,7 +108,6 @@
             const allData = displayData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText), status: item.status }));
             
             try {
-                // 呼叫全新的 action: syncExactOrder
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'syncExactOrder', id: sheetId, allData: allData }) });
                 btn.innerHTML = '✅ 鏡像同步成功！'; setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
