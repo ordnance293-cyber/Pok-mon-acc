@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V49 終極反向解析版</title>
+    <title>寶可夢頂級帳號庫 - V51 乾淨命名版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -173,7 +173,7 @@
             msg.innerHTML = text; document.body.appendChild(msg); setTimeout(() => msg.remove(), 2500);
         }
 
-        // 🔥 終極大絕招：文案反向解析引擎 (解決舊帳號不打勾的問題) 🔥
+        // 🔥 文案反向解析引擎 🔥
         window.editAccount = function(uid) {
             const item = inventoryData.find(i => i.uid === uid); if(!item) return;
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -191,10 +191,8 @@
             setVal('st_bg_special', item.st_bg_special); setVal('st_dyna', item.st_dyna); setVal('st_giga', item.st_giga); setVal('st_perfect', item.st_perfect);
             setVal('st_old_poke', item.st_old_poke); setVal('st_old_leg', item.st_old_leg);
 
-            // 將儲存的文案解碼，用來反推打勾狀態
             const txt = decodeURIComponent(item.fullText || "");
 
-            // 11 個特殊調查反向打勾
             setChk('chk_sp_1', item.chk_sp_1 !== undefined ? item.chk_sp_1 : txt.includes('色違美洛耶塔'));
             setChk('chk_sp_2', item.chk_sp_2 !== undefined ? item.chk_sp_2 : txt.includes('色違夢幻'));
             setChk('chk_sp_3', item.chk_sp_3 !== undefined ? item.chk_sp_3 : (txt.includes('凱路迪歐') && !txt.includes('凱路迪歐,瑪夏多')));
@@ -207,7 +205,6 @@
             setChk('chk_sp_10', item.chk_sp_10 !== undefined ? item.chk_sp_10 : txt.includes('薩戮德'));
             setChk('chk_sp_11', item.chk_sp_11 !== undefined ? item.chk_sp_11 : txt.includes('凱路迪歐,瑪夏多'));
 
-            // 合體與下拉選單反向還原
             const hasKyurem = item.chk_kyurem !== undefined ? item.chk_kyurem : txt.includes('酋雷姆合體');
             setChk('chk_kyurem', hasKyurem);
             if(txt.includes('‼️酋雷姆雙型態合體‼️')) setVal('sel_kyurem', '‼️酋雷姆雙型態合體‼️');
@@ -244,13 +241,11 @@
             else if(txt.includes('⭐️烈空坐能量夠Mega⭐️')) setVal('sel_hoenn', '⭐️烈空坐能量夠Mega⭐️');
             else setVal('sel_hoenn', item.sel_hoenn || '⭐️豐原三神可 Mega⭐️');
 
-            // 極巨化等打勾反向解析
             setChk('chk_dyna', item.chk_dyna_form !== undefined ? item.chk_dyna_form : txt.includes('✨可打極巨化／超極巨化✨'));
             setChk('chk_groudon', item.chk_groudon !== undefined ? item.chk_groudon : txt.includes('固拉多斷崖之劍'));
             setChk('chk_kyogre', item.chk_kyogre !== undefined ? item.chk_kyogre : txt.includes('蓋歐卡根源波動'));
             setChk('chk_rayquaza', item.chk_rayquaza !== undefined ? item.chk_rayquaza : txt.includes('烈空坐畫龍點睛'));
 
-            // 動態還原下拉選單顯示/隱藏
             document.getElementById('sel_kyurem').classList.toggle('hidden', !document.getElementById('chk_kyurem').checked);
             document.getElementById('sel_dogs').classList.toggle('hidden', !document.getElementById('chk_zamazenta').checked);
             document.getElementById('sel_necrozma').classList.toggle('hidden', !document.getElementById('chk_necrozma').checked);
@@ -370,15 +365,19 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：付費版 2.5 Pro + 鋼彈視覺辨識 🔥
+        // 🔥 AI 核心：移除米字號，乾淨命名 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 視覺型態深度掃描中...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 深度視覺解析中...';
             try {
                 let parts = [{ text: `你是一位資深的寶可夢GO數據分析官，現在要從遊戲截圖中提取數據。
-【🌟色違辨識】：如果名字或圖示旁邊有「三顆星星」🌟，該寶可夢即為「色違 (Shiny)」。
+
+【✨色違(Shiny)嚴格視覺辨識】（極重要防呆）：
+1. 請特別注意！背景出現的「黃色大圓光暈/泡泡」【絕對不是】色違標誌！
+2. 真正的色違標誌是位於 CP 數字旁邊或寶可夢周圍的「三顆深色/黑灰色四角星星 ✨」圖案。
+3. 只有看到這三顆深色星星圖案，該寶可夢才是「色違 (Shiny)」。
 
 【🤖基格爾德型態視覺辨識】（極重要）：
 遊戲中的「基格爾德」有多種型態，請你務必「觀察它的外觀」來命名：
@@ -387,8 +386,8 @@
 
 【資料輸出規則】：
 1. pokemon_list（將填入 g_hundos清單）：
-    - 色違規則：如果是色違，必須加上字首「色違」和字尾「***」。例如：\`色違完全體基格爾德***\`、\`色違基格爾德***\` 或 \`色違超夢***\`。
-    - 數量規則：同品種出現兩隻以上，在後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違超夢*3***\`。
+    - 色違規則：如果是色違(有深色星星)，請在名字最前面加上「色違」兩個字即可，結尾絕對不要加任何星號或符號。例如：\`色違完全體基格爾德\`、\`色違基格爾德\` 或 \`色違帕路奇亞\`。
+    - 數量規則：同品種出現兩隻以上，在名字最後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違帕路奇亞*3\`。
 2. 提取括號內的數字即為總數。
 
 JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
@@ -464,7 +463,6 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
-        // 🔥 修正了原本選單無法清除的 Bug 🔥
         window.resetForm = function() {
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
                 if(!['googleSheetId','gasUrl','geminiApiKey'].includes(el.id)) { 
@@ -569,7 +567,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V49 終極反向解析版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V51 乾淨命名版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
