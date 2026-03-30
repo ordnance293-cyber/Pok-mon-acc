@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V43 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V47 視覺型態辨識版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -11,6 +11,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
+        // Firebase 設定
         const firebaseConfig = {
             apiKey: "AIzaSyAXHqvXLLTmYl8kVV1fR0gJRFangwV85n8",
             authDomain: "pokemon-acc.firebaseapp.com",
@@ -40,23 +41,36 @@
             const btn = document.getElementById('saveBtn');
             btn.innerHTML = '✅ 已儲存';
             btn.classList.replace('bg-gray-800', 'bg-green-600');
-            setTimeout(() => { btn.innerHTML = '💾 儲存設定'; btn.classList.replace('bg-green-600', 'bg-gray-800'); }, 2000);
+            setTimeout(() => {
+                btn.innerHTML = '💾 儲存設定';
+                btn.classList.replace('bg-green-600', 'bg-gray-800');
+            }, 2000);
         };
 
         onValue(inventoryRef, (snapshot) => {
             const data = snapshot.val();
             inventoryData = [];
-            if (data) { Object.keys(data).forEach(key => inventoryData.push({ uid: key, ...data[key] })); }
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    inventoryData.push({ uid: key, ...data[key] });
+                });
+            }
             renderInventory(); 
         });
 
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
-            const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { showMsg("❌ 請先儲存試算表設定！", "red"); return; }
+            const sheetId = document.getElementById('googleSheetId').value.trim();
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
+            if(!sheetId || !scriptUrl) { 
+                showMsg("❌ 請先在頂部填寫並儲存試算表設定！", "red");
+                return; 
+            }
+            
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
             try {
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(fullText) }) });
-                btn.innerHTML = '<i class="fas fa-check"></i>'; setTimeout(() => { btn.innerHTML = '拋轉'; btn.disabled = false; }, 2000);
+                btn.innerHTML = '<i class="fas fa-check"></i>'; 
+                setTimeout(() => { btn.innerHTML = '拋轉'; btn.disabled = false; }, 2000);
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
@@ -73,18 +87,21 @@
             });
 
             displayData.sort((a, b) => {
-                if (sortMode === 'priceDesc') { return (parseInt(b.price)||0) - (parseInt(a.price)||0) || b.timestamp - a.timestamp; } 
-                else if (sortMode === 'priceAsc') { return (parseInt(a.price)||Infinity) - (parseInt(b.price)||Infinity) || b.timestamp - a.timestamp; } 
+                if (sortMode === 'priceDesc') { let pA = parseInt(a.price)||0; let pB = parseInt(b.price)||0; return pB - pA || b.timestamp - a.timestamp; } 
+                else if (sortMode === 'priceAsc') { let pA = parseInt(a.price)||Infinity; let pB = parseInt(b.price)||Infinity; return pA - pB || b.timestamp - a.timestamp; } 
                 else return b.timestamp - a.timestamp;
             });
 
-            if(displayData.length === 0) return;
-            if(!confirm(`確定要將目前的【${displayData.length}】個帳號重排覆蓋到試算表嗎？`)) return;
+            if(displayData.length === 0) { 
+                showMsg("目前沒有資料可以拋轉！", "amber");
+                return; 
+            }
+            if(!confirm(`確定要將目前的【${displayData.length}】個帳號\n完全按照「網頁上的順序」重新洗牌並覆蓋到試算表嗎？`)) return;
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) return;
+            if(!sheetId || !scriptUrl) { alert("請先在頂部填寫並儲存設定！"); return; }
             
-            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 重排中...'; btn.disabled = true;
+            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 鏡像重排中...'; btn.disabled = true;
             const allData = displayData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText), status: item.status }));
             
             try {
@@ -101,7 +118,8 @@
             }
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
-                btn.disabled = true; const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                btn.disabled = true;
+                const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 try {
                     await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sold', id: sheetId, accountId: accountId }) });
                     btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = isAlreadySold ? '🟡 補塗' : '💰 售出'; btn.disabled = false; }, 2000);
@@ -110,12 +128,14 @@
         };
 
         window.restoreAccount = async function(uid, accountId, btn) {
-            if(!confirm(`確定要恢復為現貨嗎？`)) return;
+            if(!confirm(`確定要將此帳號恢復為「現貨」嗎？`)) return;
+            
             update(ref(db, `inventory/${uid}`), { status: 'active' });
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
-                btn.disabled = true; const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                btn.disabled = true;
+                const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 try {
                     await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', id: sheetId, accountId: accountId }) });
                     btn.innerHTML = '✅'; 
@@ -131,7 +151,6 @@
             const accountId = getVal('g_id').trim();
             if(!accountId) { showMsg("請輸入帳號代碼！", "red"); return; }
             
-            // 🔥 新增：全面存取所有打勾狀態與選擇狀態 🔥
             const newItem = {
                 accountId: accountId, level: getVal('g_level'), team: getVal('g_team'), price: getVal('g_price') || "未標價",
                 stardust: getVal('g_stardust'), xp: getVal('g_xp'), rarecandy: getVal('st_rarecandy'), coin: getVal('st_coin'), 
@@ -158,8 +177,11 @@
                 update(ref(db, `inventory/${currentEditUid}`), newItem);
                 showMsg("✅ 帳號資料已更新！", "green");
 
-                const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-                if(sheetId && scriptUrl) fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
+                const sheetId = document.getElementById('googleSheetId').value.trim(); 
+                const scriptUrl = document.getElementById('gasUrl').value.trim();
+                if(sheetId && scriptUrl) {
+                    fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
+                }
             } else {
                 newItem.timestamp = Date.now();
                 push(inventoryRef, newItem);
@@ -171,10 +193,11 @@
         function showMsg(text, color) {
             const msg = document.createElement('div');
             msg.className = `fixed top-20 left-1/2 -translate-x-1/2 bg-${color}-600 text-white px-6 py-2 rounded-full shadow-lg z-[100] animate-bounce`;
-            msg.innerHTML = text; document.body.appendChild(msg); setTimeout(() => msg.remove(), 2500);
+            msg.innerHTML = text;
+            document.body.appendChild(msg);
+            setTimeout(() => msg.remove(), 2500);
         }
 
-        // 🔥 完美還原：把資料庫裡存的勾選狀態全部倒回去 🔥
         window.editAccount = function(uid) {
             const item = inventoryData.find(i => i.uid === uid); if(!item) return;
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -182,7 +205,6 @@
             const setVal = (id, val) => { document.getElementById(id).value = val || ''; };
             const setChk = (id, val) => { document.getElementById(id).checked = !!val; };
 
-            // 基本資訊回填
             setVal('g_id', item.accountId); setVal('g_level', item.level); setVal('g_team', item.team || '藍隊');
             setVal('g_price', item.price === "未標價" ? "" : item.price); setVal('g_stardust', item.stardust); setVal('g_xp', item.xp);
             setVal('st_rarecandy', item.rarecandy); setVal('st_coin', item.coin); setVal('st_greenpass', item.greenpass);
@@ -193,7 +215,6 @@
             setVal('st_bg_special', item.st_bg_special); setVal('st_dyna', item.st_dyna); setVal('st_giga', item.st_giga); setVal('st_perfect', item.st_perfect);
             setVal('st_old_poke', item.st_old_poke); setVal('st_old_leg', item.st_old_leg);
 
-            // 完美回填勾選狀態
             for(let i=1; i<=11; i++) setChk('chk_sp_'+i, item['chk_sp_'+i]);
             
             setChk('chk_kyurem', item.chk_kyurem); setVal('sel_kyurem', item.sel_kyurem || '‼️酋雷姆雙型態合體‼️');
@@ -207,7 +228,6 @@
             setChk('chk_kyogre', item.chk_kyogre); 
             setChk('chk_rayquaza', item.chk_rayquaza);
 
-            // 動態還原下拉選單顯示/隱藏
             document.getElementById('sel_kyurem').classList.toggle('hidden', !item.chk_kyurem);
             document.getElementById('sel_dogs').classList.toggle('hidden', !item.chk_zamazenta);
             document.getElementById('sel_necrozma').classList.toggle('hidden', !item.chk_necrozma);
@@ -216,9 +236,12 @@
             
             currentEditUid = uid;
             const submitBtn = document.getElementById('submitBtn');
-            submitBtn.innerText = '💾 儲存修改'; submitBtn.classList.replace('bg-red-600', 'bg-blue-600'); submitBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
+            submitBtn.innerText = '💾 儲存修改';
+            submitBtn.classList.replace('bg-red-600', 'bg-blue-600');
+            submitBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
             document.getElementById('cancelEditBtn').classList.remove('hidden');
-            showMsg("已完美還原所有資料，修改後點擊「儲存修改」即可覆蓋！", "blue");
+
+            showMsg("已回填資料，修改後點擊「儲存修改」即可覆蓋！", "blue");
         };
 
         window.deleteAccount = async function(uid, accountId) {
@@ -232,29 +255,42 @@
         let currentEditModalUid = null;
         let currentEditModalAccountId = null;
         window.openEditModal = function(uid, accountId) {
-            const item = inventoryData.find(i => i.uid === uid); if(!item) return;
-            currentEditModalUid = uid; currentEditModalAccountId = accountId;
+            const item = inventoryData.find(i => i.uid === uid);
+            if(!item) return;
+            currentEditModalUid = uid;
+            currentEditModalAccountId = accountId;
             document.getElementById('editModalText').value = decodeURIComponent(item.fullText);
-            document.getElementById('editModal').classList.remove('hidden'); document.getElementById('editModal').classList.add('flex');
+            document.getElementById('editModal').classList.remove('hidden');
+            document.getElementById('editModal').classList.add('flex');
         };
 
         window.saveEditedText = async function() {
             if(!currentEditModalUid) return;
             const newText = document.getElementById('editModalText').value.trim();
-            const btn = document.getElementById('saveModalBtn'); const oldBtnText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步儲存中...'; btn.disabled = true;
+            const btn = document.getElementById('saveModalBtn');
+            const oldBtnText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步儲存中...';
+            btn.disabled = true;
 
             update(ref(db, `inventory/${currentEditModalUid}`), { fullText: encodeURIComponent(newText) });
 
-            const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
+            const sheetId = document.getElementById('googleSheetId').value.trim(); 
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
-                try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: currentEditModalAccountId, data: newText }) }); } catch(e) {}
+                try {
+                    await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: currentEditModalAccountId, data: newText }) });
+                } catch(e) {}
             }
-            btn.innerHTML = oldBtnText; btn.disabled = false; window.closeEditModal(); showMsg("✅ 文案修改成功！", "green");
+
+            btn.innerHTML = oldBtnText;
+            btn.disabled = false;
+            window.closeEditModal();
+            showMsg("✅ 文案修改成功，已同步至試算表！", "green");
         };
 
         window.closeEditModal = function() {
-            document.getElementById('editModal').classList.add('hidden'); document.getElementById('editModal').classList.remove('flex');
+            document.getElementById('editModal').classList.add('hidden');
+            document.getElementById('editModal').classList.remove('flex');
         };
 
         window.renderInventory = function() {
@@ -267,8 +303,8 @@
                 return true;
             });
             displayData.sort((a, b) => {
-                if (sortMode === 'priceDesc') { return (parseInt(b.price)||0) - (parseInt(a.price)||0) || b.timestamp - a.timestamp; } 
-                else if (sortMode === 'priceAsc') { return (parseInt(a.price)||Infinity) - (parseInt(b.price)||Infinity) || b.timestamp - a.timestamp; } 
+                if (sortMode === 'priceDesc') { let pA = parseInt(a.price)||0; let pB = parseInt(b.price)||0; return pB - pA || b.timestamp - a.timestamp; } 
+                else if (sortMode === 'priceAsc') { let pA = parseInt(a.price)||Infinity; let pB = parseInt(b.price)||Infinity; return pA - pB || b.timestamp - a.timestamp; } 
                 else return b.timestamp - a.timestamp;
             });
             displayData.forEach(item => {
@@ -288,176 +324,7 @@
             });
             const cEl = document.getElementById('inventoryCount'); if(cEl) cEl.innerText = displayData.length;
         }
-    </script>
-</head>
-<body class="bg-gray-50 text-gray-800 min-h-screen">
-    <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
-        <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V43 完美記憶版
-        </h1>
-        <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="password" id="geminiApiKey" placeholder="請貼上新的 API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 focus:ring-2 focus:ring-yellow-400 transition-all outline-none">
-            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm active:scale-90">💾 儲存設定</button>
-        </div>
-    </header>
 
-    <main class="max-w-7xl mx-auto p-4 py-8">
-        <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
-            <div class="flex justify-between items-center mb-4 border-b pb-4">
-                <h2 class="text-lg font-bold">快速建檔區</h2>
-                <div class="flex gap-2">
-                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-300 transition">🧹 清除</button>
-                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-gray-600 transition">取消編輯</button>
-                    <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
-                </div>
-            </div>
-
-            <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100 mb-5">
-                <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
-                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
-                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
-                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
-            </div>
-
-            <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div class="col-span-1 flex flex-col gap-3">
-                    <div class="bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
-                        <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
-                        <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm font-bold hover:bg-gray-50 transition text-center w-full">選擇多張截圖</label>
-                        <div id="imagePreviewContainer" class="flex flex-wrap gap-2 w-full py-2 justify-center"></div>
-                        <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition mt-2">🤖 AI 自動填數量</button>
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-gray-400 block mb-1">稀有怪</label>
-                        <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢)，若有多隻請換行輸入..." class="w-full p-2 border rounded text-xs h-16 bg-white outline-none shadow-sm"></textarea>
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-blue-400 block mb-1">百神清單</label>
-                        <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神清單 (支援自動加總，如：超夢*3)..." class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-20 font-bold outline-none shadow-sm"></textarea>
-                    </div>
-                </div>
-
-                <div class="col-span-1 space-y-3">
-                    <label class="text-xs font-bold text-gray-400 border-b block pb-1">基本資訊</label>
-                    <input type="text" id="g_id" placeholder="貼上完整帳號代碼" class="w-full p-2 border rounded font-bold text-sm bg-white outline-none focus:border-indigo-400">
-                    <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white cursor-pointer"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
-                    <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm outline-none">
-                    <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm outline-none">
-                    <div class="flex gap-2">
-                        <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm outline-none">
-                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700 cursor-pointer"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
-                    </div>
-                </div>
-
-                <div class="col-span-1 space-y-3">
-                    <label class="text-xs font-bold text-gray-400 border-b block pb-1">資源數據</label>
-                    <div class="grid grid-cols-2 gap-2 text-[11px]">
-                        <div>16-20怪<input type="number" id="st_old_poke" class="w-full p-1 border rounded"></div>
-                        <div>16-20神<input type="number" id="st_old_leg" class="w-full p-1 border rounded"></div>
-                        <div>大師球<input type="number" id="st_masterball" class="w-full p-1 border rounded"></div>
-                        <div>綠票/卷<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
-                        <div>神奇糖果<input type="number" id="st_rarecandy" class="w-full p-1 border rounded"></div>
-                        <div>寶可幣<input type="number" id="st_coin" class="w-full p-1 border rounded"></div>
-                        <div class="col-span-1">寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
-                        <div class="col-span-1">道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
-                    </div>
-                </div>
-
-                <div class="col-span-1 space-y-2 bg-red-50/30 p-2 rounded-lg border border-red-100">
-                    <label class="text-xs font-bold text-red-800 border-b border-red-200 block pb-1">特殊調查</label>
-                    <div class="flex flex-col gap-1 text-[10px]">
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_3" value="凱路迪歐">凱路迪歐</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_4" value="至尊鳳王">至尊鳳王</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_5" value="至尊洛奇亞">至尊洛奇亞</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_6" value="瑪夏多">瑪夏多</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_7" value="色違基拉祈">色違基拉祈</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_8" value="色違謝米">色違謝米</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_9" value="波爾凱尼恩">波爾凱尼恩</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_10" value="薩戮德">薩戮德</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_11" value="凱路迪歐,瑪夏多">凱路迪歐,瑪夏多</label>
-                    </div>
-                </div>
-
-                <div class="col-span-1 space-y-2 bg-purple-50/30 p-2 rounded-lg border border-purple-100 text-[10px]">
-                    <label class="text-xs font-bold text-purple-800 border-b border-purple-200 block pb-1">合體與 Mega</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label>
-                    <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label>
-                    <select id="sel_dogs" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪合體</label>
-                    <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
-                    <select id="sel_lati" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
-                    <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option><option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option><option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option><option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_dyna">可打極巨化</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多斷崖之劍</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡根源波動</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐畫龍點睛</label>
-                </div>
-
-                <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
-                    <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
-                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none"></div>
-                        <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded outline-none"></div>
-                        <div>色違總數<input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none"></div>
-                        <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none"></div>
-                        <div>裝扮數量<input type="number" id="st_costume" class="w-full p-1 border rounded outline-none"></div>
-                        <div>紀念背卡<input type="number" id="st_bg_comm" class="w-full p-1 border rounded outline-none"></div>
-                        <div>特別背卡<input type="number" id="st_bg_special" class="w-full p-1 border rounded outline-none"></div>
-                        <div>極巨化數<input type="number" id="st_dyna" class="w-full p-1 border rounded outline-none"></div>
-                        <div>超極巨化<input type="number" id="st_giga" class="w-full p-1 border rounded outline-none"></div>
-                        <div>完美數量<input type="number" id="st_perfect" class="w-full p-1 border rounded outline-none"></div>
-                    </div>
-                </div>
-            </form>
-        </div>
-
-        <div class="bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
-            <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
-                <span class="text-indigo-900"><i class="fas fa-list-ul mr-1"></i> 雲端同步清單 (<span id="inventoryCount">0</span>)</span>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <div class="relative">
-                        <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400"><i class="fas fa-search"></i></span>
-                        <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
-                    </div>
-                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
-                    <select id="filterStatus" onchange="renderInventory()" class="border border-indigo-200 p-1.5 rounded font-bold text-xs text-indigo-700 bg-indigo-50 cursor-pointer outline-none"><option value="all">📦 全部狀態</option><option value="active">🟢 僅現貨</option><option value="sold">🔴 僅售出</option></select>
-                    <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer outline-none"><option value="priceDesc">💰 售價高 ➔ 低</option><option value="priceAsc">💰 售價低 ➔ 高</option><option value="newest">🆕 最新加入</option></select>
-                </div>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-gray-100/50"><tr><th class="px-4 py-3 border-b">代碼</th><th class="px-4 py-3 border-b">資訊</th><th class="px-4 py-3 border-b">售價</th><th class="px-4 py-3 border-b text-center">快捷操作</th><th class="px-4 py-3 border-b text-center">刪除</th></tr></thead>
-                    <tbody id="inventoryBody"></tbody>
-                </table>
-            </div>
-        </div>
-    </main>
-
-    <div id="editModal" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col overflow-hidden">
-            <div class="p-4 border-b bg-gray-50 flex justify-between items-center">
-                <h3 class="font-bold text-lg text-indigo-900"><i class="fas fa-edit mr-2"></i>📝 修改帳號介紹文案</h3>
-                <button onclick="window.closeEditModal()" class="text-gray-400 hover:text-gray-700 text-xl"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="p-4">
-                <textarea id="editModalText" class="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none text-sm font-mono leading-relaxed" placeholder="在這裡修改文案..."></textarea>
-            </div>
-            <div class="p-4 border-t bg-gray-50 flex justify-end gap-3">
-                <button onclick="window.closeEditModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition">取消</button>
-                <button id="saveModalBtn" onclick="window.saveEditedText()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold shadow-md hover:bg-indigo-700 transition">儲存並同步試算表</button>
-            </div>
-        </div>
-    </div>
-
-    <textarea id="hiddenCopyArea" class="hidden"></textarea>
-
-    <script>
         window.previewImages = function(event) {
             const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
             for(let i = 0; i < files.length; i++) {
@@ -493,41 +360,28 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
+        // 🔥 AI 核心進化：視覺型態辨識版 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 2.5 Pro 高畫質精準解析中...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 視覺型態深度掃描中...';
             try {
-                let parts = [{ text: `你是一個精準的寶可夢GO截圖OCR分析系統。請輸出純 JSON（不含 Markdown）。
+                let parts = [{ text: `你是一位資深的寶可夢GO數據分析官，現在要從遊戲截圖中提取數據。
+【🌟色違辨識】：如果名字或圖示旁邊有「三顆星星」🌟，該寶可夢即為「色違 (Shiny)」。
 
-【防幻覺最高指導原則】：
-絕對禁止捏造、猜測畫面上沒有的寶可夢名字或數字！所有資料必須 100% 來自圖片上可見的文字。如果有看不清楚的，請留空，不要亂猜。
+【🤖基格爾德型態視覺辨識】（極重要）：
+遊戲中的「基格爾德」有多種型態，請你務必「觀察它的外觀」來命名：
+1. 若外觀像「巨大機器人、鋼彈、雙足人型」(100% 完全體形態) ➔ 請在 pokemon_list 裡將它命名為「完全體基格爾德」。
+2. 若外觀像「蛇、蛞蝓、異形」(50% 形態) 或「杜賓狗」(10% 形態) ➔ 請維持原名「基格爾德」。
 
-【關鍵數量精確提取】：
-請注意搜尋列下方的文字，通常會有一個放大鏡圖示加上括號數字，例如「寶可夢 (5)」或「Q (5)」，這個 (5) 就是總數量。
-1. 若搜尋列完整出現「傳說的寶可夢,幻,究極異獸&4*」：提取括號內的數字填入 hundo_leg (百神數量)。
-2. 若搜尋列僅出現「傳說的寶可夢,幻,究極異獸」：提取括號內的數字填入 legendary (神獸總數)。
-3. 若搜尋列出現「傳說的寶可夢,幻,究極異獸&異色」：提取括號內的數字填入 shiny_leg (色違神獸)。
+【資料輸出規則】：
+1. pokemon_list（將填入 g_hundos清單）：
+    - 色違規則：如果是色違，必須加上字首「色違」和字尾「***」。例如：\`色違完全體基格爾德***\`、\`色違基格爾德***\` 或 \`色違超夢***\`。
+    - 數量規則：同品種出現兩隻以上，在後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違超夢*3***\`。
+2. 提取括號內的數字即為總數。
 
-【網格寶可夢清單 (pokemon_list)】：
-請「嚴格」讀取圖片中每隻寶可夢圖示「正下方」的中文名字（如：基格爾德、席多藍恩、酋雷姆）。若同名出現多次請合併計數（例如：超夢*3）。如果沒有看到名字，絕對不要亂編！
-
-【標籤分類介面 (圓形圖示)】：
-請讀取圓形圖示下方的文字與數字對應：
-- 「異色」下方的數字 -> 填入 shiny (代表色違總數)
-- 「活動」下方的數字 -> 填入 costume (代表裝扮數量)
-- 「紀念背卡」下方的數字 -> 填入 bg_comm
-- 「特別背卡」下方的數字 -> 填入 bg_special
-- 「極巨化」下方的數字 -> 填入 dyna
-- 「超極巨化」下方的數字 -> 填入 giga
-- 「完美」下方的數字 -> 填入 perfect
-
-【其他數據提取】：
-- 道具數字：大師球(masterball)、神奇糖果(rarecandy)、寶可幣(coin)、特級入場券(greenpass)、寶可夢包(poke_bag)、道具包(item_bag)。
-- 基本資訊：玩家等級(level)、星塵(stardust)、經驗(xp)。
-
-JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
+JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
                 
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
@@ -693,5 +547,172 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
             const oldT = btn.innerHTML; btn.innerHTML = '✅'; setTimeout(() => btn.innerHTML = oldT, 1200);
         };
     </script>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+    <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
+        <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V47 視覺型態辨識版
+        </h1>
+        <div class="flex gap-2 items-center flex-wrap">
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
+            <input type="password" id="geminiApiKey" placeholder="請貼上新的 API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 focus:ring-2 focus:ring-yellow-400 transition-all outline-none">
+            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm active:scale-90">💾 儲存設定</button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-4 py-8">
+        <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
+            <div class="flex justify-between items-center mb-4 border-b pb-4">
+                <h2 class="text-lg font-bold">快速建檔區</h2>
+                <div class="flex gap-2">
+                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-300 transition">🧹 清除</button>
+                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-gray-600 transition">取消編輯</button>
+                    <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100 mb-5">
+                <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
+            </div>
+
+            <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div class="col-span-1 flex flex-col gap-3">
+                    <div class="bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
+                        <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
+                        <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm font-bold hover:bg-gray-50 transition text-center w-full">選擇多張截圖</label>
+                        <div id="imagePreviewContainer" class="flex flex-wrap gap-2 w-full py-2 justify-center"></div>
+                        <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition mt-2">🤖 AI 自動填數量</button>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-400 block mb-1">稀有怪</label>
+                        <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢)，若有多隻請換行輸入..." class="w-full p-2 border rounded text-xs h-16 bg-white outline-none shadow-sm"></textarea>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-blue-400 block mb-1">百神清單</label>
+                        <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神清單 (支援自動加總，如：超夢*3)..." class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-20 font-bold outline-none shadow-sm"></textarea>
+                    </div>
+                </div>
+
+                <div class="col-span-1 space-y-3">
+                    <label class="text-xs font-bold text-gray-400 border-b block pb-1">基本資訊</label>
+                    <input type="text" id="g_id" placeholder="貼上完整帳號代碼" class="w-full p-2 border rounded font-bold text-sm bg-white outline-none focus:border-indigo-400">
+                    <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white cursor-pointer"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
+                    <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm outline-none">
+                    <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm outline-none">
+                    <div class="flex gap-2">
+                        <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm outline-none">
+                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700 cursor-pointer"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
+                    </div>
+                </div>
+
+                <div class="col-span-1 space-y-3">
+                    <label class="text-xs font-bold text-gray-400 border-b block pb-1">資源數據</label>
+                    <div class="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>16-20怪<input type="number" id="st_old_poke" class="w-full p-1 border rounded"></div>
+                        <div>16-20神<input type="number" id="st_old_leg" class="w-full p-1 border rounded"></div>
+                        <div>大師球<input type="number" id="st_masterball" class="w-full p-1 border rounded"></div>
+                        <div>綠票/卷<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
+                        <div>神奇糖果<input type="number" id="st_rarecandy" class="w-full p-1 border rounded"></div>
+                        <div>寶可幣<input type="number" id="st_coin" class="w-full p-1 border rounded"></div>
+                        <div class="col-span-1">寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
+                        <div class="col-span-1">道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
+                    </div>
+                </div>
+
+                <div class="col-span-1 space-y-2 bg-red-50/30 p-2 rounded-lg border border-red-100">
+                    <label class="text-xs font-bold text-red-800 border-b border-red-200 block pb-1">特殊調查</label>
+                    <div class="flex flex-col gap-1 text-[10px]">
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_3" value="凱路迪歐">凱路迪歐</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_4" value="至尊鳳王">至尊鳳王</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_5" value="至尊洛奇亞">至尊洛奇亞</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_6" value="瑪夏多">瑪夏多</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_7" value="色違基拉祈">色違基拉祈</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_8" value="色違謝米">色違謝米</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_9" value="波爾凱尼恩">波爾凱尼恩</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_10" value="薩戮德">薩戮德</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_11" value="凱路迪歐,瑪夏多">凱路迪歐,瑪夏多</label>
+                    </div>
+                </div>
+
+                <div class="col-span-1 space-y-2 bg-purple-50/30 p-2 rounded-lg border border-purple-100 text-[10px]">
+                    <label class="text-xs font-bold text-purple-800 border-b border-purple-200 block pb-1">合體與 Mega</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label>
+                    <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label>
+                    <select id="sel_dogs" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪合體</label>
+                    <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
+                    <select id="sel_lati" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
+                    <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option><option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option><option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option><option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option></select>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_dyna">可打極巨化</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多斷崖之劍</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡根源波動</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐畫龍點睛</label>
+                </div>
+
+                <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
+                    <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
+                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none"></div>
+                        <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded outline-none"></div>
+                        <div>色違總數<input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none"></div>
+                        <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none"></div>
+                        <div>裝扮數量<input type="number" id="st_costume" class="w-full p-1 border rounded outline-none"></div>
+                        <div>紀念背卡<input type="number" id="st_bg_comm" class="w-full p-1 border rounded outline-none"></div>
+                        <div>特別背卡<input type="number" id="st_bg_special" class="w-full p-1 border rounded outline-none"></div>
+                        <div>極巨化數<input type="number" id="st_dyna" class="w-full p-1 border rounded outline-none"></div>
+                        <div>超極巨化<input type="number" id="st_giga" class="w-full p-1 border rounded outline-none"></div>
+                        <div>完美數量<input type="number" id="st_perfect" class="w-full p-1 border rounded outline-none"></div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
+            <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
+                <span class="text-indigo-900"><i class="fas fa-list-ul mr-1"></i> 雲端同步清單 (<span id="inventoryCount">0</span>)</span>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400"><i class="fas fa-search"></i></span>
+                        <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
+                    </div>
+                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
+                    <select id="filterStatus" onchange="renderInventory()" class="border border-indigo-200 p-1.5 rounded font-bold text-xs text-indigo-700 bg-indigo-50 cursor-pointer outline-none"><option value="all">📦 全部狀態</option><option value="active">🟢 僅現貨</option><option value="sold">🔴 僅售出</option></select>
+                    <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer outline-none"><option value="priceDesc">💰 售價高 ➔ 低</option><option value="priceAsc">💰 售價低 ➔ 高</option><option value="newest">🆕 最新加入</option></select>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-100/50"><tr><th class="px-4 py-3 border-b">代碼</th><th class="px-4 py-3 border-b">資訊</th><th class="px-4 py-3 border-b">售價</th><th class="px-4 py-3 border-b text-center">快捷操作</th><th class="px-4 py-3 border-b text-center">刪除</th></tr></thead>
+                    <tbody id="inventoryBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <div id="editModal" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col overflow-hidden">
+            <div class="p-4 border-b bg-gray-50 flex justify-between items-center">
+                <h3 class="font-bold text-lg text-indigo-900"><i class="fas fa-edit mr-2"></i>📝 修改帳號介紹文案</h3>
+                <button onclick="window.closeEditModal()" class="text-gray-400 hover:text-gray-700 text-xl"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-4">
+                <textarea id="editModalText" class="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none text-sm font-mono leading-relaxed" placeholder="在這裡修改文案..."></textarea>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex justify-end gap-3">
+                <button onclick="window.closeEditModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition">取消</button>
+                <button id="saveModalBtn" onclick="window.saveEditedText()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold shadow-md hover:bg-indigo-700 transition">儲存並同步試算表</button>
+            </div>
+        </div>
+    </div>
+
+    <textarea id="hiddenCopyArea" class="hidden"></textarea>
 </body>
 </html>
