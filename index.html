@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V64 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V65 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -327,7 +327,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V64 切換為 2.5 Pro，嚴格定義色違為黑色星星 🔥
+        // 🔥 AI 核心：V65 切換為 2.5 Pro，保留 JSON 強制模式 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -387,7 +387,6 @@ JSON格式範本：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 🔥 改回使用 gemini-2.5-pro 模型，維持強制 JSON 模式 🔥
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
@@ -404,7 +403,6 @@ JSON格式範本：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 
                 const data = await resp.json(); 
                 let rawText = data.candidates[0].content.parts[0].text;
-                // 保險起見，清除可能殘留的 markdown json 標籤
                 let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim(); 
                 let res = JSON.parse(cleanText);
                 
@@ -561,7 +559,7 @@ JSON格式範本：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V64 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V65 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
@@ -580,6 +578,13 @@ JSON格式範本：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                     <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md transition">取消編輯</button>
                     <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
                 </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100 mb-5">
+                <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
+                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
             </div>
 
             <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
