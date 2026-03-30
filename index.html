@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V56 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V57 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -423,14 +423,37 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                 let oL = parseNum(res.level); let oS = parseNum(res.stardust); let oX = parseNum(res.xp);
                 let fS = isNaN(oS) ? 0 : oS; let fX = isNaN(oX) ? 0 : oX;
 
+                // 🔥 V57：優化等級保送與經驗值邏輯 🔥
                 if (!isNaN(oL)) {
-                    if (oL < 60) { document.getElementById('g_level').value = 60; fS += 200000; fX = 0; } 
-                    else if (oL >= 68) { document.getElementById('g_level').value = 70; fS += 300000; } 
-                    else { document.getElementById('g_level').value = oL; }
+                    if (oL < 60) { 
+                        document.getElementById('g_level').value = 60; 
+                        fS += 200000; 
+                        fX = 0; // 保送升級到 60，清空經驗
+                    } 
+                    else if (oL >= 68 && oL < 70) { 
+                        document.getElementById('g_level').value = 70; 
+                        fS += 300000; 
+                        fX = 0; // 保送升級到 70，清空經驗
+                    } 
+                    else { 
+                        document.getElementById('g_level').value = oL; 
+                        // 包含原本就已經 >= 70 等的，保留原始經驗 fX
+                    }
                     highlightInput('g_level');
                 }
-                if (fS >= 800000) { document.getElementById('g_stardust').value = Math.floor(fS / 10000); highlightInput('g_stardust'); }
-                if (fX >= 800000) { document.getElementById('g_xp').value = Math.floor(fX / 10000); highlightInput('g_xp'); }
+                
+                if (fS >= 800000) { 
+                    document.getElementById('g_stardust').value = Math.floor(fS / 10000); 
+                    highlightInput('g_stardust'); 
+                }
+                
+                // 只有經驗大於等於 80萬 且 大於 0 (未被清空) 時才填入
+                if (fX >= 800000 && fX > 0) { 
+                    document.getElementById('g_xp').value = Math.floor(fX / 10000); 
+                    highlightInput('g_xp'); 
+                } else {
+                    document.getElementById('g_xp').value = ''; // 確保經驗欄位留空
+                }
 
                 window.updateHundoCount(); 
             } catch (e) { 
@@ -554,7 +577,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V56 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V57 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
