@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V55 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V56 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -350,6 +350,16 @@
 1. 若外觀像「巨大機器人、鋼彈、雙足人型」(100% 完全體形態) ➔ 請在 pokemon_list 裡將它命名為「完全體基格爾德」。
 2. 若外觀像「蛇、蛞蝓、異形」(50% 形態) 或「杜賓狗」(10% 形態) ➔ 請維持原名「基格爾德」。
 
+【🦄神獸總數嚴格辨識】（極重要防呆）：
+請尋找遊戲畫面上方的搜尋欄。**只有當搜尋欄內的文字「完全符合」：『傳說的寶可夢,幻,究極異獸』時**，才提取該畫面頂部顯示的數字作為「神獸總數 (legendary)」。
+如果搜尋欄包含其他條件（例如加了 &4* 或 &異色），或者根本沒有這個搜尋條件，請將數量歸類到對應的欄位（如完美神獸 hundo_leg、色違神獸 shiny_leg），**絕對不要**把這些數字誤認為「神獸總數」。
+
+【🖼️背卡(Background)嚴格辨識】：
+請仔細辨識截圖中的分類標籤或圖示特徵：
+1. 「紀念背卡」(bg_comm)：圖示特徵為淺藍色圓底，帶有「白色地球/網格球體」圖案。
+2. 「特別背卡」(bg_special)：圖示特徵為偏深藍色圓底，帶有「三朵白色小花」圖案。
+請根據文字標籤或上述明確的圖示特徵，準確提取對應的數量。
+
 【資料輸出規則】：
 1. pokemon_list（將填入 g_hundos清單）：
     - 色違規則：如果是色違(有深色星星)，請在名字最前面加上「色違」兩個字即可，結尾絕對不要加任何星號或符號。例如：\`色違完全體基格爾德\`、\`色違基格爾德\` 或 \`色違帕路奇亞\`。
@@ -430,7 +440,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
-        // 🔥 V55：保護庫存區，且強制重置 AI 按鈕狀態 🔥
+        // 🔥 V56：保護庫存區，且強制重置 AI 按鈕狀態 🔥
         window.resetForm = function() {
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
                 // 排除列表：不會清空最上面的設定，也不會清空最下面的庫存搜尋、篩選、排序
@@ -544,7 +554,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V55 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V56 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
