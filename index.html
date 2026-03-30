@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V61 2.5 Flash 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V63 2.5 Flash 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -327,89 +327,85 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：切換為 2.5 Flash 版並加入極致精準警告 🔥
+        // 🔥 AI 核心：V63 加入底層強制 JSON 模式，徹底根除廢話報錯 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 2.5 Flash 大腦解析中...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 2.5 Flash 解析中...';
             try {
-                let parts = [{ text: `你是一位資深的寶可夢GO數據分析官，現在要從遊戲截圖中嚴格且仔細地提取數據。
+                let parts = [{ text: `你是一位非常精準的寶可夢GO數據分析官。
 
-【🚨極致精準警告🚨】（最高指導原則）：
-請你「非常仔細、逐一對比」地掃描每一張截圖的所有文字與圖示！確保你抓取的每一個數字，都100%精準填入對應的JSON欄位中。如果不確定，請留空，絕對不要亂填或填錯格子！請在輸出前再三檢查對應關係！
+【🚨最高指令🚨】：
+請你「非常仔細、逐一對比」地掃描每一張截圖！確保你抓取的每一個數字，都100%精準填入對應的 JSON 欄位中。如果不確定，請留空，絕對不要亂填或填錯格子！請在輸出前再三確認對應關係！
 
 【✨色違(Shiny)嚴格視覺辨識】（極重要防呆）：
-1. 請特別注意！背景出現的「黃色大圓光暈/泡泡」【絕對不是】色違標誌！
-2. 真正的色違標誌是位於 CP 數字旁邊或寶可夢周圍的「三顆深色/黑灰色四角星星 ✨」圖案。
-3. 只有看到這三顆深色星星圖案，該寶可夢才是「色違 (Shiny)」。
+1. 只有看到名字旁邊有「三顆深色/黑灰色四角星星 ✨」圖案，才是色違。背景的黃色大圓光暈絕對不是！
 
 【🎒包包容量辨識規則】（極重要防呆）：
-寶可夢背包 (poke_bag) 與 道具背包 (item_bag) 在截圖中通常顯示為「目前數量 / 總容量」（例如：345/1000）。
-請「永遠只提取右邊的總容量數字」（以此例為 1000）。絕對不要提取左邊的數字！不管左邊的值是什麼，永遠只輸出右邊的值。
-
-【🤖基格爾德型態視覺辨識】（極重要）：
-遊戲中的「基格爾德」有多種型態，請你務必「觀察它的外觀」來命名：
-1. 若外觀像「巨大機器人、鋼彈、雙足人型」(100% 完全體形態) ➔ 請在 pokemon_list 裡將它命名為「完全體基格爾德」。
-2. 若外觀像「蛇、蛞蝓、異形」(50% 形態) 或「杜賓狗」(10% 形態) ➔ 請維持原名「基格爾德」。
+提取右邊的總容量數字（例如 345/1000 ➔ 1000）。絕對不要提取左邊的數字。
 
 【🦄神獸總數嚴格辨識】（極重要防呆）：
 請尋找遊戲畫面上方的搜尋欄。**只有當搜尋欄內的文字「完全符合」：『傳說的寶可夢,幻,究極異獸』時**，才提取該畫面頂部顯示的數字作為「神獸總數 (legendary)」。
 如果搜尋欄包含其他條件（例如加了 &4* 或 &異色），或者根本沒有這個搜尋條件，請將數量歸類到對應的欄位（如完美神獸 hundo_leg、色違神獸 shiny_leg），**絕對不要**把這些數字誤認為「神獸總數」。
 
 【🖼️背卡(Background)嚴格辨識】：
-請仔細辨識截圖中的分類標籤或圖示特徵：
-1. 「紀念背卡」(bg_comm)：圖示特徵為淺藍色圓底，帶有「白色地球/網格球體」圖案。
-2. 「特別背卡」(bg_special)：圖示特徵為偏深藍色圓底，帶有「三朵白色小花」圖案。
-請根據文字標籤或上述明確的圖示特徵，準確提取下方的對應數量。
+請仔細辨識截圖中的分類標籤或圖示特徵，並提取下方的對應數量：
+1. 「紀念背卡」(bg_comm)：圖示特徵為「淺藍色圓底，裡面有白色的地球網格/經緯線圖案」。
+2. 「特別背卡」(bg_special)：圖示特徵為「淺紫藍色圓底，裡面有三朵白色的花朵(一大兩小)圖案」。
 
 【🌟特殊標籤嚴格辨識（極巨化、超極巨化、活動）】：
 請仔細辨識截圖中的分類標籤，並提取該標籤「下方」的數字：
 1. 「活動」(costume)：標籤圖示為「淺紫色圓底＋白色派對帽」。
 2. 「極巨化」(dyna)：標籤圖示為「桃紅色(粉紅)圓底＋白色發光交叉/X型圖案」。
 3. 「超極巨化」(giga)：標籤圖示為「深紫紅色圓底＋白色發光交叉/X型圖案」。
-請根據上述圖示特徵與文字，將對應的數量準確填入 costume, dyna, giga 欄位中。
+請將對應數量準確填入 costume, dyna, giga 欄位中。
 
-【資料輸出規則】：
+【🤖基格爾德與資料輸出規則】：
 1. pokemon_list（將填入 g_hundos清單）：
-    - 色違規則：如果是色違(有深色星星)，請在名字最前面加上「色違」兩個字即可，結尾絕對不要加任何星號或符號。例如：\`色違完全體基格爾德\`、\`色違基格爾德\` 或 \`色違帕路奇亞\`。
-    - 數量規則：同品種出現兩隻以上，在名字最後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違帕路奇亞*3\`。
+    - 基格爾德型態辨識：若外觀像「巨大機器人、鋼彈」(100% 完全體形態) ➔ 命名為「完全體基格爾德」。若是「蛇/杜賓狗」(50%或10%) ➔ 維持原名「基格爾德」。
+    - 色違規則：如果是色違，請在名字最前面加上「色違」即可，結尾不要加星號。
+    - 數量規則：同品種兩隻以上，在最後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違帕路奇亞*3\`。
 2. 提取括號內的數字即為總數。
 
-JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
+JSON格式範本：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
                 
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
-                                const maxSize = 1500; 
-                                let width = img.width;
-                                let height = img.height;
-                                if (width > height) {
-                                    if (width > maxSize) { height *= maxSize / width; width = maxSize; }
-                                } else {
-                                    if (height > maxSize) { width *= maxSize / height; height = maxSize; }
-                                }
-                                const canvas = document.createElement('canvas'); 
-                                canvas.width = width; 
-                                canvas.height = height;
-                                canvas.getContext('2d').drawImage(img, 0, 0, width, height); 
-                                r(canvas.toDataURL('image/jpeg', 0.9).split(',')[1]); 
+                                const maxSize = 1500; let w = img.width, h = img.height;
+                                if (w > h) { if (w > maxSize) { h *= maxSize / w; w = maxSize; } }
+                                else { if (h > maxSize) { w *= maxSize / h; h = maxSize; } }
+                                const cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h;
+                                cvs.getContext('2d').drawImage(img, 0, 0, w, h);
+                                r(cvs.toDataURL('image/jpeg', 0.9).split(',')[1]); 
                             }; img.src = e.target.result;
                         }; reader.readAsDataURL(files[i]);
                     });
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 🔥 切換為 gemini-2.5-flash 模型 🔥
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+                // 🔥 V63：使用 generationConfig 強制鎖定 MIME type 為 JSON，徹底消除廢話報錯 🔥
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ 
+                        contents: [{ parts }],
+                        generationConfig: { responseMimeType: "application/json" }
+                    }) 
+                });
                 
                 if (!resp.ok) {
                     const errData = await resp.text(); 
                     throw new Error(`錯誤代碼 ${resp.status}\nGoogle 官方原因：${errData}`);
                 }
 
-                const data = await resp.json(); let cleanText = data.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, '').trim(); let res = JSON.parse(cleanText);
+                const data = await resp.json(); 
+                let rawText = data.candidates[0].content.parts[0].text;
+                // 保險起見，清除可能殘留的 markdown json 標籤
+                let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim(); 
+                let res = JSON.parse(cleanText);
                 
                 document.getElementById('g_hundos').value = res.pokemon_list || ''; 
                 if(res.hundo_leg) document.getElementById('st_hundo_leg').value = res.hundo_leg;
@@ -430,53 +426,29 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                 if(res.poke_bag) document.getElementById('st_poke_bag').value = parseNum(res.poke_bag) || res.poke_bag;
                 if(res.item_bag) document.getElementById('st_item_bag').value = parseNum(res.item_bag) || res.item_bag;
 
-                let oL = parseNum(res.level); let oS = parseNum(res.stardust); let oX = parseNum(res.xp);
-                let fS = isNaN(oS) ? 0 : oS; let fX = isNaN(oX) ? 0 : oX;
+                let oL = parseNum(res.level), oS = parseNum(res.stardust), oX = parseNum(res.xp);
+                let fS = isNaN(oS) ? 0 : oS, fX = isNaN(oX) ? 0 : oX;
 
-                // 🔥 優化等級保送與經驗值邏輯 🔥
                 if (!isNaN(oL)) {
-                    if (oL < 60) { 
-                        document.getElementById('g_level').value = 60; 
-                        fS += 200000; 
-                        fX = 0; // 保送升級到 60，清空經驗
-                    } 
-                    else if (oL >= 68 && oL < 70) { 
-                        document.getElementById('g_level').value = 70; 
-                        fS += 300000; 
-                        fX = 0; // 保送升級到 70，清空經驗
-                    } 
-                    else { 
-                        document.getElementById('g_level').value = oL; 
-                        // 包含原本就已經 >= 70 等的，保留原始經驗 fX
-                    }
+                    if (oL < 60) { document.getElementById('g_level').value = 60; fS += 200000; fX = 0; } 
+                    else if (oL >= 68 && oL < 70) { document.getElementById('g_level').value = 70; fS += 300000; fX = 0; } 
+                    else { document.getElementById('g_level').value = oL; }
                     highlightInput('g_level');
                 }
-                
-                if (fS >= 800000) { 
-                    document.getElementById('g_stardust').value = Math.floor(fS / 10000); 
-                    highlightInput('g_stardust'); 
-                }
-                
-                // 只有經驗大於等於 80萬 且 大於 0 (未被清空) 時才填入
-                if (fX >= 800000 && fX > 0) { 
-                    document.getElementById('g_xp').value = Math.floor(fX / 10000); 
-                    highlightInput('g_xp'); 
-                } else {
-                    document.getElementById('g_xp').value = ''; // 確保經驗欄位留空
-                }
+                if (fS >= 800000) { document.getElementById('g_stardust').value = Math.floor(fS / 10000); highlightInput('g_stardust'); }
+                if (fX >= 800000 && fX > 0) { document.getElementById('g_xp').value = Math.floor(fX / 10000); highlightInput('g_xp'); }
+                else { document.getElementById('g_xp').value = ''; }
 
                 window.updateHundoCount(); 
             } catch (e) { 
-                alert("🚨 AI 辨識異常 🚨\n\n" + e.message); 
+                alert("🚨 AI 解析錯誤 🚨\n請確認圖片清晰並再試一次。\n細節：" + e.message); 
                 console.error(e); 
             }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
-        // 🔥 保護庫存區，且強制重置 AI 按鈕狀態 🔥
         window.resetForm = function() {
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
-                // 排除列表：不會清空最上面的設定，也不會清空最下面的庫存搜尋、篩選、排序
                 if(!['googleSheetId','gasUrl','geminiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
                     if(el.type === 'checkbox') el.checked = false; 
                     else if(el.tagName === 'SELECT') el.selectedIndex = 0; 
@@ -488,7 +460,6 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); 
             window.clearImage(); 
 
-            // 強制解除 AI 按鈕的載入狀態
             const aiBtn = document.getElementById('aiBtn');
             if(aiBtn) {
                 aiBtn.disabled = false;
@@ -553,15 +524,11 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             if(valid(v('st_shiny'))) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
             if(valid(v('st_shiny_leg'))) res.push(`✅色違神獸${v('st_shiny_leg')}隻`); 
             
-            // 🔥 這裡依然會輸出「裝扮寶可夢」
             if(valid(v('st_costume'))) res.push(`✅裝扮寶可夢${v('st_costume')}隻`);
-            
             if(valid(v('st_bg_comm'))) res.push(`✅紀念背卡${v('st_bg_comm')}隻`); 
             if(valid(v('st_bg_special'))) res.push(`✅特別背卡${v('st_bg_special')}隻`);
             
-            // 🔥 這裡依然會輸出「極巨化」
             if(valid(v('st_dyna'))) res.push(`✅極巨化${v('st_dyna')}隻`); 
-            
             if(valid(v('st_giga'))) res.push(`✅超極巨化${v('st_giga')}隻`);
             if(valid(v('st_perfect'))) res.push(`✅完美${v('st_perfect')}隻`);
             
@@ -593,13 +560,13 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V61 2.5 Flash 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V63 2.5 Flash 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="password" id="geminiApiKey" placeholder="請貼上新的 API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 focus:ring-2 focus:ring-yellow-400 transition-all outline-none">
-            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm active:scale-90">💾 儲存設定</button>
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
+            <input type="password" id="geminiApiKey" placeholder="API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 outline-none">
+            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm">💾 儲存設定</button>
         </div>
     </header>
 
@@ -608,17 +575,10 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             <div class="flex justify-between items-center mb-4 border-b pb-4">
                 <h2 class="text-lg font-bold">快速建檔區</h2>
                 <div class="flex gap-2">
-                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-300 transition">🧹 清除</button>
-                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-gray-600 transition">取消編輯</button>
+                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold transition">🧹 清除</button>
+                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md transition">取消編輯</button>
                     <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
                 </div>
-            </div>
-
-            <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100 mb-5">
-                <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
-                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
-                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
-                <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
             </div>
 
             <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -629,25 +589,19 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                         <div id="imagePreviewContainer" class="flex flex-wrap gap-2 w-full py-2 justify-center"></div>
                         <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition mt-2">🤖 AI 自動填數量</button>
                     </div>
-                    <div>
-                        <label class="text-xs font-bold text-gray-400 block mb-1">稀有怪</label>
-                        <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢)，若有多隻請換行輸入..." class="w-full p-2 border rounded text-xs h-16 bg-white outline-none shadow-sm"></textarea>
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-blue-400 block mb-1">百神清單</label>
-                        <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神清單 (支援自動加總，如：超夢*3)..." class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-20 font-bold outline-none shadow-sm"></textarea>
-                    </div>
+                    <textarea id="g_rare_list" placeholder="稀有怪清單..." class="w-full p-2 border rounded text-xs h-16 bg-white outline-none"></textarea>
+                    <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="百神清單..." class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-20 font-bold outline-none"></textarea>
                 </div>
 
                 <div class="col-span-1 space-y-3">
                     <label class="text-xs font-bold text-gray-400 border-b block pb-1">基本資訊</label>
-                    <input type="text" id="g_id" placeholder="貼上完整帳號代碼" class="w-full p-2 border rounded font-bold text-sm bg-white outline-none focus:border-indigo-400">
-                    <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white cursor-pointer"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
+                    <input type="text" id="g_id" placeholder="帳號代碼" class="w-full p-2 border rounded font-bold text-sm outline-none">
+                    <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
                     <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm outline-none">
                     <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm outline-none">
                     <div class="flex gap-2">
                         <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm outline-none">
-                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700 cursor-pointer"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
+                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
                     </div>
                 </div>
 
@@ -660,8 +614,8 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                         <div>綠票/卷<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
                         <div>神奇糖果<input type="number" id="st_rarecandy" class="w-full p-1 border rounded"></div>
                         <div>寶可幣<input type="number" id="st_coin" class="w-full p-1 border rounded"></div>
-                        <div class="col-span-1">寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
-                        <div class="col-span-1">道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
+                        <div>寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
+                        <div>道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
                     </div>
                 </div>
 
@@ -702,7 +656,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 
                 <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
                     <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
-                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none"></div>
+                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 outline-none"></div>
                         <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded outline-none"></div>
                         <div>色違總數<input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none"></div>
                         <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none"></div>
@@ -719,20 +673,17 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 
         <div class="bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
             <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
-                <span class="text-indigo-900"><i class="fas fa-list-ul mr-1"></i> 雲端同步清單 (<span id="inventoryCount">0</span>)</span>
+                <span class="text-indigo-900"><i class="fas fa-list-ul mr-1"></i> 雲端清單 (<span id="inventoryCount">0</span>)</span>
                 <div class="flex items-center gap-2 flex-wrap">
-                    <div class="relative">
-                        <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400"><i class="fas fa-search"></i></span>
-                        <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border border-gray-300 pl-7 p-1.5 rounded font-normal text-xs text-gray-700 bg-white w-32 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
-                    </div>
-                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
-                    <select id="filterStatus" onchange="renderInventory()" class="border border-indigo-200 p-1.5 rounded font-bold text-xs text-indigo-700 bg-indigo-50 cursor-pointer outline-none"><option value="all">📦 全部狀態</option><option value="active">🟢 僅現貨</option><option value="sold">🔴 僅售出</option></select>
-                    <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded font-normal text-xs text-gray-700 bg-white cursor-pointer outline-none"><option value="priceDesc">💰 售價高 ➔ 低</option><option value="priceAsc">💰 售價低 ➔ 高</option><option value="newest">🆕 最新加入</option></select>
+                    <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border p-1.5 rounded text-xs w-32 outline-none">
+                    <button onclick="syncAllToSheets(this)" class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
+                    <select id="filterStatus" onchange="renderInventory()" class="border p-1.5 rounded text-xs text-indigo-700 bg-indigo-50 outline-none"><option value="all">📦 全部</option><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
+                    <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded text-xs outline-none"><option value="priceDesc">💰 高 ➔ 低</option><option value="priceAsc">💰 低 ➔ 高</option><option value="newest">🆕 最新</option></select>
                 </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
-                    <thead class="bg-gray-100/50"><tr><th class="px-4 py-3 border-b">代碼</th><th class="px-4 py-3 border-b">資訊</th><th class="px-4 py-3 border-b">售價</th><th class="px-4 py-3 border-b text-center">快捷操作</th><th class="px-4 py-3 border-b text-center">刪除</th></tr></thead>
+                    <thead class="bg-gray-100/50"><tr><th class="px-4 py-3 border-b">代碼</th><th class="px-4 py-3 border-b">資訊</th><th class="px-4 py-3 border-b">售價</th><th class="px-4 py-3 border-b text-center">操作</th><th class="px-4 py-3 border-b text-center">刪除</th></tr></thead>
                     <tbody id="inventoryBody"></tbody>
                 </table>
             </div>
