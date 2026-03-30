@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V57 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V59 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -358,7 +358,14 @@
 請仔細辨識截圖中的分類標籤或圖示特徵：
 1. 「紀念背卡」(bg_comm)：圖示特徵為淺藍色圓底，帶有「白色地球/網格球體」圖案。
 2. 「特別背卡」(bg_special)：圖示特徵為偏深藍色圓底，帶有「三朵白色小花」圖案。
-請根據文字標籤或上述明確的圖示特徵，準確提取對應的數量。
+請根據文字標籤或上述明確的圖示特徵，準確提取下方的對應數量。
+
+【🌟特殊標籤嚴格辨識（極巨化、超極巨化、活動）】：
+請仔細辨識截圖中的分類標籤，並提取該標籤「下方」的數字：
+1. 「活動」(costume)：標籤圖示為「淺紫色圓底＋白色派對帽」。
+2. 「極巨化」(dyna)：標籤圖示為「桃紅色(粉紅)圓底＋白色發光交叉/X型圖案」。
+3. 「超極巨化」(giga)：標籤圖示為「深紫紅色圓底＋白色發光交叉/X型圖案」。
+請根據上述圖示特徵與文字，將對應的數量準確填入 costume, dyna, giga 欄位中。
 
 【資料輸出規則】：
 1. pokemon_list（將填入 g_hundos清單）：
@@ -542,10 +549,16 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             if(valid(v('st_legend'))) res.push(`✅神獸總數${v('st_legend')}隻`); 
             if(valid(v('st_shiny'))) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
             if(valid(v('st_shiny_leg'))) res.push(`✅色違神獸${v('st_shiny_leg')}隻`); 
+            
+            // 🔥 V59：這裡依然會輸出「裝扮寶可夢」
             if(valid(v('st_costume'))) res.push(`✅裝扮寶可夢${v('st_costume')}隻`);
+            
             if(valid(v('st_bg_comm'))) res.push(`✅紀念背卡${v('st_bg_comm')}隻`); 
             if(valid(v('st_bg_special'))) res.push(`✅特別背卡${v('st_bg_special')}隻`);
+            
+            // 🔥 V59：這裡依然會輸出「極巨化」
             if(valid(v('st_dyna'))) res.push(`✅極巨化${v('st_dyna')}隻`); 
+            
             if(valid(v('st_giga'))) res.push(`✅超極巨化${v('st_giga')}隻`);
             if(valid(v('st_perfect'))) res.push(`✅完美${v('st_perfect')}隻`);
             
@@ -577,7 +590,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V57 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V59 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
@@ -690,10 +703,10 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                         <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded outline-none"></div>
                         <div>色違總數<input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none"></div>
                         <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none"></div>
-                        <div>裝扮數量<input type="number" id="st_costume" class="w-full p-1 border rounded outline-none"></div>
+                        <div>活動總數<input type="number" id="st_costume" class="w-full p-1 border rounded outline-none"></div>
                         <div>紀念背卡<input type="number" id="st_bg_comm" class="w-full p-1 border rounded outline-none"></div>
                         <div>特別背卡<input type="number" id="st_bg_special" class="w-full p-1 border rounded outline-none"></div>
-                        <div>極巨化數<input type="number" id="st_dyna" class="w-full p-1 border rounded outline-none"></div>
+                        <div>極巨化<input type="number" id="st_dyna" class="w-full p-1 border rounded outline-none"></div>
                         <div>超極巨化<input type="number" id="st_giga" class="w-full p-1 border rounded outline-none"></div>
                         <div>完美數量<input type="number" id="st_perfect" class="w-full p-1 border rounded outline-none"></div>
                     </div>
