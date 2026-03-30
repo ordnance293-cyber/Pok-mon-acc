@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V48 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V49 終極反向解析版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -11,6 +11,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
+        // Firebase 設定
         const firebaseConfig = {
             apiKey: "AIzaSyAXHqvXLLTmYl8kVV1fR0gJRFangwV85n8",
             authDomain: "pokemon-acc.firebaseapp.com",
@@ -38,8 +39,12 @@
                 localStorage.setItem(id, document.getElementById(id).value.trim());
             });
             const btn = document.getElementById('saveBtn');
-            btn.innerHTML = '✅ 已儲存'; btn.classList.replace('bg-gray-800', 'bg-green-600');
-            setTimeout(() => { btn.innerHTML = '💾 儲存設定'; btn.classList.replace('bg-green-600', 'bg-gray-800'); }, 2000);
+            btn.innerHTML = '✅ 已儲存';
+            btn.classList.replace('bg-gray-800', 'bg-green-600');
+            setTimeout(() => {
+                btn.innerHTML = '💾 儲存設定';
+                btn.classList.replace('bg-green-600', 'bg-gray-800');
+            }, 2000);
         };
 
         onValue(inventoryRef, (snapshot) => {
@@ -123,7 +128,6 @@
 
         let currentEditUid = null;
         
-        // 🔥 全面存取：儲存時記錄所有打勾狀態 🔥
         window.saveAccountToInventory = async function() {
             const getVal = (id) => document.getElementById(id).value;
             const getChk = (id) => document.getElementById(id).checked;
@@ -169,7 +173,7 @@
             msg.innerHTML = text; document.body.appendChild(msg); setTimeout(() => msg.remove(), 2500);
         }
 
-        // 🔥 完美還原：把所有勾選與下拉選單完整倒回表單 🔥
+        // 🔥 終極大絕招：文案反向解析引擎 (解決舊帳號不打勾的問題) 🔥
         window.editAccount = function(uid) {
             const item = inventoryData.find(i => i.uid === uid); if(!item) return;
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -187,28 +191,71 @@
             setVal('st_bg_special', item.st_bg_special); setVal('st_dyna', item.st_dyna); setVal('st_giga', item.st_giga); setVal('st_perfect', item.st_perfect);
             setVal('st_old_poke', item.st_old_poke); setVal('st_old_leg', item.st_old_leg);
 
-            // 還原 11 個特殊調查打勾
-            for(let i=1; i<=11; i++) setChk('chk_sp_'+i, item['chk_sp_'+i]);
-            
-            // 還原合體與下拉選單
-            setChk('chk_kyurem', item.chk_kyurem); setVal('sel_kyurem', item.sel_kyurem || '‼️酋雷姆雙型態合體‼️');
-            setChk('chk_zamazenta', item.chk_zamazenta); setVal('sel_dogs', item.sel_dogs || '‼️雙狗劍盾型態‼️');
-            setChk('chk_necrozma', item.chk_necrozma); setVal('sel_necrozma', item.sel_necrozma || '‼️奈克洛茲瑪雙型態合體‼️');
-            setChk('chk_lati', item.chk_lati); setVal('sel_lati', item.sel_lati || '⭐️飛機兄妹可Mega⭐️');
-            setChk('chk_hoenn', item.chk_hoenn); setVal('sel_hoenn', item.sel_hoenn || '⭐️豐原三神可 Mega⭐️');
-            
-            // 還原極巨化等打勾
-            setChk('chk_dyna', item.chk_dyna_form); 
-            setChk('chk_groudon', item.chk_groudon); 
-            setChk('chk_kyogre', item.chk_kyogre); 
-            setChk('chk_rayquaza', item.chk_rayquaza);
+            // 將儲存的文案解碼，用來反推打勾狀態
+            const txt = decodeURIComponent(item.fullText || "");
+
+            // 11 個特殊調查反向打勾
+            setChk('chk_sp_1', item.chk_sp_1 !== undefined ? item.chk_sp_1 : txt.includes('色違美洛耶塔'));
+            setChk('chk_sp_2', item.chk_sp_2 !== undefined ? item.chk_sp_2 : txt.includes('色違夢幻'));
+            setChk('chk_sp_3', item.chk_sp_3 !== undefined ? item.chk_sp_3 : (txt.includes('凱路迪歐') && !txt.includes('凱路迪歐,瑪夏多')));
+            setChk('chk_sp_4', item.chk_sp_4 !== undefined ? item.chk_sp_4 : txt.includes('至尊鳳王'));
+            setChk('chk_sp_5', item.chk_sp_5 !== undefined ? item.chk_sp_5 : txt.includes('至尊洛奇亞'));
+            setChk('chk_sp_6', item.chk_sp_6 !== undefined ? item.chk_sp_6 : (txt.includes('瑪夏多') && !txt.includes('凱路迪歐,瑪夏多')));
+            setChk('chk_sp_7', item.chk_sp_7 !== undefined ? item.chk_sp_7 : txt.includes('色違基拉祈'));
+            setChk('chk_sp_8', item.chk_sp_8 !== undefined ? item.chk_sp_8 : txt.includes('色違謝米'));
+            setChk('chk_sp_9', item.chk_sp_9 !== undefined ? item.chk_sp_9 : txt.includes('波爾凱尼恩'));
+            setChk('chk_sp_10', item.chk_sp_10 !== undefined ? item.chk_sp_10 : txt.includes('薩戮德'));
+            setChk('chk_sp_11', item.chk_sp_11 !== undefined ? item.chk_sp_11 : txt.includes('凱路迪歐,瑪夏多'));
+
+            // 合體與下拉選單反向還原
+            const hasKyurem = item.chk_kyurem !== undefined ? item.chk_kyurem : txt.includes('酋雷姆合體');
+            setChk('chk_kyurem', hasKyurem);
+            if(txt.includes('‼️酋雷姆雙型態合體‼️')) setVal('sel_kyurem', '‼️酋雷姆雙型態合體‼️');
+            else if(txt.includes('‼️闇黑酋雷姆合體‼️')) setVal('sel_kyurem', '‼️闇黑酋雷姆合體‼️');
+            else if(txt.includes('‼️焰白酋雷姆合體‼️')) setVal('sel_kyurem', '‼️焰白酋雷姆合體‼️');
+            else setVal('sel_kyurem', item.sel_kyurem || '‼️酋雷姆雙型態合體‼️');
+
+            const hasDogs = item.chk_zamazenta !== undefined ? item.chk_zamazenta : txt.includes('劍盾');
+            setChk('chk_zamazenta', hasDogs);
+            if(txt.includes('‼️雙狗劍盾型態‼️')) setVal('sel_dogs', '‼️雙狗劍盾型態‼️');
+            else if(txt.includes('‼️蒼響劍盾型態‼️')) setVal('sel_dogs', '‼️蒼響劍盾型態‼️');
+            else if(txt.includes('‼️藏瑪然特劍盾型態‼️')) setVal('sel_dogs', '‼️藏瑪然特劍盾型態‼️');
+            else setVal('sel_dogs', item.sel_dogs || '‼️雙狗劍盾型態‼️');
+
+            const hasNecrozma = item.chk_necrozma !== undefined ? item.chk_necrozma : txt.includes('奈克洛茲瑪');
+            setChk('chk_necrozma', hasNecrozma);
+            if(txt.includes('‼️奈克洛茲瑪雙型態合體‼️')) setVal('sel_necrozma', '‼️奈克洛茲瑪雙型態合體‼️');
+            else if(txt.includes('‼️奈克洛茲瑪日獅型態合體‼️')) setVal('sel_necrozma', '‼️奈克洛茲瑪日獅型態合體‼️');
+            else if(txt.includes('‼️奈克洛茲瑪月亮型態合體‼️')) setVal('sel_necrozma', '‼️奈克洛茲瑪月亮型態合體‼️');
+            else setVal('sel_necrozma', item.sel_necrozma || '‼️奈克洛茲瑪雙型態合體‼️');
+
+            const hasLati = item.chk_lati !== undefined ? item.chk_lati : (txt.includes('飛機兄妹') || txt.includes('拉帝'));
+            setChk('chk_lati', hasLati);
+            if(txt.includes('⭐️飛機兄妹可Mega⭐️')) setVal('sel_lati', '⭐️飛機兄妹可Mega⭐️');
+            else if(txt.includes('⭐️拉帝歐斯可Mega⭐️')) setVal('sel_lati', '⭐️拉帝歐斯可Mega⭐️');
+            else if(txt.includes('⭐️拉帝亞斯可Mega⭐️')) setVal('sel_lati', '⭐️拉帝亞斯可Mega⭐️');
+            else setVal('sel_lati', item.sel_lati || '⭐️飛機兄妹可Mega⭐️');
+
+            const hasHoenn = item.chk_hoenn !== undefined ? item.chk_hoenn : (txt.includes('豐原三神') || txt.includes('固拉多可 Mega') || txt.includes('蓋歐卡可 Mega') || txt.includes('烈空坐能量夠Mega'));
+            setChk('chk_hoenn', hasHoenn);
+            if(txt.includes('⭐️豐原三神可 Mega⭐️')) setVal('sel_hoenn', '⭐️豐原三神可 Mega⭐️');
+            else if(txt.includes('⭐️固拉多可 Mega⭐️')) setVal('sel_hoenn', '⭐️固拉多可 Mega⭐️');
+            else if(txt.includes('⭐️蓋歐卡可 Mega⭐️')) setVal('sel_hoenn', '⭐️蓋歐卡可 Mega⭐️');
+            else if(txt.includes('⭐️烈空坐能量夠Mega⭐️')) setVal('sel_hoenn', '⭐️烈空坐能量夠Mega⭐️');
+            else setVal('sel_hoenn', item.sel_hoenn || '⭐️豐原三神可 Mega⭐️');
+
+            // 極巨化等打勾反向解析
+            setChk('chk_dyna', item.chk_dyna_form !== undefined ? item.chk_dyna_form : txt.includes('✨可打極巨化／超極巨化✨'));
+            setChk('chk_groudon', item.chk_groudon !== undefined ? item.chk_groudon : txt.includes('固拉多斷崖之劍'));
+            setChk('chk_kyogre', item.chk_kyogre !== undefined ? item.chk_kyogre : txt.includes('蓋歐卡根源波動'));
+            setChk('chk_rayquaza', item.chk_rayquaza !== undefined ? item.chk_rayquaza : txt.includes('烈空坐畫龍點睛'));
 
             // 動態還原下拉選單顯示/隱藏
-            document.getElementById('sel_kyurem').classList.toggle('hidden', !item.chk_kyurem);
-            document.getElementById('sel_dogs').classList.toggle('hidden', !item.chk_zamazenta);
-            document.getElementById('sel_necrozma').classList.toggle('hidden', !item.chk_necrozma);
-            document.getElementById('sel_lati').classList.toggle('hidden', !item.chk_lati);
-            document.getElementById('sel_hoenn').classList.toggle('hidden', !item.chk_hoenn);
+            document.getElementById('sel_kyurem').classList.toggle('hidden', !document.getElementById('chk_kyurem').checked);
+            document.getElementById('sel_dogs').classList.toggle('hidden', !document.getElementById('chk_zamazenta').checked);
+            document.getElementById('sel_necrozma').classList.toggle('hidden', !document.getElementById('chk_necrozma').checked);
+            document.getElementById('sel_lati').classList.toggle('hidden', !document.getElementById('chk_lati').checked);
+            document.getElementById('sel_hoenn').classList.toggle('hidden', !document.getElementById('chk_hoenn').checked);
             
             currentEditUid = uid;
             const submitBtn = document.getElementById('submitBtn');
@@ -217,7 +264,7 @@
             submitBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
             document.getElementById('cancelEditBtn').classList.remove('hidden');
 
-            showMsg("✅ 資料已完全還原，可直接編輯！", "blue");
+            showMsg("✅ 自動反向解析完成！勾選狀態已完美還原！", "blue");
         };
 
         window.deleteAccount = async function(uid, accountId) {
@@ -323,7 +370,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：視覺型態辨識 + 付費版 2.5 Pro 🔥
+        // 🔥 AI 核心：付費版 2.5 Pro + 鋼彈視覺辨識 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -417,12 +464,20 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
+        // 🔥 修正了原本選單無法清除的 Bug 🔥
         window.resetForm = function() {
-            document.querySelectorAll('input:not([type=password]), textarea').forEach(el => { if(!['googleSheetId','gasUrl'].includes(el.id) && el.type !== 'checkbox') el.value = ''; if(el.type === 'checkbox') el.checked = false; });
-            document.getElementById('g_item_status').value = 'active'; document.getElementById('g_team').value = '藍隊';
-            document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); window.clearImage();
-            
-            currentEditUid = null;
+            document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
+                if(!['googleSheetId','gasUrl','geminiApiKey'].includes(el.id)) { 
+                    if(el.type === 'checkbox') el.checked = false; 
+                    else if(el.tagName === 'SELECT') el.selectedIndex = 0; 
+                    else el.value = ''; 
+                } 
+            });
+            document.getElementById('g_item_status').value = 'active'; 
+            document.getElementById('g_team').value = '藍隊';
+            document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); 
+            window.clearImage(); 
+            currentEditUid = null; 
             const submitBtn = document.getElementById('submitBtn');
             if(submitBtn) {
                 submitBtn.innerText = '同步至雲端列表';
@@ -514,7 +569,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V48 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V49 終極反向解析版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
