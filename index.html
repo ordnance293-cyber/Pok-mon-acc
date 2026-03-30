@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V47 視覺型態辨識版</title>
+    <title>寶可夢頂級帳號庫 - V48 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -11,7 +11,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // Firebase 設定
         const firebaseConfig = {
             apiKey: "AIzaSyAXHqvXLLTmYl8kVV1fR0gJRFangwV85n8",
             authDomain: "pokemon-acc.firebaseapp.com",
@@ -39,38 +38,24 @@
                 localStorage.setItem(id, document.getElementById(id).value.trim());
             });
             const btn = document.getElementById('saveBtn');
-            btn.innerHTML = '✅ 已儲存';
-            btn.classList.replace('bg-gray-800', 'bg-green-600');
-            setTimeout(() => {
-                btn.innerHTML = '💾 儲存設定';
-                btn.classList.replace('bg-green-600', 'bg-gray-800');
-            }, 2000);
+            btn.innerHTML = '✅ 已儲存'; btn.classList.replace('bg-gray-800', 'bg-green-600');
+            setTimeout(() => { btn.innerHTML = '💾 儲存設定'; btn.classList.replace('bg-green-600', 'bg-gray-800'); }, 2000);
         };
 
         onValue(inventoryRef, (snapshot) => {
             const data = snapshot.val();
             inventoryData = [];
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    inventoryData.push({ uid: key, ...data[key] });
-                });
-            }
+            if (data) { Object.keys(data).forEach(key => inventoryData.push({ uid: key, ...data[key] })); }
             renderInventory(); 
         });
 
         window.syncToGoogleSheets = async function(accountId, fullText, btn) {
-            const sheetId = document.getElementById('googleSheetId').value.trim();
-            const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { 
-                showMsg("❌ 請先在頂部填寫並儲存試算表設定！", "red");
-                return; 
-            }
-            
+            const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
+            if(!sheetId || !scriptUrl) return; 
             const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
             try {
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(fullText) }) });
-                btn.innerHTML = '<i class="fas fa-check"></i>'; 
-                setTimeout(() => { btn.innerHTML = '拋轉'; btn.disabled = false; }, 2000);
+                btn.innerHTML = '<i class="fas fa-check"></i>'; setTimeout(() => { btn.innerHTML = '拋轉'; btn.disabled = false; }, 2000);
             } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
         };
 
@@ -87,21 +72,18 @@
             });
 
             displayData.sort((a, b) => {
-                if (sortMode === 'priceDesc') { let pA = parseInt(a.price)||0; let pB = parseInt(b.price)||0; return pB - pA || b.timestamp - a.timestamp; } 
-                else if (sortMode === 'priceAsc') { let pA = parseInt(a.price)||Infinity; let pB = parseInt(b.price)||Infinity; return pA - pB || b.timestamp - a.timestamp; } 
+                if (sortMode === 'priceDesc') return (parseInt(b.price)||0) - (parseInt(a.price)||0) || b.timestamp - a.timestamp;
+                else if (sortMode === 'priceAsc') return (parseInt(a.price)||Infinity) - (parseInt(b.price)||Infinity) || b.timestamp - a.timestamp;
                 else return b.timestamp - a.timestamp;
             });
 
-            if(displayData.length === 0) { 
-                showMsg("目前沒有資料可以拋轉！", "amber");
-                return; 
-            }
-            if(!confirm(`確定要將目前的【${displayData.length}】個帳號\n完全按照「網頁上的順序」重新洗牌並覆蓋到試算表嗎？`)) return;
+            if(displayData.length === 0) return;
+            if(!confirm(`確定要鏡像重排覆蓋到試算表嗎？`)) return;
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) { alert("請先在頂部填寫並儲存設定！"); return; }
+            if(!sheetId || !scriptUrl) return;
             
-            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 鏡像重排中...'; btn.disabled = true;
+            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 重排中...'; btn.disabled = true;
             const allData = displayData.map(item => ({ accountId: item.accountId, data: decodeURIComponent(item.fullText), status: item.status }));
             
             try {
@@ -118,8 +100,7 @@
             }
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
-                btn.disabled = true;
-                const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                btn.disabled = true; const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 try {
                     await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sold', id: sheetId, accountId: accountId }) });
                     btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = isAlreadySold ? '🟡 補塗' : '💰 售出'; btn.disabled = false; }, 2000);
@@ -128,14 +109,11 @@
         };
 
         window.restoreAccount = async function(uid, accountId, btn) {
-            if(!confirm(`確定要將此帳號恢復為「現貨」嗎？`)) return;
-            
+            if(!confirm(`確定要恢復為現貨嗎？`)) return;
             update(ref(db, `inventory/${uid}`), { status: 'active' });
-            
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
-                btn.disabled = true;
-                const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                btn.disabled = true; const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 try {
                     await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', id: sheetId, accountId: accountId }) });
                     btn.innerHTML = '✅'; 
@@ -144,48 +122,43 @@
         };
 
         let currentEditUid = null;
+        
+        // 🔥 全面存取：儲存時記錄所有打勾狀態 🔥
         window.saveAccountToInventory = async function() {
             const getVal = (id) => document.getElementById(id).value;
             const getChk = (id) => document.getElementById(id).checked;
-            
             const accountId = getVal('g_id').trim();
             if(!accountId) { showMsg("請輸入帳號代碼！", "red"); return; }
             
             const newItem = {
-                accountId: accountId, level: getVal('g_level'), team: getVal('g_team'), price: getVal('g_price') || "未標價",
+                accountId, level: getVal('g_level'), team: getVal('g_team'), price: getVal('g_price') || "未標價",
                 stardust: getVal('g_stardust'), xp: getVal('g_xp'), rarecandy: getVal('st_rarecandy'), coin: getVal('st_coin'), 
                 greenpass: getVal('st_greenpass'), masterball: getVal('st_masterball'), poke_bag: getVal('st_poke_bag'), item_bag: getVal('st_item_bag'), 
                 rare_list: getVal('g_rare_list'), hundos: getVal('g_hundos'), st_hundo_leg: getVal('st_hundo_leg'), st_legend: getVal('st_legend'), 
                 st_shiny: getVal('st_shiny'), st_shiny_leg: getVal('st_shiny_leg'), st_costume: getVal('st_costume'), st_bg_comm: getVal('st_bg_comm'), 
                 st_bg_special: getVal('st_bg_special'), st_dyna: getVal('st_dyna'), st_giga: getVal('st_giga'), st_perfect: getVal('st_perfect'),
                 st_old_poke: getVal('st_old_poke'), st_old_leg: getVal('st_old_leg'),
-                chk_sp_1: getChk('chk_sp_1'), chk_sp_2: getChk('chk_sp_2'), chk_sp_3: getChk('chk_sp_3'), chk_sp_4: getChk('chk_sp_4'),
-                chk_sp_5: getChk('chk_sp_5'), chk_sp_6: getChk('chk_sp_6'), chk_sp_7: getChk('chk_sp_7'), chk_sp_8: getChk('chk_sp_8'),
-                chk_sp_9: getChk('chk_sp_9'), chk_sp_10: getChk('chk_sp_10'), chk_sp_11: getChk('chk_sp_11'),
                 chk_kyurem: getChk('chk_kyurem'), sel_kyurem: getVal('sel_kyurem'),
                 chk_zamazenta: getChk('chk_zamazenta'), sel_dogs: getVal('sel_dogs'),
                 chk_necrozma: getChk('chk_necrozma'), sel_necrozma: getVal('sel_necrozma'),
                 chk_lati: getChk('chk_lati'), sel_lati: getVal('sel_lati'),
                 chk_hoenn: getChk('chk_hoenn'), sel_hoenn: getVal('sel_hoenn'),
-                chk_dyna_form: getChk('chk_dyna'), chk_groudon: getChk('chk_groudon'), chk_kyogre: getChk('chk_kyogre'), chk_rayquaza: getChk('chk_rayquaza'),
+                chk_dyna_form: getChk('chk_dyna'), chk_groudon: getChk('chk_groudon'),
+                chk_kyogre: getChk('chk_kyogre'), chk_rayquaza: getChk('chk_rayquaza'),
                 fullText: encodeURIComponent(window.generateText()), status: getVal('g_item_status')
             };
+
+            for(let i=1; i<=11; i++) newItem['chk_sp_'+i] = getChk('chk_sp_'+i);
 
             if (currentEditUid) {
                 const existingItem = inventoryData.find(i => i.uid === currentEditUid);
                 newItem.timestamp = existingItem ? existingItem.timestamp : Date.now();
                 update(ref(db, `inventory/${currentEditUid}`), newItem);
                 showMsg("✅ 帳號資料已更新！", "green");
-
-                const sheetId = document.getElementById('googleSheetId').value.trim(); 
-                const scriptUrl = document.getElementById('gasUrl').value.trim();
-                if(sheetId && scriptUrl) {
-                    fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
-                }
+                const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
+                if(sheetId && scriptUrl) fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
             } else {
-                newItem.timestamp = Date.now();
-                push(inventoryRef, newItem);
-                showMsg("✅ 帳號已新增！", "green");
+                newItem.timestamp = Date.now(); push(inventoryRef, newItem); showMsg("✅ 帳號已新增！", "green");
             }
             window.resetForm();
         };
@@ -193,11 +166,10 @@
         function showMsg(text, color) {
             const msg = document.createElement('div');
             msg.className = `fixed top-20 left-1/2 -translate-x-1/2 bg-${color}-600 text-white px-6 py-2 rounded-full shadow-lg z-[100] animate-bounce`;
-            msg.innerHTML = text;
-            document.body.appendChild(msg);
-            setTimeout(() => msg.remove(), 2500);
+            msg.innerHTML = text; document.body.appendChild(msg); setTimeout(() => msg.remove(), 2500);
         }
 
+        // 🔥 完美還原：把所有勾選與下拉選單完整倒回表單 🔥
         window.editAccount = function(uid) {
             const item = inventoryData.find(i => i.uid === uid); if(!item) return;
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -215,19 +187,23 @@
             setVal('st_bg_special', item.st_bg_special); setVal('st_dyna', item.st_dyna); setVal('st_giga', item.st_giga); setVal('st_perfect', item.st_perfect);
             setVal('st_old_poke', item.st_old_poke); setVal('st_old_leg', item.st_old_leg);
 
+            // 還原 11 個特殊調查打勾
             for(let i=1; i<=11; i++) setChk('chk_sp_'+i, item['chk_sp_'+i]);
             
+            // 還原合體與下拉選單
             setChk('chk_kyurem', item.chk_kyurem); setVal('sel_kyurem', item.sel_kyurem || '‼️酋雷姆雙型態合體‼️');
             setChk('chk_zamazenta', item.chk_zamazenta); setVal('sel_dogs', item.sel_dogs || '‼️雙狗劍盾型態‼️');
             setChk('chk_necrozma', item.chk_necrozma); setVal('sel_necrozma', item.sel_necrozma || '‼️奈克洛茲瑪雙型態合體‼️');
             setChk('chk_lati', item.chk_lati); setVal('sel_lati', item.sel_lati || '⭐️飛機兄妹可Mega⭐️');
             setChk('chk_hoenn', item.chk_hoenn); setVal('sel_hoenn', item.sel_hoenn || '⭐️豐原三神可 Mega⭐️');
             
+            // 還原極巨化等打勾
             setChk('chk_dyna', item.chk_dyna_form); 
             setChk('chk_groudon', item.chk_groudon); 
             setChk('chk_kyogre', item.chk_kyogre); 
             setChk('chk_rayquaza', item.chk_rayquaza);
 
+            // 動態還原下拉選單顯示/隱藏
             document.getElementById('sel_kyurem').classList.toggle('hidden', !item.chk_kyurem);
             document.getElementById('sel_dogs').classList.toggle('hidden', !item.chk_zamazenta);
             document.getElementById('sel_necrozma').classList.toggle('hidden', !item.chk_necrozma);
@@ -241,7 +217,7 @@
             submitBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
             document.getElementById('cancelEditBtn').classList.remove('hidden');
 
-            showMsg("已回填資料，修改後點擊「儲存修改」即可覆蓋！", "blue");
+            showMsg("✅ 資料已完全還原，可直接編輯！", "blue");
         };
 
         window.deleteAccount = async function(uid, accountId) {
@@ -252,45 +228,32 @@
             }
         };
 
-        let currentEditModalUid = null;
-        let currentEditModalAccountId = null;
+        let currentEditModalUid = null; let currentEditModalAccountId = null;
         window.openEditModal = function(uid, accountId) {
-            const item = inventoryData.find(i => i.uid === uid);
-            if(!item) return;
-            currentEditModalUid = uid;
-            currentEditModalAccountId = accountId;
+            const item = inventoryData.find(i => i.uid === uid); if(!item) return;
+            currentEditModalUid = uid; currentEditModalAccountId = accountId;
             document.getElementById('editModalText').value = decodeURIComponent(item.fullText);
-            document.getElementById('editModal').classList.remove('hidden');
-            document.getElementById('editModal').classList.add('flex');
+            document.getElementById('editModal').classList.remove('hidden'); document.getElementById('editModal').classList.add('flex');
         };
 
         window.saveEditedText = async function() {
             if(!currentEditModalUid) return;
             const newText = document.getElementById('editModalText').value.trim();
-            const btn = document.getElementById('saveModalBtn');
-            const oldBtnText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步儲存中...';
-            btn.disabled = true;
+            const btn = document.getElementById('saveModalBtn'); const oldBtnText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步儲存中...'; btn.disabled = true;
 
             update(ref(db, `inventory/${currentEditModalUid}`), { fullText: encodeURIComponent(newText) });
 
-            const sheetId = document.getElementById('googleSheetId').value.trim(); 
-            const scriptUrl = document.getElementById('gasUrl').value.trim();
+            const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
-                try {
-                    await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: currentEditModalAccountId, data: newText }) });
-                } catch(e) {}
+                try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: currentEditModalAccountId, data: newText }) }); } catch(e) {}
             }
 
-            btn.innerHTML = oldBtnText;
-            btn.disabled = false;
-            window.closeEditModal();
-            showMsg("✅ 文案修改成功，已同步至試算表！", "green");
+            btn.innerHTML = oldBtnText; btn.disabled = false; window.closeEditModal(); showMsg("✅ 文案修改成功！", "green");
         };
 
         window.closeEditModal = function() {
-            document.getElementById('editModal').classList.add('hidden');
-            document.getElementById('editModal').classList.remove('flex');
+            document.getElementById('editModal').classList.add('hidden'); document.getElementById('editModal').classList.remove('flex');
         };
 
         window.renderInventory = function() {
@@ -303,8 +266,8 @@
                 return true;
             });
             displayData.sort((a, b) => {
-                if (sortMode === 'priceDesc') { let pA = parseInt(a.price)||0; let pB = parseInt(b.price)||0; return pB - pA || b.timestamp - a.timestamp; } 
-                else if (sortMode === 'priceAsc') { let pA = parseInt(a.price)||Infinity; let pB = parseInt(b.price)||Infinity; return pA - pB || b.timestamp - a.timestamp; } 
+                if (sortMode === 'priceDesc') return (parseInt(b.price)||0) - (parseInt(a.price)||0) || b.timestamp - a.timestamp;
+                else if (sortMode === 'priceAsc') return (parseInt(a.price)||Infinity) - (parseInt(b.price)||Infinity) || b.timestamp - a.timestamp;
                 else return b.timestamp - a.timestamp;
             });
             displayData.forEach(item => {
@@ -360,7 +323,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心進化：視覺型態辨識版 🔥
+        // 🔥 AI 核心：視覺型態辨識 + 付費版 2.5 Pro 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -551,7 +514,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V47 視覺型態辨識版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V48 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
