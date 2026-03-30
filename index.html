@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V63 2.5 Flash 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V64 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -327,12 +327,12 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V63 加入底層強制 JSON 模式，徹底根除廢話報錯 🔥
+        // 🔥 AI 核心：V64 切換為 2.5 Pro，嚴格定義色違為黑色星星 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 2.5 Flash 解析中...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 2.5 Pro 解析中...';
             try {
                 let parts = [{ text: `你是一位非常精準的寶可夢GO數據分析官。
 
@@ -340,7 +340,8 @@
 請你「非常仔細、逐一對比」地掃描每一張截圖！確保你抓取的每一個數字，都100%精準填入對應的 JSON 欄位中。如果不確定，請留空，絕對不要亂填或填錯格子！請在輸出前再三確認對應關係！
 
 【✨色違(Shiny)嚴格視覺辨識】（極重要防呆）：
-1. 只有看到名字旁邊有「三顆深色/黑灰色四角星星 ✨」圖案，才是色違。背景的黃色大圓光暈絕對不是！
+1. 只有看到名字旁邊有「三顆純黑色四角星星 ✨」圖案，才是色違(Shiny)！
+2. 請非常注意：背景的黃色大圓光暈/泡泡【絕對不是】色違！必須要有【黑色的星星】才是！
 
 【🎒包包容量辨識規則】（極重要防呆）：
 提取右邊的總容量數字（例如 345/1000 ➔ 1000）。絕對不要提取左邊的數字。
@@ -386,8 +387,8 @@ JSON格式範本：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 🔥 V63：使用 generationConfig 強制鎖定 MIME type 為 JSON，徹底消除廢話報錯 🔥
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { 
+                // 🔥 改回使用 gemini-2.5-pro 模型，維持強制 JSON 模式 🔥
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
                     body: JSON.stringify({ 
@@ -560,7 +561,7 @@ JSON格式範本：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V63 2.5 Flash 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V64 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
