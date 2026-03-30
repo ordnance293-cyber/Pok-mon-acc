@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V54 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V55 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -430,9 +430,11 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
+        // 🔥 V55：保護庫存區，且強制重置 AI 按鈕狀態 🔥
         window.resetForm = function() {
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
-                if(!['googleSheetId','gasUrl','geminiApiKey'].includes(el.id)) { 
+                // 排除列表：不會清空最上面的設定，也不會清空最下面的庫存搜尋、篩選、排序
+                if(!['googleSheetId','gasUrl','geminiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
                     if(el.type === 'checkbox') el.checked = false; 
                     else if(el.tagName === 'SELECT') el.selectedIndex = 0; 
                     else el.value = ''; 
@@ -442,6 +444,14 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             document.getElementById('g_team').value = '藍隊';
             document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); 
             window.clearImage(); 
+
+            // 強制解除 AI 按鈕的載入狀態
+            const aiBtn = document.getElementById('aiBtn');
+            if(aiBtn) {
+                aiBtn.disabled = false;
+                aiBtn.innerHTML = '🤖 AI 自動填數量';
+            }
+
             currentEditUid = null; 
             const submitBtn = document.getElementById('submitBtn');
             if(submitBtn) {
@@ -534,7 +544,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V54 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V55 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
