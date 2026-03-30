@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V39 閃電無延遲版</title>
+    <title>寶可夢頂級帳號庫 - V42 旗艦 2.5 Pro 版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -130,6 +130,7 @@
 
         window.restoreAccount = async function(uid, accountId, btn) {
             if(!confirm(`確定要將此帳號恢復為「現貨」嗎？\n這會清除試算表中的黃色標記！`)) return;
+            
             update(ref(db, `inventory/${uid}`), { status: 'active' });
             
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
@@ -279,7 +280,7 @@
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V39 閃電無延遲版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V42 旗艦 2.5 Pro 版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
@@ -481,9 +482,9 @@
 
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
-            if(!apiKey) { alert("請先在頂部貼上你的 AI Key 並按儲存設定！"); return; }
+            if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 高畫質精準解析中 (需時較長)...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 2.5 Pro 高畫質精準解析中...';
             try {
                 let parts = [{ text: `你是一個精準的寶可夢GO截圖OCR分析系統。請輸出純 JSON（不含 Markdown）。
 
@@ -538,8 +539,8 @@ JSON格式：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 🔥 將模型從 gemini-2.5-pro 改回 gemini-2.5-flash，解除免費版卡頓限制 🔥
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+                // 🔥 已切換回最穩定的 gemini-2.5-pro 模型 🔥
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
                 
                 if (!resp.ok) {
                     const errData = await resp.text(); 
