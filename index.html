@@ -54,16 +54,6 @@
             renderInventory(); 
         });
 
-        window.syncToGoogleSheets = async function(accountId, fullText, btn) {
-            const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(!sheetId || !scriptUrl) return; 
-            const oldText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
-            try {
-                await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(fullText) }) });
-                btn.innerHTML = '<i class="fas fa-check"></i>'; setTimeout(() => { btn.innerHTML = '拋轉'; btn.disabled = false; }, 2000);
-            } catch (e) { btn.innerHTML = oldText; btn.disabled = false; }
-        };
-
         window.syncAllToSheets = async function(btn) {
             const filterStatus = document.getElementById('filterStatus')?.value || 'all';
             const sortMode = document.getElementById('sortMode')?.value || 'priceDesc';
@@ -270,34 +260,6 @@
             }
         };
 
-        let currentEditModalUid = null; let currentEditModalAccountId = null;
-        window.openEditModal = function(uid, accountId) {
-            const item = inventoryData.find(i => i.uid === uid); if(!item) return;
-            currentEditModalUid = uid; currentEditModalAccountId = accountId;
-            document.getElementById('editModalText').value = decodeURIComponent(item.fullText);
-            document.getElementById('editModal').classList.remove('hidden'); document.getElementById('editModal').classList.add('flex');
-        };
-
-        window.saveEditedText = async function() {
-            if(!currentEditModalUid) return;
-            const newText = document.getElementById('editModalText').value.trim();
-            const btn = document.getElementById('saveModalBtn'); const oldBtnText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步儲存中...'; btn.disabled = true;
-
-            update(ref(db, `inventory/${currentEditModalUid}`), { fullText: encodeURIComponent(newText) });
-
-            const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-            if(sheetId && scriptUrl) {
-                try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: currentEditModalAccountId, data: newText }) }); } catch(e) {}
-            }
-
-            btn.innerHTML = oldBtnText; btn.disabled = false; window.closeEditModal(); showMsg("✅ 文案修改成功！", "green");
-        };
-
-        window.closeEditModal = function() {
-            document.getElementById('editModal').classList.add('hidden'); document.getElementById('editModal').classList.remove('flex');
-        };
-
         window.renderInventory = function() {
             const tbody = document.getElementById('inventoryBody'); if(!tbody) return; tbody.innerHTML = ''; 
             const filterStatus = document.getElementById('filterStatus')?.value || 'all'; const sortMode = document.getElementById('sortMode')?.value || 'priceDesc'; const searchQuery = document.getElementById('searchInput')?.value.toLowerCase().trim() || '';
@@ -324,7 +286,7 @@
                 
                 const sId = item.accountId.substring(0, 6).toUpperCase(); const lD = item.level ? `${item.level}等 ` : '';
                 
-                nR.innerHTML = `<td class="px-4 py-4"><div class="font-mono font-bold text-base uppercase flex items-center">${sId}${sB}</div><div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div></td><td class="px-4 py-4 text-sm font-bold ${tC}">${lD}${item.team}</td><td class="px-4 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td><td class="px-4 py-4 text-center"><div class="flex gap-1 justify-center flex-wrap"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-2 py-1 rounded text-[10px] shadow-sm">複製</button><button onclick="window.openEditModal('${item.uid}', '${item.accountId}')" class="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-[10px] shadow-sm font-bold transition">📝 改文</button><button onclick="window.syncToGoogleSheets('${item.accountId}', '${item.fullText}', this)" class="bg-green-600 text-white px-2 py-1 rounded text-[10px] shadow-sm">拋轉</button>${aB}<button onclick="window.editAccount('${item.uid}')" class="bg-blue-500 text-white px-2 py-1 rounded text-[10px] shadow-sm">✏️</button></div></td><td class="px-4 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-300 hover:text-red-600 p-1"><i class="fas fa-trash-alt"></i></button></td>`;
+                nR.innerHTML = `<td class="px-4 py-4"><div class="font-mono font-bold text-base uppercase flex items-center">${sId}${sB}</div><div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div></td><td class="px-4 py-4 text-sm font-bold ${tC}">${lD}${item.team}</td><td class="px-4 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td><td class="px-4 py-4 text-center"><div class="flex gap-1 justify-center flex-wrap"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-2 py-1 rounded text-[10px] shadow-sm">複製</button>${aB}<button onclick="window.editAccount('${item.uid}')" class="bg-blue-500 text-white px-2 py-1 rounded text-[10px] shadow-sm">✏️</button></div></td><td class="px-4 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-300 hover:text-red-600 p-1"><i class="fas fa-trash-alt"></i></button></td>`;
                 tbody.appendChild(nR);
             });
             const cEl = document.getElementById('inventoryCount'); if(cEl) cEl.innerText = displayData.length;
@@ -717,23 +679,6 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             </div>
         </div>
     </main>
-
-    <div id="editModal" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col overflow-hidden">
-            <div class="p-4 border-b bg-gray-50 flex justify-between items-center">
-                <h3 class="font-bold text-lg text-indigo-900"><i class="fas fa-edit mr-2"></i>📝 修改帳號介紹文案</h3>
-                <button onclick="window.closeEditModal()" class="text-gray-400 hover:text-gray-700 text-xl"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="p-4">
-                <textarea id="editModalText" class="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none text-sm font-mono leading-relaxed" placeholder="在這裡修改文案..."></textarea>
-            </div>
-            <div class="p-4 border-t bg-gray-50 flex justify-end gap-3">
-                <button onclick="window.closeEditModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition">取消</button>
-                <button id="saveModalBtn" onclick="window.saveEditedText()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold shadow-md hover:bg-indigo-700 transition">儲存並同步試算表</button>
-            </div>
-        </div>
-    </div>
-
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 </body>
 </html>
