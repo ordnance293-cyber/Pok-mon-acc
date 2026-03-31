@@ -494,6 +494,26 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
 
+        // 🔥 新增：分頁切換功能 🔥
+        window.togglePage = function(pageNumber) {
+            const page1 = document.getElementById('page1');
+            const page2 = document.getElementById('page2');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+
+            if (pageNumber === 1) {
+                page1.classList.remove('hidden');
+                page2.classList.add('hidden');
+                prevBtn.classList.add('hidden');
+                nextBtn.classList.remove('hidden');
+            } else if (pageNumber === 2) {
+                page1.classList.add('hidden');
+                page2.classList.remove('hidden');
+                prevBtn.classList.remove('hidden');
+                nextBtn.classList.add('hidden');
+            }
+        };
+
         window.resetForm = function() {
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
                 if(!['googleSheetId','gasUrl','geminiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
@@ -522,6 +542,9 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             }
             const cancelEditBtn = document.getElementById('cancelEditBtn');
             if(cancelEditBtn) cancelEditBtn.classList.add('hidden');
+
+            // 🔥 重置時自動回到第一頁 🔥
+            window.togglePage(1);
         };
 
         window.generateText = function() {
@@ -635,92 +658,102 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
             </div>
 
-            <form class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div class="col-span-1 flex flex-col gap-3">
-                    <div class="bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
-                        <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
-                        <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm font-bold hover:bg-gray-50 transition text-center w-full">選擇多張截圖</label>
-                        <div id="imagePreviewContainer" class="flex flex-wrap gap-2 w-full py-2 justify-center"></div>
-                        <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition mt-2">🤖 AI 自動填數量</button>
+            <form id="pokeInputForm">
+                <div id="page1" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="col-span-1 flex flex-col gap-3">
+                        <div class="bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
+                            <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
+                            <label for="imageInput" class="cursor-pointer bg-white border px-4 py-2 rounded shadow-sm text-sm font-bold hover:bg-gray-50 transition text-center w-full">選擇多張截圖</label>
+                            <div id="imagePreviewContainer" class="flex flex-wrap gap-2 w-full py-2 justify-center"></div>
+                            <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition mt-2">🤖 AI 自動填數量</button>
+                        </div>
+                        <textarea id="g_rare_list" placeholder="稀有怪清單..." class="w-full p-2 border rounded text-xs h-16 bg-white outline-none"></textarea>
+                        <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="百神清單..." class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-20 font-bold outline-none"></textarea>
                     </div>
-                    <textarea id="g_rare_list" placeholder="稀有怪清單..." class="w-full p-2 border rounded text-xs h-16 bg-white outline-none"></textarea>
-                    <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="百神清單..." class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-20 font-bold outline-none"></textarea>
-                </div>
 
-                <div class="col-span-1 space-y-3">
-                    <label class="text-xs font-bold text-gray-400 border-b block pb-1">基本資訊</label>
-                    <input type="text" id="g_id" placeholder="帳號代碼" class="w-full p-2 border rounded font-bold text-sm outline-none">
-                    <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
-                    <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm outline-none">
-                    <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm outline-none">
-                    <div class="flex gap-2">
-                        <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm outline-none">
-                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
+                    <div class="col-span-1 space-y-3">
+                        <label class="text-xs font-bold text-gray-400 border-b block pb-1">基本資訊</label>
+                        <input type="text" id="g_id" placeholder="帳號代碼" class="w-full p-2 border rounded font-bold text-sm outline-none">
+                        <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
+                        <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm outline-none">
+                        <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm outline-none">
+                        <div class="flex gap-2">
+                            <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm outline-none">
+                            <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
+                        </div>
                     </div>
-                </div>
 
-                <div class="col-span-1 space-y-3">
-                    <label class="text-xs font-bold text-gray-400 border-b block pb-1">資源數據</label>
-                    <div class="grid grid-cols-2 gap-2 text-[11px]">
-                        <div>16-20怪<input type="number" id="st_old_poke" class="w-full p-1 border rounded"></div>
-                        <div>16-20神<input type="number" id="st_old_leg" class="w-full p-1 border rounded"></div>
-                        <div>大師球<input type="number" id="st_masterball" class="w-full p-1 border rounded"></div>
-                        <div>綠票/卷<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
-                        <div>神奇糖果<input type="number" id="st_rarecandy" class="w-full p-1 border rounded"></div>
-                        <div>寶可幣<input type="number" id="st_coin" class="w-full p-1 border rounded"></div>
-                        <div>寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
-                        <div>道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
-                    </div>
-                </div>
-
-                <div class="col-span-1 space-y-2 bg-red-50/30 p-2 rounded-lg border border-red-100">
-                    <label class="text-xs font-bold text-red-800 border-b border-red-200 block pb-1">特殊調查</label>
-                    <div class="flex flex-col gap-1 text-[10px]">
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_3" value="凱路迪歐">凱路迪歐</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_4" value="至尊鳳王">至尊鳳王</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_5" value="至尊洛奇亞">至尊洛奇亞</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_6" value="瑪夏多">瑪夏多</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_7" value="色違基拉祈">色違基拉祈</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_8" value="色違謝米">色違謝米</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_9" value="波爾凱尼恩">波爾凱尼恩</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_10" value="薩戮德">薩戮德</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_11" value="凱路迪歐,瑪夏多">凱路迪歐,瑪夏多</label>
+                    <div class="col-span-1 space-y-3">
+                        <label class="text-xs font-bold text-gray-400 border-b block pb-1">資源數據</label>
+                        <div class="grid grid-cols-2 gap-2 text-[11px]">
+                            <div>16-20怪<input type="number" id="st_old_poke" class="w-full p-1 border rounded"></div>
+                            <div>16-20神<input type="number" id="st_old_leg" class="w-full p-1 border rounded"></div>
+                            <div>大師球<input type="number" id="st_masterball" class="w-full p-1 border rounded"></div>
+                            <div>綠票/卷<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
+                            <div>神奇糖果<input type="number" id="st_rarecandy" class="w-full p-1 border rounded"></div>
+                            <div>寶可幣<input type="number" id="st_coin" class="w-full p-1 border rounded"></div>
+                            <div>寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
+                            <div>道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="col-span-1 space-y-2 bg-purple-50/30 p-2 rounded-lg border border-purple-100 text-[10px]">
-                    <label class="text-xs font-bold text-purple-800 border-b border-purple-200 block pb-1">合體與 Mega</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label>
-                    <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label>
-                    <select id="sel_dogs" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪合體</label>
-                    <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
-                    <select id="sel_lati" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
-                    <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option><option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option><option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option><option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option></select>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_dyna">可打極巨化</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多斷崖之劍</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡根源波動</label>
-                    <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐畫龍點睛</label>
+                <div id="page2" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="col-span-1 space-y-2 bg-red-50/30 p-2 rounded-lg border border-red-100">
+                        <label class="text-xs font-bold text-red-800 border-b border-red-200 block pb-1">特殊調查</label>
+                        <div class="flex flex-col gap-1 text-[10px]">
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_3" value="凱路迪歐">凱路迪歐</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_4" value="至尊鳳王">至尊鳳王</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_5" value="至尊洛奇亞">至尊洛奇亞</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_6" value="瑪夏多">瑪夏多</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_7" value="色違基拉祈">色違基拉祈</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_8" value="色違謝米">色違謝米</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_9" value="波爾凱尼恩">波爾凱尼恩</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_10" value="薩戮德">薩戮德</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_11" value="凱路迪歐,瑪夏多">凱路迪歐,瑪夏多</label>
+                        </div>
+                    </div>
+
+                    <div class="col-span-1 space-y-2 bg-purple-50/30 p-2 rounded-lg border border-purple-100 text-[10px]">
+                        <label class="text-xs font-bold text-purple-800 border-b border-purple-200 block pb-1">合體與 Mega</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label>
+                        <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label>
+                        <select id="sel_dogs" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪合體</label>
+                        <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
+                        <select id="sel_lati" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
+                        <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option><option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option><option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option><option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option></select>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_dyna">可打極巨化</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多斷崖之劍</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡根源波動</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐畫龍點睛</label>
+                    </div>
+
+                    <div class="col-span-1 md:col-span-2 space-y-3 border-t pt-4">
+                        <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
+                            <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none"></div>
+                            <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded outline-none"></div>
+                            <div>色違總數<input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none"></div>
+                            <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none"></div>
+                            <div>活動總數<input type="number" id="st_costume" class="w-full p-1 border rounded outline-none"></div>
+                            <div>紀念背卡<input type="number" id="st_bg_comm" class="w-full p-1 border rounded outline-none"></div>
+                            <div>特別背卡<input type="number" id="st_bg_special" class="w-full p-1 border rounded outline-none"></div>
+                            <div>極巨化<input type="number" id="st_dyna" class="w-full p-1 border rounded outline-none"></div>
+                            <div>超極巨化<input type="number" id="st_giga" class="w-full p-1 border rounded outline-none"></div>
+                            <div>完美數量<input type="number" id="st_perfect" class="w-full p-1 border rounded outline-none"></div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="col-span-1 md:col-span-5 space-y-3 border-t pt-4">
-                    <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-[10px]">
-                        <div>百神數量<input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none"></div>
-                        <div>神獸總數<input type="number" id="st_legend" class="w-full p-1 border rounded outline-none"></div>
-                        <div>色違總數<input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none"></div>
-                        <div>色違神獸<input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none"></div>
-                        <div>活動總數<input type="number" id="st_costume" class="w-full p-1 border rounded outline-none"></div>
-                        <div>紀念背卡<input type="number" id="st_bg_comm" class="w-full p-1 border rounded outline-none"></div>
-                        <div>特別背卡<input type="number" id="st_bg_special" class="w-full p-1 border rounded outline-none"></div>
-                        <div>極巨化<input type="number" id="st_dyna" class="w-full p-1 border rounded outline-none"></div>
-                        <div>超極巨化<input type="number" id="st_giga" class="w-full p-1 border rounded outline-none"></div>
-                        <div>完美數量<input type="number" id="st_perfect" class="w-full p-1 border rounded outline-none"></div>
-                    </div>
+                <div class="flex justify-between border-t pt-4 mt-6">
+                    <button type="button" id="prevBtn" onclick="window.togglePage(1)" class="hidden bg-gray-500 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-gray-600 transition transform active:scale-95">⬅️ 上一頁</button>
+                    <div class="flex-grow"></div>
+                    <button type="button" id="nextBtn" onclick="window.togglePage(2)" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95">下一頁 ➔</button>
                 </div>
             </form>
         </div>
