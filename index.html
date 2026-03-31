@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V70 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V71 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -166,7 +166,7 @@
         // 🔥 文案反向解析引擎 🔥
         window.editAccount = function(uid) {
             const item = inventoryData.find(i => i.uid === uid); if(!item) return;
-            window.togglePage(1); // 自動切換回第一頁，方便直接修改基本資訊
+            window.togglePage(1); // 自動切換回第一頁
             window.scrollTo({ top: 0, behavior: 'smooth' });
             
             const setVal = (id, val) => { document.getElementById(id).value = val || ''; };
@@ -328,7 +328,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V70 加入隊伍顏色辨識 🔥
+        // 🔥 AI 核心：V71 加入隊伍顏色辨識 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -497,24 +497,15 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 
         // 🔥 新增：分頁切換功能 🔥
         window.togglePage = function(pageNumber) {
-            const page1 = document.getElementById('page1');
-            const page2 = document.getElementById('page2');
-            const prevBtn = document.getElementById('prevBtn');
-            const nextBtn = document.getElementById('nextBtn');
-            const cloudList = document.getElementById('cloudListDiv');
+            const page1 = document.getElementById('mainPage1');
+            const page2 = document.getElementById('mainPage2');
 
             if (pageNumber === 1) {
                 page1.classList.remove('hidden');
                 page2.classList.add('hidden');
-                prevBtn.classList.add('hidden');
-                nextBtn.classList.remove('hidden');
-                if(cloudList) cloudList.classList.add('hidden');
             } else if (pageNumber === 2) {
                 page1.classList.add('hidden');
                 page2.classList.remove('hidden');
-                prevBtn.classList.remove('hidden');
-                nextBtn.classList.add('hidden');
-                if(cloudList) cloudList.classList.remove('hidden');
             }
         };
 
@@ -634,7 +625,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V70 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V71 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
@@ -645,7 +636,8 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
     </header>
 
     <main class="max-w-7xl mx-auto p-4 py-8">
-        <div class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
+        
+        <div id="mainPage1" class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
             <div class="flex justify-between items-center mb-4 border-b pb-4">
                 <h2 class="text-lg font-bold">快速建檔區</h2>
                 <div class="flex gap-2">
@@ -663,7 +655,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             </div>
 
             <form id="pokeInputForm">
-                <div id="page1" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="col-span-1 flex flex-col gap-3">
                         <div class="bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
                             <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
@@ -702,7 +694,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                     </div>
                 </div>
 
-                <div id="page2" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                     <div class="col-span-1 space-y-2 bg-red-50/30 p-2 rounded-lg border border-red-100">
                         <label class="text-xs font-bold text-red-800 border-b border-red-200 block pb-1">特殊調查</label>
                         <div class="flex flex-col gap-1 text-[10px]">
@@ -754,18 +746,19 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                     </div>
                 </div>
 
-                <div class="flex justify-between border-t pt-4 mt-6">
-                    <button type="button" id="prevBtn" onclick="window.togglePage(1)" class="hidden bg-gray-500 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-gray-600 transition transform active:scale-95">⬅️ 上一頁</button>
-                    <div class="flex-grow"></div>
-                    <button type="button" id="nextBtn" onclick="window.togglePage(2)" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95">下一頁 ➔</button>
+                <div class="flex justify-end border-t pt-4 mt-6">
+                    <button type="button" onclick="window.togglePage(2)" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95">前往雲端清單 ➔</button>
                 </div>
             </form>
         </div>
 
-        <div id="cloudListDiv" class="hidden bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
+        <div id="mainPage2" class="hidden bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
             <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
-                <span class="text-indigo-900"><i class="fas fa-list-ul mr-1"></i> 雲端清單 (<span id="inventoryCount">0</span>)</span>
-                <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="window.togglePage(1)" class="bg-gray-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md hover:bg-gray-600 transition transform active:scale-95">⬅️ 返回建檔區</button>
+                    <span class="text-indigo-900 ml-2"><i class="fas fa-list-ul mr-1"></i> 雲端清單 (<span id="inventoryCount">0</span>)</span>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap mt-2 sm:mt-0">
                     <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border p-1.5 rounded text-xs w-32 outline-none">
                     <button type="button" onclick="syncAllToSheets(this)" class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
                     <select id="filterStatus" onchange="renderInventory()" class="border p-1.5 rounded text-xs text-indigo-700 bg-indigo-50 outline-none"><option value="all">📦 全部</option><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
