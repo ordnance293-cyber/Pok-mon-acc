@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V67 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V69 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -327,7 +327,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V67 切換為 2.5 Pro，加入酋雷姆辨識與強制 JSON 🔥
+        // 🔥 AI 核心：V69 加入隊伍顏色辨識 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -339,6 +339,12 @@
 【🚨最高指令🚨】：
 請你「非常仔細、逐一對比」地掃描每一張截圖！確保你抓取的每一個數字，都100%精準填入對應的 JSON 欄位中。如果不確定，請留空，絕對不要亂填或填錯格子！請在輸出前再三確認對應關係！
 
+【🛡️隊伍顏色自動辨識】（極重要）：
+當你看到「訓練家個人檔案」的截圖（有顯示人物、夥伴寶可夢、等級、經驗值的畫面），請觀察該畫面的「整體背景顏色」：
+- 若背景偏黃色 ➔ 請在 team 欄位填入「黃隊」
+- 若背景偏紅色 ➔ 請在 team 欄位填入「紅隊」
+- 若背景偏藍色 ➔ 請在 team 欄位填入「藍隊」
+
 【🤖特定寶可夢型態視覺辨識】（極重要）：
 請你務必「觀察外觀」來準確命名以下寶可夢，並填入 pokemon_list：
 1. 基格爾德：若外觀像「巨大機器人/鋼彈」(100% 完全體形態) ➔ 命名為「完全體基格爾德」。若外觀像「蛇/蛞蝓/異形」(50% 形態) 或「杜賓狗」(10% 形態) ➔ 維持原名「基格爾德」。
@@ -349,8 +355,9 @@
 
 【✨色違(Shiny)嚴格視覺辨識】（極重要防呆）：
 1. 請特別注意！背景出現的「黃色大圓光暈/泡泡」【絕對不是】色違標誌！
-2. 真正的色違標誌是位於 CP 數字旁邊或寶可夢周圍的「三顆純黑色四角星星 ✨」圖案。
+2. 真正的色違標誌是位於 CP 數字旁邊、寶可夢周圍，或是「寶可夢圖示的左上角(CP下方)」的「三顆純黑色四角星星 ✨」圖案。
 3. 只有看到這三顆純黑色星星圖案，該寶可夢才是「色違 (Shiny)」。
+4. 在提取 \`pokemon_list\` (百神清單等列表) 時，請務必仔細檢查每隻寶可夢左上角(CP下方)是否有黑色星星，若有，請務必在名字前面加上「色違」兩字。
 
 【🦄神獸總數嚴格辨識】（極重要防呆）：
 請尋找遊戲畫面上方的搜尋欄。**只有當搜尋欄內的文字「完全符合」：『傳說的寶可夢,幻,究極異獸』時**，才提取該畫面頂部顯示的數字作為「神獸總數 (legendary)」。
@@ -375,11 +382,11 @@
 
 【資料輸出規則】：
 1. pokemon_list（將填入 g_hundos清單）：
-    - 色違規則：如果是色違(有純黑色星星)，請在名字最前面加上「色違」兩個字即可，結尾絕對不要加任何星號或符號。例如：\`色違完全體基格爾德\`、\`色違焰白酋雷姆\`、\`色違奈克日獅型態\`、\`色違蒼響劍盾型態\`。
+    - 色違規則：如果是色違(有純黑色星星)，請在名字最前面加上「色違」兩個字即可，結尾絕對不要加任何星號或符號。例如：\`色違完全體基格爾德\`、\`色違焰白酋雷姆\`、\`色違固拉多\`、\`色違捷克羅姆\`。
     - 數量規則：同品種出現兩隻以上，在名字最後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違奈克洛茲瑪*3\`。
 2. 提取括號內的數字即為總數。
 
-JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
+JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
                 
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
@@ -404,7 +411,7 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
                 }
                 
-                // 🔥 終極解決報錯：使用 generationConfig 強制鎖定 MIME type 為 JSON，徹底消除廢話 🔥
+                // 🔥 強制鎖定 JSON 輸出，杜絕任何報錯 🔥
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
@@ -421,10 +428,15 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 
                 const data = await resp.json(); 
                 let rawText = data.candidates[0].content.parts[0].text;
-                // 保險起見，清除可能殘留的 markdown json 標籤
                 let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim(); 
                 let res = JSON.parse(cleanText);
                 
+                // 🔥 自動填入隊伍 🔥
+                if(res.team && ['藍隊', '紅隊', '黃隊'].includes(res.team)) {
+                    document.getElementById('g_team').value = res.team;
+                    highlightInput('g_team');
+                }
+
                 document.getElementById('g_hundos').value = res.pokemon_list || ''; 
                 if(res.hundo_leg) document.getElementById('st_hundo_leg').value = res.hundo_leg;
                 if(res.legendary) document.getElementById('st_legend').value = res.legendary;
@@ -595,13 +607,13 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V67 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V69 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 focus:ring-2 focus:ring-indigo-400 transition-all outline-none bg-white">
-            <input type="password" id="geminiApiKey" placeholder="API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 focus:ring-2 focus:ring-yellow-400 transition-all outline-none">
-            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm active:scale-90">💾 儲存設定</button>
+            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
+            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
+            <input type="password" id="geminiApiKey" placeholder="API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 outline-none">
+            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm">💾 儲存設定</button>
         </div>
     </header>
 
@@ -610,8 +622,8 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
             <div class="flex justify-between items-center mb-4 border-b pb-4">
                 <h2 class="text-lg font-bold">快速建檔區</h2>
                 <div class="flex gap-2">
-                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-300 transition">🧹 清除</button>
-                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-gray-600 transition">取消編輯</button>
+                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold transition">🧹 清除</button>
+                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md transition">取消編輯</button>
                     <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
                 </div>
             </div>
@@ -631,25 +643,19 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                         <div id="imagePreviewContainer" class="flex flex-wrap gap-2 w-full py-2 justify-center"></div>
                         <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition mt-2">🤖 AI 自動填數量</button>
                     </div>
-                    <div>
-                        <label class="text-xs font-bold text-gray-400 block mb-1">稀有怪</label>
-                        <textarea id="g_rare_list" placeholder="填入額外稀有怪 (如: 色違超夢)，若有多隻請換行輸入..." class="w-full p-2 border rounded text-xs h-16 bg-white outline-none shadow-sm"></textarea>
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-blue-400 block mb-1">百神清單</label>
-                        <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="在此輸入/修改百神清單 (支援自動加總，如：超夢*3)..." class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-20 font-bold outline-none shadow-sm"></textarea>
-                    </div>
+                    <textarea id="g_rare_list" placeholder="稀有怪清單..." class="w-full p-2 border rounded text-xs h-16 bg-white outline-none"></textarea>
+                    <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="百神清單..." class="w-full p-2 border border-blue-200 bg-blue-50/30 rounded text-xs h-20 font-bold outline-none"></textarea>
                 </div>
 
                 <div class="col-span-1 space-y-3">
                     <label class="text-xs font-bold text-gray-400 border-b block pb-1">基本資訊</label>
-                    <input type="text" id="g_id" placeholder="貼上完整帳號代碼" class="w-full p-2 border rounded font-bold text-sm bg-white outline-none focus:border-indigo-400">
-                    <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white cursor-pointer"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
+                    <input type="text" id="g_id" placeholder="帳號代碼" class="w-full p-2 border rounded font-bold text-sm outline-none">
+                    <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
                     <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm outline-none">
                     <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm outline-none">
                     <div class="flex gap-2">
                         <input type="number" id="g_price" placeholder="價格" class="w-1/2 p-2 border-yellow-400 bg-yellow-50 font-bold rounded text-sm outline-none">
-                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700 cursor-pointer"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
+                        <select id="g_item_status" class="w-1/2 p-2 border border-green-300 bg-green-50 font-bold rounded text-sm text-green-700"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
                     </div>
                 </div>
 
@@ -662,8 +668,8 @@ JSON格式輸出：{"legendary":"","shiny":"","costume":"","bg_comm":"","bg_spec
                         <div>綠票/卷<input type="number" id="st_greenpass" class="w-full p-1 border rounded"></div>
                         <div>神奇糖果<input type="number" id="st_rarecandy" class="w-full p-1 border rounded"></div>
                         <div>寶可幣<input type="number" id="st_coin" class="w-full p-1 border rounded"></div>
-                        <div class="col-span-1">寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
-                        <div class="col-span-1">道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
+                        <div>寶可夢包<input type="number" id="st_poke_bag" class="w-full p-1 border rounded"></div>
+                        <div>道具背包<input type="number" id="st_item_bag" class="w-full p-1 border rounded"></div>
                     </div>
                 </div>
 
