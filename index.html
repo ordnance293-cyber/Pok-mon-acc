@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V74 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V76 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -328,7 +328,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V74 加入隊伍顏色辨識與16-20年老怪辨識 🔥
+        // 🔥 AI 核心：V76 導入 960px 影像壓縮引擎防 503 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -366,8 +366,8 @@
 
 【🕰️16-20年老怪嚴格辨識】（極重要防呆）：
 請尋找遊戲畫面上方的搜尋欄：
-1. 若搜尋欄內的文字「完全符合」：『年16-20』，請將該畫面頂部顯示的數字作為「16-20年寶可夢總數 (old_poke)」。
-2. 若搜尋欄內的文字包含『年16-20』，且「同時包含」『傳說的寶可夢,幻,究極異獸』，請將該畫面頂部顯示的數字作為「16-20年神獸總數 (old_leg)」。
+1. 若搜尋欄內的文字「完全符合」：『年16-20』，請將該畫面頂部顯示的數字作為「16-20年寶可夢總數 (old_poke)」，對應前端的「16-20怪」格子。
+2. 若搜尋欄內的文字「完全符合」：『年16-20&傳說的寶可夢,幻,究極異獸』，請將該畫面頂部顯示的數字作為「16-20年神獸總數 (old_leg)」，對應前端的「16-20神」格子。
 
 【🎒包包容量辨識規則】（極重要防呆）：
 寶可夢背包 (poke_bag) 與 道具背包 (item_bag) 在截圖中通常顯示為「目前數量 / 總容量」（例如：345/1000）。
@@ -398,7 +398,8 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                     const base64 = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
-                                const maxSize = 1500; 
+                                // 🔥 V76：大幅壓縮圖片尺寸與品質，防 503 超載 🔥
+                                const maxSize = 960; 
                                 let width = img.width;
                                 let height = img.height;
                                 if (width > height) {
@@ -410,7 +411,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                                 canvas.width = width; 
                                 canvas.height = height;
                                 canvas.getContext('2d').drawImage(img, 0, 0, width, height); 
-                                r(canvas.toDataURL('image/jpeg', 0.9).split(',')[1]); 
+                                r(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]); 
                             }; img.src = e.target.result;
                         }; reader.readAsDataURL(files[i]);
                     });
@@ -634,7 +635,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V74 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V76 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
