@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V73 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V74 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -328,7 +328,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V73 加入隊伍顏色辨識 🔥
+        // 🔥 AI 核心：V74 加入隊伍顏色辨識與16-20年老怪辨識 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -364,6 +364,11 @@
 請尋找遊戲畫面上方的搜尋欄。**只有當搜尋欄內的文字「完全符合」：『傳說的寶可夢,幻,究極異獸』時**，才提取該畫面頂部顯示的數字作為「神獸總數 (legendary)」。
 如果搜尋欄包含其他條件（例如加了 &4* 或 &異色），或者根本沒有這個搜尋條件，請將數量歸類到對應的欄位（如完美神獸 hundo_leg、色違神獸 shiny_leg），**絕對不要**把這些數字誤認為「神獸總數」。
 
+【🕰️16-20年老怪嚴格辨識】（極重要防呆）：
+請尋找遊戲畫面上方的搜尋欄：
+1. 若搜尋欄內的文字「完全符合」：『年16-20』，請將該畫面頂部顯示的數字作為「16-20年寶可夢總數 (old_poke)」。
+2. 若搜尋欄內的文字包含『年16-20』，且「同時包含」『傳說的寶可夢,幻,究極異獸』，請將該畫面頂部顯示的數字作為「16-20年神獸總數 (old_leg)」。
+
 【🎒包包容量辨識規則】（極重要防呆）：
 寶可夢背包 (poke_bag) 與 道具背包 (item_bag) 在截圖中通常顯示為「目前數量 / 總容量」（例如：345/1000）。
 請「永遠只提取右邊的總容量數字」（以此例為 1000）。絕對不要提取左邊的數字！不管左邊的值是什麼，永遠只輸出右邊的值。
@@ -387,7 +392,7 @@
     - 數量規則：同品種出現兩隻以上，在名字最後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違奈克洛茲瑪*3\`。
 2. 提取括號內的數字即為總數。
 
-JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
+JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","old_poke":"","old_leg":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
                 
                 for(let i=0; i<files.length; i++){
                     const base64 = await new Promise(r => {
@@ -450,6 +455,10 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 if(res.giga) document.getElementById('st_giga').value = res.giga;
                 if(res.perfect) document.getElementById('st_perfect').value = res.perfect;
                 
+                // 🔥 16-20 年老怪自動填入 🔥
+                if(res.old_poke) document.getElementById('st_old_poke').value = res.old_poke;
+                if(res.old_leg) document.getElementById('st_old_leg').value = res.old_leg;
+
                 if(res.masterball) document.getElementById('st_masterball').value = parseNum(res.masterball) || res.masterball;
                 let rc = parseNum(res.rarecandy); if(!isNaN(rc) && rc >= 100) document.getElementById('st_rarecandy').value = rc;
                 let coin = parseNum(res.coin); if(!isNaN(coin) && coin >= 200) document.getElementById('st_coin').value = coin;
@@ -625,7 +634,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V73 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V74 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
@@ -649,10 +658,11 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             </div>
 
             <div class="flex flex-wrap gap-2 items-center text-[11px] bg-blue-50/50 p-2 rounded-lg border border-blue-100 mb-5">
-                <span class="font-bold text-blue-800"><i class="fas fa-terminal"></i> 快速搜尋指令：</span>
                 <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
                 <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
                 <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
+                <button type="button" onclick="window.copySimpleText('年16-20', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">年16-20</button>
+                <button type="button" onclick="window.copySimpleText('年16-20&傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">16-20神獸</button>
             </div>
 
             <form id="pokeInputForm">
