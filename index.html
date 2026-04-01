@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V83 2.5 Pro 官方圖鑑+客製覆寫版</title>
+    <title>寶可夢頂級帳號庫 - V84 2.5 Pro 真實等級標示版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -328,7 +328,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V83 官方圖鑑基礎 + 客製化覆寫版 🔥
+        // 🔥 AI 核心：V84 真實等級標示版 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -491,33 +491,21 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 if(res.poke_bag) document.getElementById('st_poke_bag').value = parseNum(res.poke_bag) || res.poke_bag;
                 if(res.item_bag) document.getElementById('st_item_bag').value = parseNum(res.item_bag) || res.item_bag;
 
-                let oL = parseNum(res.level); let oS = parseNum(res.stardust); let oX = parseNum(res.xp);
-                let fS = isNaN(oS) ? 0 : oS; let fX = isNaN(oX) ? 0 : oX;
-
+                // 🚀 V84: 移除所有人工灌水邏輯，如實填寫 🚀
+                let oL = parseNum(res.level); 
+                let oS = parseNum(res.stardust); 
+                let oX = parseNum(res.xp);
+                
                 if (!isNaN(oL)) {
-                    if (oL < 60) { 
-                        document.getElementById('g_level').value = 60; 
-                        fS += 200000; 
-                        fX = 0; 
-                    } 
-                    else if (oL >= 68 && oL < 70) { 
-                        document.getElementById('g_level').value = 70; 
-                        fS += 300000; 
-                        fX = 0; 
-                    } 
-                    else { 
-                        document.getElementById('g_level').value = oL; 
-                    }
+                    document.getElementById('g_level').value = oL; 
                     highlightInput('g_level');
                 }
-                
-                if (fS >= 800000) { 
-                    document.getElementById('g_stardust').value = Math.floor(fS / 10000); 
+                if (!isNaN(oS)) { 
+                    document.getElementById('g_stardust').value = Math.floor(oS / 10000); 
                     highlightInput('g_stardust'); 
                 }
-                
-                if (fX >= 800000) { 
-                    document.getElementById('g_xp').value = Math.floor(fX / 10000); 
+                if (!isNaN(oX)) { 
+                    document.getElementById('g_xp').value = Math.floor(oX / 10000); 
                     highlightInput('g_xp'); 
                 }
 
@@ -574,6 +562,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             window.togglePage(1);
         };
 
+        // 🚀 V84: 自動判斷加上 (免費練到60) 的後綴 🚀
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim(); 
             const checked = (id) => document.getElementById(id).checked;
@@ -586,8 +575,21 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 return true;
             };
 
-            let res = []; const fullId = v('g_id'); const shortId = fullId.substring(0, 6).toUpperCase(); res.push(shortId); 
-            const lvlStr = valid(v('g_level')) ? v('g_level') + '等 ' : ''; res.push(`${lvlStr}${v('g_team')}`);
+            let res = []; 
+            const fullId = v('g_id'); 
+            const shortId = fullId.substring(0, 6).toUpperCase(); 
+            res.push(shortId); 
+            
+            let lvlStr = '';
+            if (valid(v('g_level'))) {
+                const lvlNum = parseInt(v('g_level'), 10);
+                if (lvlNum < 60) {
+                    lvlStr = `${lvlNum}等(免費練到60) `;
+                } else {
+                    lvlStr = `${lvlNum}等 `;
+                }
+            }
+            res.push(`${lvlStr}${v('g_team')}`);
             
             let spList = []; for(let i=1; i<=11; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
@@ -657,7 +659,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V83 2.5 Pro 官方圖鑑+客製覆寫版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V84 2.5 Pro 真實等級標示版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
