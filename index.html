@@ -562,7 +562,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             window.togglePage(1);
         };
 
-        // 🚀 V84: 自動判斷加上 (免費練到60) 的後綴 🚀
+        // 🚀 V84: 自動判斷加上 (免費練到60) 的後綴，並控制星塵與經驗值的顯示 🚀
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim(); 
             const checked = (id) => document.getElementById(id).checked;
@@ -581,10 +581,12 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             res.push(shortId); 
             
             let lvlStr = '';
+            let isBelow60 = false;
             if (valid(v('g_level'))) {
                 const lvlNum = parseInt(v('g_level'), 10);
                 if (lvlNum < 60) {
                     lvlStr = `${lvlNum}等(免費練到60) `;
+                    isBelow60 = true;
                 } else {
                     lvlStr = `${lvlNum}等 `;
                 }
@@ -615,8 +617,9 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             if(checked('chk_kyogre')) res.push(`蓋歐卡根源波動`);
             if(checked('chk_rayquaza')) res.push(`烈空坐畫龍點睛`);
             
-            if(valid(v('g_xp'))) res.push(`經驗 ${v('g_xp')}萬`); 
-            if(valid(v('g_stardust'))) res.push(`星塵 ${v('g_stardust')}萬`);
+            // 根據是否低於60等，決定是否顯示經驗與星塵
+            if(!isBelow60 && valid(v('g_xp'))) res.push(`經驗 ${v('g_xp')}萬`); 
+            if(!isBelow60 && valid(v('g_stardust'))) res.push(`星塵 ${v('g_stardust')}萬`);
             
             if(valid(v('st_hundo_leg'))) { let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
             if(valid(v('st_legend'))) res.push(`✅神獸總數${v('st_legend')}隻`); 
