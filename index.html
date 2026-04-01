@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V82 2.5 Pro 官方圖鑑+客製覆寫版</title>
+    <title>寶可夢頂級帳號庫 - V83 2.5 Pro 官方圖鑑+客製覆寫版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -223,9 +223,10 @@
             else if(txt.includes('⭐️拉帝亞斯可Mega⭐️')) setVal('sel_lati', '⭐️拉帝亞斯可Mega⭐️');
             else setVal('sel_lati', item.sel_lati || '⭐️飛機兄妹可Mega⭐️');
 
-            const hasHoenn = item.chk_hoenn !== undefined ? item.chk_hoenn : (txt.includes('豐原三神') || txt.includes('固拉多可 Mega') || txt.includes('蓋歐卡可 Mega') || txt.includes('烈空坐能量夠Mega'));
+            const hasHoenn = item.chk_hoenn !== undefined ? item.chk_hoenn : (txt.includes('豐原三神') || txt.includes('豐原雙神') || txt.includes('固拉多可 Mega') || txt.includes('蓋歐卡可 Mega') || txt.includes('烈空坐能量夠Mega'));
             setChk('chk_hoenn', hasHoenn);
             if(txt.includes('⭐️豐原三神可 Mega⭐️')) setVal('sel_hoenn', '⭐️豐原三神可 Mega⭐️');
+            else if(txt.includes('⭐️豐原雙神可 Mega⭐️')) setVal('sel_hoenn', '⭐️豐原雙神可 Mega⭐️');
             else if(txt.includes('⭐️固拉多可 Mega⭐️')) setVal('sel_hoenn', '⭐️固拉多可 Mega⭐️');
             else if(txt.includes('⭐️蓋歐卡可 Mega⭐️')) setVal('sel_hoenn', '⭐️蓋歐卡可 Mega⭐️');
             else if(txt.includes('⭐️烈空坐能量夠Mega⭐️')) setVal('sel_hoenn', '⭐️烈空坐能量夠Mega⭐️');
@@ -327,7 +328,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V82 官方圖鑑基礎 + 客製化覆寫版 🔥
+        // 🔥 AI 核心：V83 官方圖鑑基礎 + 客製化覆寫版 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -656,7 +657,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V82 2.5 Pro 官方圖鑑+客製覆寫版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V83 2.5 Pro 官方圖鑑+客製覆寫版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
@@ -769,7 +770,13 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                         <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
                         <select id="sel_lati" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
                         <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
-                        <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option><option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option><option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option><option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option></select>
+                        <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white">
+                            <option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option>
+                            <option value="⭐️豐原雙神可 Mega⭐️">豐原雙神可 Mega</option>
+                            <option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option>
+                            <option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option>
+                            <option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option>
+                        </select>
                         <label class="flex items-center gap-1"><input type="checkbox" id="chk_dyna">可打極巨化</label>
                         <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多斷崖之劍</label>
                         <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡根源波動</label>
