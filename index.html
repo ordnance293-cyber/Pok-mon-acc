@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V77 2.5 Pro 完美記憶版</title>
+    <title>寶可夢頂級帳號庫 - V79 2.5 Pro 完美記憶版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -328,7 +328,7 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        // 🔥 AI 核心：V77 導入 503 自動重試引擎 🔥
+        // 🔥 AI 核心：V79 加入等級與經驗值精準辨識 🔥
         window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
@@ -345,6 +345,11 @@
 - 若背景偏黃色 ➔ 請在 team 欄位填入「黃隊」
 - 若背景偏紅色 ➔ 請在 team 欄位填入「紅隊」
 - 若背景偏藍色 ➔ 請在 team 欄位填入「藍隊」
+
+【📊等級與經驗值(XP)辨識規則】（極重要防呆）：
+當看到「訓練家個人檔案」的截圖（有顯示人物與夥伴寶可夢）時：
+1. 等級 (level)：請看畫面左下方，經驗值進度條的左邊有一個「極大的數字」（數字下方標示「等級」），請提取該數字作為 level。
+2. 經驗值 (xp)：請看畫面中下方的經驗值進度條，上面會顯示「目前經驗值 / 目標經驗值」（例如：320,665 / 8,000,000）。請「永遠只提取斜線左邊的目前經驗值數字」（以此例為 320665），並填入 xp 欄位。
 
 【🤖特定寶可夢型態視覺辨識】（極重要）：
 請你務必「觀察外觀」來準確命名以下寶可夢，並填入 pokemon_list：
@@ -372,6 +377,9 @@
 【🎒包包容量辨識規則】（極重要防呆）：
 寶可夢背包 (poke_bag) 與 道具背包 (item_bag) 在截圖中通常顯示為「目前數量 / 總容量」（例如：345/1000）。
 請「永遠只提取右邊的總容量數字」（以此例為 1000）。絕對不要提取左邊的數字！不管左邊的值是什麼，永遠只輸出右邊的值。
+
+【🪙寶可幣(Pokecoin)數量辨識】（極重要防呆）：
+當看到遊戲「商店」的截圖時，畫面正上方會有一個「黃色皮卡丘圖案的圓形硬幣」圖示。請精準提取該黃色硬幣旁邊的數字，這就是「寶可幣總數」，並將其填入 \`coin\` 欄位中。
 
 【🖼️背卡(Background)嚴格辨識】：
 請仔細辨識截圖中的分類標籤或圖示特徵：
@@ -425,7 +433,6 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 let res = null;
                 const maxRetries = 3; // 設定最多重試次數
                 
-                // 🔥 V77 自動重試引擎 🔥
                 for (let attempt = 1; attempt <= maxRetries; attempt++) {
                     try {
                         const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { 
@@ -479,7 +486,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 
                 if(res.masterball) document.getElementById('st_masterball').value = parseNum(res.masterball) || res.masterball;
                 let rc = parseNum(res.rarecandy); if(!isNaN(rc) && rc >= 100) document.getElementById('st_rarecandy').value = rc;
-                let coin = parseNum(res.coin); if(!isNaN(coin) && coin >= 200) document.getElementById('st_coin').value = coin;
+                let coin = parseNum(res.coin); if(!isNaN(coin)) document.getElementById('st_coin').value = coin;
                 let pass = parseNum(res.greenpass); if(!isNaN(pass) && pass >= 10) document.getElementById('st_greenpass').value = pass;
                 if(res.poke_bag) document.getElementById('st_poke_bag').value = parseNum(res.poke_bag) || res.poke_bag;
                 if(res.item_bag) document.getElementById('st_item_bag').value = parseNum(res.item_bag) || res.item_bag;
@@ -652,7 +659,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V77 2.5 Pro 完美記憶版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V79 2.5 Pro 完美記憶版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
