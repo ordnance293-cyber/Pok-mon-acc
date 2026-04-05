@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V84 2.5 Pro 真實等級標示版</title>
+    <title>寶可夢頂級帳號庫 - V85 2.5 Pro 極速全域同步版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -118,6 +118,7 @@
 
         let currentEditUid = null;
         
+        // 🚀 已精確修改：完善新增時同步到 GAS 的功能
         window.saveAccountToInventory = async function() {
             const getVal = (id) => document.getElementById(id).value;
             const getChk = (id) => document.getElementById(id).checked;
@@ -144,15 +145,23 @@
 
             for(let i=1; i<=11; i++) newItem['chk_sp_'+i] = getChk('chk_sp_'+i);
 
+            const sheetId = document.getElementById('googleSheetId').value.trim(); 
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
+
             if (currentEditUid) {
                 const existingItem = inventoryData.find(i => i.uid === currentEditUid);
                 newItem.timestamp = existingItem ? existingItem.timestamp : Date.now();
                 update(ref(db, `inventory/${currentEditUid}`), newItem);
                 showMsg("✅ 帳號資料已更新！", "green");
-                const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
+                
                 if(sheetId && scriptUrl) fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
             } else {
-                newItem.timestamp = Date.now(); push(inventoryRef, newItem); showMsg("✅ 帳號已新增！", "green");
+                newItem.timestamp = Date.now(); 
+                push(inventoryRef, newItem); 
+                showMsg("✅ 帳號已新增！", "green");
+                
+                // 補上這行，確保全新增的帳號也能立刻觸發 GAS 寫入與塗色
+                if(sheetId && scriptUrl) fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
             }
             window.resetForm();
         };
@@ -662,7 +671,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V84 2.5 Pro 真實等級標示版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V85 2.5 Pro 極速全域同步版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
