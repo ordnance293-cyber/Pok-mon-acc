@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V85 2.5 Pro 極速全域同步版</title>
+    <title>寶可夢頂級帳號庫 - V87 2.5 Pro 批量轉換版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -118,7 +118,6 @@
 
         let currentEditUid = null;
         
-        // 🚀 已精確修改：完善新增時同步到 GAS 的功能
         window.saveAccountToInventory = async function() {
             const getVal = (id) => document.getElementById(id).value;
             const getChk = (id) => document.getElementById(id).checked;
@@ -160,7 +159,6 @@
                 push(inventoryRef, newItem); 
                 showMsg("✅ 帳號已新增！", "green");
                 
-                // 補上這行，確保全新增的帳號也能立刻觸發 GAS 寫入與塗色
                 if(sheetId && scriptUrl) fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
             }
             window.resetForm();
@@ -267,6 +265,27 @@
                 remove(ref(db, `inventory/${uid}`)); 
                 const sId = document.getElementById('googleSheetId').value; const gUrl = document.getElementById('gasUrl').value; 
                 if(sId && gUrl) fetch(gUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: sId, accountId: accountId }) }); 
+            }
+        };
+
+        // 🚀 已修改：新增批量轉換舊代碼功能
+        window.bulkUpdateAccountIds = async function() {
+            if (!confirm('⚠️ 確定要將所有舊帳號代碼中的「空白」替換為「分號 ( ; )」嗎？\n此動作將修改資料庫中的紀錄。')) return;
+            
+            let updateCount = 0;
+            inventoryData.forEach(item => {
+                // 如果代碼裡面包含空白 (包含多個空白)，就進行替換
+                if (/\s/.test(item.accountId)) {
+                    const newAccountId = item.accountId.replace(/\s+/g, ';');
+                    update(ref(db, `inventory/${item.uid}`), { accountId: newAccountId });
+                    updateCount++;
+                }
+            });
+
+            if (updateCount > 0) {
+                alert(`✅ 成功批量轉換了 ${updateCount} 筆帳號！\n\n👉 轉換完成後，請務必點擊旁邊的「🔄 鏡像同步目前排序」，試算表才會更新為新格式喔！`);
+            } else {
+                alert(`🎉 檢查完畢！沒有發現包含空白的舊帳號代碼，不需要轉換。`);
             }
         };
 
@@ -671,7 +690,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V85 2.5 Pro 極速全域同步版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V87 2.5 Pro 批量轉換版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
@@ -730,7 +749,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 
                     <div class="col-span-1 space-y-3">
                         <label class="text-xs font-bold text-gray-400 border-b block pb-1">基本資訊</label>
-                        <input type="text" id="g_id" placeholder="帳號代碼" class="w-full p-2 border rounded font-bold text-sm outline-none">
+                        <input type="text" id="g_id" placeholder="帳號代碼" class="w-full p-2 border rounded font-bold text-sm outline-none" oninput="this.value = this.value.replace(/\s+/g, ';')">
                         <div class="flex gap-2"><input type="number" id="g_level" placeholder="等級" class="w-1/2 p-2 border rounded text-sm outline-none"><select id="g_team" class="w-1/2 p-2 border rounded text-sm bg-white"><option>藍隊</option><option>紅隊</option><option>黃隊</option></select></div>
                         <input type="number" id="g_xp" placeholder="經驗 (萬)" class="w-full p-2 border rounded text-sm outline-none">
                         <input type="text" id="g_stardust" placeholder="星塵 (萬)" class="w-full p-2 border rounded text-sm outline-none">
@@ -808,6 +827,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 </div>
                 <div class="flex items-center gap-2 flex-wrap mt-2 sm:mt-0">
                     <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border p-1.5 rounded text-xs w-32 outline-none">
+                    <button type="button" onclick="bulkUpdateAccountIds()" class="bg-orange-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🛠️ 批量修復舊代碼空白</button>
                     <button type="button" onclick="syncAllToSheets(this)" class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
                     <select id="filterStatus" onchange="renderInventory()" class="border p-1.5 rounded text-xs text-indigo-700 bg-indigo-50 outline-none"><option value="all">📦 全部</option><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
                     <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded text-xs outline-none"><option value="priceDesc">💰 高 ➔ 低</option><option value="priceAsc">💰 低 ➔ 高</option><option value="newest">🆕 最新</option></select>
