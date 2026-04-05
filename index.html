@@ -54,6 +54,27 @@
             renderInventory(); 
         });
 
+        // 🚀 新增：自動背景刷新試算表顏色的防呆機制
+        window.autoRefreshSheetColors = function() {
+            const sheetId = document.getElementById('googleSheetId').value.trim();
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
+            if(!sheetId || !scriptUrl || inventoryData.length === 0) return;
+
+            let soldIds = [];
+            let activeIds = [];
+            inventoryData.forEach(item => {
+                if(item.status === 'sold') soldIds.push(item.accountId);
+                else activeIds.push(item.accountId);
+            });
+
+            fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'refreshColors', id: sheetId, soldIds: soldIds, activeIds: activeIds })
+            }).catch(e => console.log(e));
+        };
+
         window.syncAllToSheets = async function(btn) {
             const filterStatus = document.getElementById('filterStatus')?.value || 'all';
             const sortMode = document.getElementById('sortMode')?.value || 'priceDesc';
@@ -144,15 +165,30 @@
 
             for(let i=1; i<=11; i++) newItem['chk_sp_'+i] = getChk('chk_sp_'+i);
 
+            const sheetId = document.getElementById('googleSheetId').value.trim(); 
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
+
             if (currentEditUid) {
                 const existingItem = inventoryData.find(i => i.uid === currentEditUid);
                 newItem.timestamp = existingItem ? existingItem.timestamp : Date.now();
                 update(ref(db, `inventory/${currentEditUid}`), newItem);
-                showMsg("✅ 帳號資料已更新！", "green");
-                const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
-                if(sheetId && scriptUrl) fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
+                showMsg("✅ 更新成功！觸發試算表防呆刷新...", "green");
+                
+                // 🚀 已精確修改：送出更新後，自動呼叫全局顏色刷新機制
+                if(sheetId && scriptUrl) {
+                    fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) })
+                    .then(() => setTimeout(window.autoRefreshSheetColors, 1500));
+                }
             } else {
-                newItem.timestamp = Date.now(); push(inventoryRef, newItem); showMsg("✅ 帳號已新增！", "green");
+                newItem.timestamp = Date.now(); 
+                push(inventoryRef, newItem); 
+                showMsg("✅ 新增成功！觸發試算表防呆刷新...", "green");
+                
+                // 🚀 已精確修改：送出新增後，自動呼叫全局顏色刷新機制
+                if(sheetId && scriptUrl) {
+                    fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) })
+                    .then(() => setTimeout(window.autoRefreshSheetColors, 1500));
+                }
             }
             window.resetForm();
         };
@@ -276,7 +312,7 @@
                 else return b.timestamp - a.timestamp;
             });
             displayData.forEach(item => {
-                const isS = item.status === 'sold'; const rC = isS ? 'bg-amber-50 opacity-80' : 'hover:bg-blue-50 bg-white'; const nR = document.createElement('tr'); nR.className = `${rC} border-b border-gray-100 transition duration-300`;
+                const isS = item.status === 'sold'; const rC = isS ? 'bg-yellow-200' : 'hover:bg-blue-50 bg-white'; const nR = document.createElement('tr'); nR.className = `${rC} border-b border-gray-100 transition duration-300`;
                 let tC = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
                 const sB = isS ? '<span class="ml-2 bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-bold border border-red-200">SOLD</span>' : '<span class="ml-2 bg-green-100 text-green-600 text-[10px] px-2 py-0.5 rounded-full font-bold border border-green-200">STOCK</span>';
                 
@@ -382,7 +418,7 @@
 請「永遠只提取右邊的總容量數字」（以此例為 1000）。絕對不要提取左邊的數字！不管左邊的值是什麼，永遠只輸出右邊的值。
 
 【🪙寶可幣(Pokecoin)數量辨識】（極重要防呆）：
-當看到遊戲「商店」的截圖時，畫面正上方會有一個「黃色皮卡丘圖案的圓形硬幣」圖示。請精準提取該黃色硬幣旁邊的數字，這就是「寶可幣總數」，並將其填入 \`coin\` 欄位中。
+當看到遊戲「商店」的截圖時，畫面正上方會有一個「黃色皮卡丘圖案的圓形硬幣」圖示。請精準提取該黃色硬幣旁邊的數字，這走到就是「寶可幣總數」，並將其填入 \`coin\` 欄位中。
 
 【🖼️背卡(Background)嚴格辨識】：
 請仔細辨識截圖中的分類標籤或圖示特徵：
@@ -639,7 +675,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             
             if(valid(v('st_masterball'))) res.push(`🩷大師球*${v('st_masterball')}`);
             if(valid(v('st_greenpass'))) res.push(`🩷綠票${v('st_greenpass')}張`); 
-            if(!isBelow60 && valid(v('st_rarecandy'))) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`); // ✅ 已精確修改此處
+            if(!isBelow60 && valid(v('st_rarecandy'))) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`); 
             if(valid(v('st_coin'))) res.push(`寶可幣 ${v('st_coin')}`); 
             if(valid(v('g_price'))) res.push(`💰價格 ${v('g_price')}`);
             
