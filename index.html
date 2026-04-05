@@ -639,7 +639,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             
             if(valid(v('st_masterball'))) res.push(`🩷大師球*${v('st_masterball')}`);
             if(valid(v('st_greenpass'))) res.push(`🩷綠票${v('st_greenpass')}張`); 
-            if(valid(v('st_rarecandy'))) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
+            if(!isBelow60 && valid(v('st_rarecandy'))) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`); // ✅ 已精確修改此處
             if(valid(v('st_coin'))) res.push(`寶可幣 ${v('st_coin')}`); 
             if(valid(v('g_price'))) res.push(`💰價格 ${v('g_price')}`);
             
