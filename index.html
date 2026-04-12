@@ -645,9 +645,31 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             if(checked('chk_kyogre')) res.push(`蓋歐卡根源波動`);
             if(checked('chk_rayquaza')) res.push(`烈空坐畫龍點睛`);
             
+            // ==========================================
+            // 🚀 核心修改區：精準判斷經驗與星塵的顯示邏輯
+            // ==========================================
+
             // 根據是否低於60等，決定是否顯示經驗與星塵
-            if(!isBelow60 && valid(v('g_xp'))) res.push(`經驗 ${v('g_xp')}萬`); 
-            if(!isBelow60 && valid(v('g_stardust'))) res.push(`星塵 ${v('g_stardust')}萬`);
+            if(!isBelow60 && valid(v('g_xp'))) {
+                const xpNum = parseFloat(v('g_xp'));
+                // 經驗少於100萬 (輸入值 < 100) 時不生成該行文案
+                if (xpNum >= 100) {
+                    res.push(`經驗 ${v('g_xp')}萬`);
+                }
+            }
+            
+            if(!isBelow60 && valid(v('g_stardust'))) {
+                const sdNum = parseFloat(v('g_stardust'));
+                // 星塵超過1億 (輸入值 >= 10000) 單位換成億
+                if (sdNum >= 10000) {
+                    const bNum = parseFloat((sdNum / 10000).toFixed(4)); // 自動過濾掉後面沒用的 0
+                    res.push(`星塵 ${bNum}億`);
+                } else {
+                    res.push(`星塵 ${v('g_stardust')}萬`);
+                }
+            }
+            
+            // ==========================================
             
             if(valid(v('st_hundo_leg'))) { let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
             if(valid(v('st_legend'))) res.push(`✅神獸總數${v('st_legend')}隻`); 
