@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢頂級帳號庫 - V89 2.5 Pro 代碼獨立版</title>
+    <title>寶可夢頂級帳號庫 - V90 2.5 Pro 區塊並排版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -696,7 +696,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V89 2.5 Pro 代碼獨立版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V90 2.5 Pro 區塊並排版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
@@ -737,10 +737,11 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                     <button type="button" onclick="window.copySimpleText('年16-20&傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">16-20神獸</button>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="bg-red-50/30 p-4 rounded-xl border border-red-100 space-y-3 shadow-sm">
-                        <label class="text-sm font-bold text-red-800 border-b border-red-200 block pb-1"><i class="fas fa-fire"></i> 特殊調查</label>
-                        <div class="grid grid-cols-2 lg:grid-cols-3 gap-2 text-[11px]">
+                <div class="grid grid-cols-2 gap-2 md:gap-4">
+                    
+                    <div class="bg-red-50/30 p-3 md:p-4 rounded-xl border border-red-100 space-y-3 shadow-sm">
+                        <label class="text-xs md:text-sm font-bold text-red-800 border-b border-red-200 block pb-1 truncate"><i class="fas fa-fire"></i> 特殊調查</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 text-[10px] md:text-[11px]">
                             <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label>
                             <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label>
                             <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_3" value="凱路迪歐">凱路迪歐</label>
@@ -755,28 +756,28 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                         </div>
                     </div>
 
-                    <div class="bg-purple-50/30 p-4 rounded-xl border border-purple-100 space-y-3 shadow-sm">
-                        <label class="text-sm font-bold text-purple-800 border-b border-purple-200 block pb-1"><i class="fas fa-dna"></i> 合體與 Mega</label>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                    <div class="bg-purple-50/30 p-3 md:p-4 rounded-xl border border-purple-100 space-y-3 shadow-sm">
+                        <label class="text-xs md:text-sm font-bold text-purple-800 border-b border-purple-200 block pb-1 truncate"><i class="fas fa-dna"></i> 合體與 Mega</label>
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-x-2 gap-y-2 text-[10px] md:text-[11px]">
                             <div class="space-y-1">
                                 <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label>
-                                <select id="sel_kyurem" class="dynamic-select hidden w-full p-1.5 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
+                                <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
                             </div>
                             <div class="space-y-1">
                                 <label class="flex items-center gap-1"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label>
-                                <select id="sel_dogs" class="dynamic-select hidden w-full p-1.5 border rounded bg-white"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select>
+                                <select id="sel_dogs" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select>
                             </div>
                             <div class="space-y-1">
-                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪合體</label>
-                                <select id="sel_necrozma" class="dynamic-select hidden w-full p-1.5 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪</label>
+                                <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
                             </div>
                             <div class="space-y-1">
                                 <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
-                                <select id="sel_lati" class="dynamic-select hidden w-full p-1.5 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
+                                <select id="sel_lati" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
                             </div>
                             <div class="space-y-1">
                                 <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
-                                <select id="sel_hoenn" class="dynamic-select hidden w-full p-1.5 border rounded bg-white">
+                                <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white">
                                     <option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option>
                                     <option value="⭐️豐原雙神可 Mega⭐️">豐原雙神可 Mega</option>
                                     <option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option>
