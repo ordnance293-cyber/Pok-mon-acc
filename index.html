@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>寶可夢頂級帳號庫 - V93 AI智能解析版</title>
+    <title>寶可夢頂級帳號庫 - V94 極致旗艦版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -410,7 +410,10 @@
 當看到遊戲「商店」的截圖時，畫面正上方會有一個「黃色皮卡丘圖案的圓形硬幣」圖示。請精準提取該黃色硬幣旁邊的數字，這就是「寶可幣總數」，並將其填入 \`coin\` 欄位中。
 
 【🎫入場券總數辨識(對應綠票欄位)】（極重要防呆）：
-當看到道具背包中標題為「入場券」的區域（如你提供的截圖，包含橘色、綠色、藍色等各式入場券），請將截圖中「所有種類的入場券數量」【全部加總】起來，並將這個「總和」填入 greenpass 欄位中。
+請仔細檢查截圖中是否有出現「橘色、綠色、藍色」的對戰入場券圖示（如特級對戰入場券、遠距團體戰入場券等）。
+1. 只要有看到入場券，請精準提取這些圖示「旁邊或下方」的持有數量。
+2. 將畫面上所有種類的入場券數量【全部加總】。
+3. 【嚴格要求】：greenpass 欄位「只能填寫純阿拉伯數字」，絕對不可填寫算式或文字（例如：算出來總和是 15，就只能填 15，絕對不可填 10+5 或 共15張）。如果不確定或沒看到，請直接留空。
 
 【🖼️背卡(Background)嚴格辨識】：
 請仔細辨識截圖中的分類標籤或圖示特徵：
@@ -515,7 +518,11 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 if(res.masterball) document.getElementById('st_masterball').value = parseNum(res.masterball) || res.masterball;
                 let rc = parseNum(res.rarecandy); if(!isNaN(rc) && rc >= 100) document.getElementById('st_rarecandy').value = rc;
                 let coin = parseNum(res.coin); if(!isNaN(coin)) document.getElementById('st_coin').value = coin;
-                let pass = parseNum(res.greenpass); if(!isNaN(pass) && pass >= 10) document.getElementById('st_greenpass').value = pass;
+                
+                // 讓綠票無條件填入輸入框，方便你檢查 AI 是否抓對
+                let pass = parseNum(res.greenpass); 
+                if(!isNaN(pass)) document.getElementById('st_greenpass').value = pass;
+                
                 if(res.poke_bag) document.getElementById('st_poke_bag').value = parseNum(res.poke_bag) || res.poke_bag;
                 if(res.item_bag) document.getElementById('st_item_bag').value = parseNum(res.item_bag) || res.item_bag;
 
@@ -680,7 +687,11 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             let ib = parseNum(v('st_item_bag')); if(!isNaN(ib) && ib >= 1000) res.push(`🎒道具背包 ${v('st_item_bag')}`);
             
             if(valid(v('st_masterball'))) res.push(`🩷大師球*${v('st_masterball')}`);
-            if(valid(v('st_greenpass'))) res.push(`🩷綠票${v('st_greenpass')}張`); 
+            
+            // 這裡才是決定「最終文案要不要顯示綠票」的地方（達到 10 張以上才印出）
+            let gp = parseNum(v('st_greenpass'));
+            if(!isNaN(gp) && gp >= 10) res.push(`🩷綠票${gp}張`); 
+            
             if(valid(v('st_rarecandy'))) res.push(`🩷神奇糖果 ${v('st_rarecandy')} 顆`);
             if(valid(v('st_coin'))) res.push(`寶可幣 ${v('st_coin')}`); 
             if(valid(v('g_price'))) res.push(`💰價格 ${v('g_price')}`);
@@ -704,7 +715,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 <body class="bg-gray-50 text-gray-800 min-h-screen">
     <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
-            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V93 AI智能解析版
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V94 極致旗艦版
         </h1>
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
