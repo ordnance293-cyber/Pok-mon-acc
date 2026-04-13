@@ -642,16 +642,21 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
             
             if(!isBelow60 && valid(v('g_xp'))) {
                 const xpNum = parseFloat(v('g_xp'));
-                if (xpNum >= 100) { res.push(`經驗 ${v('g_xp')}萬`); }
+                if (xpNum >= 10000) {
+                    const bNum = parseFloat((xpNum / 10000).toFixed(2));
+                    res.push(`經驗 ${bNum}億`);
+                } else if (xpNum >= 100) {
+                    res.push(`經驗 ${xpNum}萬`);
+                }
             }
             
             if(!isBelow60 && valid(v('g_stardust'))) {
                 const sdNum = parseFloat(v('g_stardust'));
                 if (sdNum >= 10000) {
-                    const bNum = parseFloat((sdNum / 10000).toFixed(4)); 
+                    const bNum = parseFloat((sdNum / 10000).toFixed(2)); 
                     res.push(`星塵 ${bNum}億`);
                 } else {
-                    res.push(`星塵 ${v('g_stardust')}萬`);
+                    res.push(`星塵 ${sdNum}萬`);
                 }
             }
             
