@@ -101,6 +101,31 @@
                     btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = isAlreadySold ? '🟡 補塗' : '💰 售出'; btn.disabled = false; }, 2000);
                 } catch(e) { btn.innerHTML = oldIcon; btn.disabled = false; }
             }
+            // 不論是首次售出或補塗，都跳出複製視窗
+            window.showCopyModal(accountId);
+        };
+
+        window.showCopyModal = function(accountId) {
+            const parts = accountId.split(';');
+            document.getElementById('modalAccount').value = parts[0] ? parts[0].trim() : accountId;
+            document.getElementById('modalPassword').value = parts[1] ? parts[1].trim() : '（無密碼）';
+            document.getElementById('copyModal').classList.remove('hidden');
+        };
+
+        window.copyModalField = function(fieldId, btn) {
+            const val = document.getElementById(fieldId).value;
+            if (val === '（無密碼）') return;
+            navigator.clipboard.writeText(val).catch(() => {
+                const area = document.getElementById('hiddenCopyArea');
+                area.style.display = 'block';
+                area.value = val;
+                area.select();
+                document.execCommand('copy');
+                area.style.display = 'none';
+            });
+            const old = btn.innerHTML;
+            btn.innerHTML = '✅ 已複製';
+            setTimeout(() => btn.innerHTML = old, 1500);
         };
 
         window.restoreAccount = async function(uid, accountId, btn) {
@@ -920,5 +945,32 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
         </div>
     </main>
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
+
+    <!-- 帳號密碼複製 Modal -->
+    <div id="copyModal" class="hidden fixed inset-0 bg-black/60 z-[200] flex items-center justify-center" onclick="if(event.target===this)document.getElementById('copyModal').classList.add('hidden')">
+      <div class="bg-white rounded-2xl shadow-2xl p-6 w-80 space-y-4">
+        <div class="flex justify-between items-center border-b pb-2">
+          <h3 class="font-bold text-gray-800 text-base">📋 帳號密碼</h3>
+          <button onclick="document.getElementById('copyModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs font-bold text-blue-700 mb-1 block">帳號</label>
+            <div class="flex gap-2">
+              <input id="modalAccount" type="text" readonly onclick="this.select()" class="flex-1 border border-blue-200 rounded-lg p-2 text-sm font-mono bg-blue-50 outline-none cursor-pointer">
+              <button onclick="window.copyModalField('modalAccount', this)" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold transition">複製</button>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-purple-700 mb-1 block">密碼</label>
+            <div class="flex gap-2">
+              <input id="modalPassword" type="text" readonly onclick="this.select()" class="flex-1 border border-purple-200 rounded-lg p-2 text-sm font-mono bg-purple-50 outline-none cursor-pointer">
+              <button onclick="window.copyModalField('modalPassword', this)" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg text-xs font-bold transition">複製</button>
+            </div>
+          </div>
+        </div>
+        <button onclick="document.getElementById('copyModal').classList.add('hidden')" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-xl text-sm font-bold transition">關閉</button>
+      </div>
+    </div>
 </body>
 </html>
