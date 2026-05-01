@@ -92,6 +92,7 @@
             if(!isAlreadySold) {
                 if(!confirm(`確定標記為售出？`)) return;
                 update(ref(db, `inventory/${uid}`), { status: 'sold' });
+                window.showCopyModal(accountId); // ✅ 首次售出時立刻跳出
             }
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
@@ -101,8 +102,7 @@
                     btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = isAlreadySold ? '🟡 補塗' : '💰 售出'; btn.disabled = false; }, 2000);
                 } catch(e) { btn.innerHTML = oldIcon; btn.disabled = false; }
             }
-            // 不論是首次售出或補塗，都跳出複製視窗
-            window.showCopyModal(accountId);
+            if(isAlreadySold) window.showCopyModal(accountId); // ✅ 補塗時跳出
         };
 
         window.showCopyModal = function(accountId) {
