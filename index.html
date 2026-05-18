@@ -28,14 +28,14 @@
         let inventoryData = [];
 
         window.addEventListener('DOMContentLoaded', () => {
-            ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
+            ['googleSheetId', 'gasUrl', 'openaiApiKey'].forEach(id => {
                 const savedValue = localStorage.getItem(id);
                 if (savedValue) document.getElementById(id).value = savedValue;
             });
         });
 
         window.saveSettings = function() {
-            ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
+            ['googleSheetId', 'gasUrl', 'openaiApiKey'].forEach(id => {
                 localStorage.setItem(id, document.getElementById(id).value.trim());
             });
             const btn = document.getElementById('saveBtn');
@@ -395,12 +395,12 @@
         };
 
         window.analyzeMultipleImages = async function() {
-            const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
+            const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
             if(!apiKey) { alert("請先在頂部貼上你的 API Key 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 2.5 Pro 解析中...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GPT-4o 解析中...';
             try {
-                let parts = [{ text: `你是一位非常精準的寶可夢GO數據分析官。
+                let content = [{ type: "text", text: `你是一位非常精準的寶可夢GO數據分析官。
 
 【🥇最高辨識優先策略 — 直接讀取圖上文字】（命名辨識最高優先權）：
 1. 若截圖是寶可夢清單畫面，且每隻寶可夢下方有顯示中文名稱文字，請「優先直接讀取該文字作為名稱」，這是第一判定來源。
@@ -505,12 +505,13 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                             }; img.src = e.target.result;
                         }; reader.readAsDataURL(files[i]);
                     });
-                    parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
+                    content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } });
                 }
                 
                 const payload = JSON.stringify({ 
-                    contents: [{ parts }],
-                    generationConfig: { responseMimeType: "application/json" }
+                    model: "gpt-4o",
+                    messages: [{ role: "user", content }],
+                    response_format: { type: "json_object" }
                 });
 
                 let res = null;
@@ -518,24 +519,26 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 
                 for (let attempt = 1; attempt <= maxRetries; attempt++) {
                     try {
-                        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, { 
+                        const resp = await fetch('https://api.openai.com/v1/chat/completions', { 
                             method: 'POST', 
-                            headers: { 'Content-Type': 'application/json' }, 
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, 
                             body: payload 
                         });
                         
                         if (!resp.ok) {
-                            if (resp.status === 503 && attempt < maxRetries) {
+                            if ((resp.status === 503 || resp.status === 429) && attempt < maxRetries) {
+                                const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
+                                const delay = retryAfter > 0 ? retryAfter * 1000 : 3500;
                                 aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 伺服器忙碌，自動重試 (${attempt}/${maxRetries})...`;
-                                await new Promise(resolve => setTimeout(resolve, 3500)); 
+                                await new Promise(resolve => setTimeout(resolve, delay)); 
                                 continue; 
                             }
                             const errData = await resp.text(); 
-                            throw new Error(`錯誤代碼 ${resp.status}\nGoogle 官方原因：${errData}`);
+                            throw new Error(`錯誤代碼 ${resp.status}\nOpenAI 官方原因：${errData}`);
                         }
 
                         const data = await resp.json(); 
-                        let rawText = data.candidates[0].content.parts[0].text;
+                        let rawText = data.choices[0].message.content;
                         let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim(); 
                         res = JSON.parse(cleanText);
                         break; 
@@ -616,7 +619,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 
         window.resetForm = function() {
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
-                if(!['googleSheetId','gasUrl','geminiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
+                if(!['googleSheetId','gasUrl','openaiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
                     if(el.type === 'checkbox') el.checked = false; 
                     else if(el.tagName === 'SELECT') el.selectedIndex = 0; 
                     else el.value = ''; 
@@ -770,7 +773,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
             <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
-            <input type="password" id="geminiApiKey" placeholder="API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 outline-none">
+            <input type="password" id="openaiApiKey" placeholder="OpenAI API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 outline-none">
             <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm">💾 儲存設定</button>
         </div>
     </header>
