@@ -105,6 +105,32 @@
             if(isAlreadySold) window.showCopyModal(accountId); // ✅ 補塗時跳出
         };
 
+
+        window.bulkMarkAsSold = async function(btn) {
+            const soldItems = inventoryData.filter(item => item.status === 'sold');
+            if (soldItems.length === 0) { alert('目前沒有已售出的帳號可補塗'); return; }
+            if (!confirm(`確定要對全部 ${soldItems.length} 筆已售出帳號進行補塗同步嗎？\n（不會再次跳出帳號密碼視窗）`)) return;
+
+            const sheetId = document.getElementById('googleSheetId').value.trim();
+            const scriptUrl = document.getElementById('gasUrl').value.trim();
+            const oldText = btn.innerHTML;
+            btn.disabled = true;
+
+            let done = 0;
+            for (const item of soldItems) {
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 補塗中 ${done}/${soldItems.length}`;
+                try {
+                    if (sheetId && scriptUrl) {
+                        await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sold', id: sheetId, accountId: item.accountId }) });
+                    }
+                } catch(e) {}
+                done++;
+            }
+
+            btn.innerHTML = `✅ 補塗完成 ${done} 筆`;
+            setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
+        };
+
         window.showCopyModal = function(accountId) {
             const parts = accountId.split(';');
             document.getElementById('modalAccount').value = parts[0] ? parts[0].trim() : accountId;
@@ -958,6 +984,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 <div class="flex items-center gap-2 flex-wrap mt-2 sm:mt-0">
                     <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border p-1.5 rounded text-xs w-32 outline-none">
                     <button type="button" onclick="bulkUpdateAccountIds()" class="bg-orange-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🛠️ 批量修復舊代碼空白</button>
+                    <button type="button" onclick="window.bulkMarkAsSold(this)" class="bg-amber-400 text-gray-900 px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🟡 一鍵補塗全部</button>
                     <button type="button" onclick="syncAllToSheets(this)" class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
                     <select id="filterStatus" onchange="renderInventory()" class="border p-1.5 rounded text-xs text-indigo-700 bg-indigo-50 outline-none"><option value="all">📦 全部</option><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
                     <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded text-xs outline-none"><option value="priceDesc">💰 高 ➔ 低</option><option value="priceAsc">💰 低 ➔ 高</option><option value="newest">🆕 最新</option></select>
