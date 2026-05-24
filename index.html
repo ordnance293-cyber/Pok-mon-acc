@@ -115,16 +115,18 @@
             const scriptUrl = document.getElementById('gasUrl').value.trim();
             const oldText = btn.innerHTML;
             btn.disabled = true;
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 補塗中 0/${soldItems.length}`;
 
             let done = 0;
-            for (const item of soldItems) {
+            const BATCH = 10;
+            for (let i = 0; i < soldItems.length; i += BATCH) {
+                const batch = soldItems.slice(i, i + BATCH);
+                await Promise.all(batch.map(item => {
+                    if (!sheetId || !scriptUrl) return Promise.resolve();
+                    return fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sold', id: sheetId, accountId: item.accountId }) }).catch(() => {});
+                }));
+                done += batch.length;
                 btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 補塗中 ${done}/${soldItems.length}`;
-                try {
-                    if (sheetId && scriptUrl) {
-                        await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sold', id: sheetId, accountId: item.accountId }) });
-                    }
-                } catch(e) {}
-                done++;
             }
 
             btn.innerHTML = `✅ 補塗完成 ${done} 筆`;
