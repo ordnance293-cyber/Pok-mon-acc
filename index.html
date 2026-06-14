@@ -457,56 +457,77 @@
         const SHINY_FILTER = '異色';
         const COSTUME_FILTER = '活動';
         const AI_BUTTON_LABEL = '🤖 AI 解析';
+        const AI_SUCCESS_LABEL = '合併完成';
         const OPENAI_JSON_SCHEMA = {
-            name: 'pokemon_go_inventory_parse',
+            name: 'pokemon_go_precise_image_result',
             strict: true,
             schema: {
                 type: 'object',
                 additionalProperties: false,
                 properties: {
-                    team: { type: 'string' },
-                    god_total: { type: 'string' },
-                    perfect_god: { type: 'string' },
-                    shiny_god: { type: 'string' },
-                    year_16_20: { type: 'string' },
-                    year_16_20_god: { type: 'string' },
-                    master_ball: { type: 'string' },
-                    special_background: { type: 'string' },
-                    pokemon_bag: { type: 'string' },
-                    item_bag: { type: 'string' },
-                    hundred_list: { type: 'string' },
-                    rare_list: { type: 'string' },
+                    image_type: {
+                        type: 'string',
+                        enum: [
+                            'category_overview',
+                            'search_legendary_total',
+                            'search_hundo_legendary',
+                            'search_shiny_legendary',
+                            'search_shiny_total',
+                            'search_costume_total',
+                            'other'
+                        ]
+                    },
+                    search_query: { type: 'string' },
                     legendary: { type: 'string' },
+                    hundo_leg: { type: 'string' },
                     shiny: { type: 'string' },
+                    shiny_leg: { type: 'string' },
                     costume: { type: 'string' },
                     bg_comm: { type: 'string' },
                     bg_special: { type: 'string' },
                     dyna: { type: 'string' },
                     giga: { type: 'string' },
                     perfect: { type: 'string' },
-                    old_poke: { type: 'string' },
-                    old_leg: { type: 'string' },
-                    hundo_leg: { type: 'string' },
-                    hundred_source_filter: { type: 'string' },
-                    shiny_leg: { type: 'string' },
                     pokemon_list: { type: 'string' },
-                    masterball: { type: 'string' },
-                    rarecandy: { type: 'string' },
-                    coin: { type: 'string' },
-                    greenpass: { type: 'string' },
-                    poke_bag: { type: 'string' },
-                    level: { type: 'string' },
-                    stardust: { type: 'string' },
-                    xp: { type: 'string' }
                 },
                 required: [
-                    'team', 'god_total', 'perfect_god', 'shiny_god', 'year_16_20', 'year_16_20_god',
-                    'master_ball', 'special_background', 'pokemon_bag', 'item_bag', 'hundred_list', 'rare_list',
-                    'legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
-                    'old_poke', 'old_leg', 'hundo_leg', 'hundred_source_filter', 'shiny_leg', 'pokemon_list', 'masterball', 'rarecandy',
-                    'coin', 'greenpass', 'poke_bag', 'level', 'stardust', 'xp'
+                    'image_type', 'search_query', 'legendary', 'hundo_leg', 'shiny', 'shiny_leg',
+                    'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'pokemon_list'
                 ]
             }
+        };
+        const AI_IMAGE_TYPES = new Set([
+            'category_overview',
+            'search_legendary_total',
+            'search_hundo_legendary',
+            'search_shiny_legendary',
+            'search_shiny_total',
+            'search_costume_total',
+            'other'
+        ]);
+        const AI_IMAGE_RESULT_FIELDS = [
+            'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'
+        ];
+        const AI_IMAGE_TYPE_ALLOWED_FIELDS = {
+            category_overview: ['legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            search_legendary_total: ['legendary'],
+            search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
+            search_shiny_legendary: ['shiny_leg'],
+            search_shiny_total: ['shiny'],
+            search_costume_total: ['costume'],
+            other: []
+        };
+        const AI_FIELD_SOURCE_PRIORITY = {
+            legendary: { category_overview: 1, search_legendary_total: 2 },
+            shiny: { category_overview: 1, search_shiny_total: 2 },
+            hundo_leg: { search_hundo_legendary: 1 },
+            shiny_leg: { search_shiny_legendary: 1 },
+            costume: { category_overview: 1, search_costume_total: 2 },
+            bg_comm: { category_overview: 1 },
+            bg_special: { category_overview: 1 },
+            dyna: { category_overview: 1 },
+            giga: { category_overview: 1 },
+            perfect: { category_overview: 1 }
         };
 
         const parseOpenAIMessageContent = (data) => {
@@ -528,7 +549,7 @@
             return JSON.parse(cleanText);
         };
 
-        const SCREEN_COUNT_FIELDS = ['legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'old_poke', 'old_leg'];
+        const SCREEN_COUNT_FIELDS = ['legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'];
         const ANALYSIS_RESULT_FIELD_TO_INPUT = {
             legendary: 'st_legend',
             hundo_leg: 'st_hundo_leg',
@@ -539,9 +560,7 @@
             bg_special: 'st_bg_special',
             dyna: 'st_dyna',
             giga: 'st_giga',
-            perfect: 'st_perfect',
-            old_poke: 'st_old_poke',
-            old_leg: 'st_old_leg'
+            perfect: 'st_perfect'
         };
 
         const extractSingleNumber = (value) => {
@@ -606,7 +625,40 @@
             }).join(',');
         };
 
-        const isExactHundredSource = (value) => String(value || '').trim() === HUNDO_LEGENDARY_FILTER;
+        const normalizeSearchQuery = (value) => String(value || '').trim().replace(/\s+/g, '');
+
+        const buildEmptyAiResult = () => ({
+            image_type: 'other',
+            search_query: '',
+            legendary: '',
+            hundo_leg: '',
+            shiny: '',
+            shiny_leg: '',
+            costume: '',
+            bg_comm: '',
+            bg_special: '',
+            dyna: '',
+            giga: '',
+            perfect: '',
+            pokemon_list: ''
+        });
+
+        const inferImageTypeFromSearchQuery = (searchQuery) => {
+            switch (searchQuery) {
+                case LEGENDARY_FILTER:
+                    return 'search_legendary_total';
+                case HUNDO_LEGENDARY_FILTER:
+                    return 'search_hundo_legendary';
+                case SHINY_LEGENDARY_FILTER:
+                    return 'search_shiny_legendary';
+                case SHINY_FILTER:
+                    return 'search_shiny_total';
+                case COSTUME_FILTER:
+                    return 'search_costume_total';
+                default:
+                    return '';
+            }
+        };
 
         const mergeUniqueTextValues = (currentValue, incomingValue, splitter, joiner) => {
             const values = [currentValue, incomingValue]
@@ -617,227 +669,160 @@
         };
 
         const normalizeAiResult = (result = {}) => {
-            const pick = (...keys) => {
-                for (const key of keys) {
-                    const value = result?.[key];
-                    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
-                }
-                return '';
-            };
+            const normalized = buildEmptyAiResult();
+            const rawImageType = AI_IMAGE_TYPES.has(String(result?.image_type || '').trim()) ? String(result.image_type).trim() : 'other';
+            normalized.search_query = normalizeSearchQuery(result?.search_query);
 
-            const normalized = {
-                ...result,
-                legendary: pick('legendary', 'god_total'),
-                hundo_leg: pick('hundo_leg', 'perfect_god'),
-                shiny_leg: pick('shiny_leg', 'shiny_god'),
-                old_poke: pick('old_poke', 'year_16_20'),
-                old_leg: pick('old_leg', 'year_16_20_god'),
-                masterball: pick('masterball', 'master_ball'),
-                bg_special: pick('bg_special', 'special_background'),
-                poke_bag: pick('poke_bag', 'pokemon_bag'),
-                item_bag: pick('item_bag'),
-                pokemon_list: pick('pokemon_list', 'hundred_list'),
-                rare_list: pick('rare_list'),
-                hundred_source_filter: pick('hundred_source_filter')
-            };
+            const inferredType = inferImageTypeFromSearchQuery(normalized.search_query);
+            normalized.image_type = inferredType || rawImageType;
+            if (rawImageType.startsWith('search_') && !inferredType) {
+                normalized.image_type = 'other';
+            }
 
-            SCREEN_COUNT_FIELDS.forEach(field => {
-                normalized[field] = extractSingleNumber(normalized[field]);
+            AI_IMAGE_RESULT_FIELDS.forEach(field => {
+                normalized[field] = extractSingleNumber(result?.[field]);
+            });
+            normalized.pokemon_list = normalizePokemonList(result?.pokemon_list);
+
+            const allowedFields = new Set(AI_IMAGE_TYPE_ALLOWED_FIELDS[normalized.image_type] || []);
+            [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'].forEach(field => {
+                if (!allowedFields.has(field)) normalized[field] = '';
             });
 
-            normalized.pokemon_list = normalizePokemonList(normalized.pokemon_list);
-            if (!isExactHundredSource(normalized.hundred_source_filter)) {
-                normalized.pokemon_list = '';
-                normalized.hundo_leg = '';
-                normalized.hundred_source_filter = '';
-            }
-            normalized.hundred_list = normalized.pokemon_list;
-            normalized.legendary = normalized.legendary || '';
-            normalized.hundo_leg = normalized.hundo_leg || '';
-            normalized.shiny_leg = normalized.shiny_leg || '';
-            normalized.old_poke = normalized.old_poke || '';
-            normalized.old_leg = normalized.old_leg || '';
-            normalized.god_total = normalized.legendary;
-            normalized.perfect_god = normalized.hundo_leg;
-            normalized.shiny_god = normalized.shiny_leg;
-            normalized.year_16_20 = normalized.old_poke;
-            normalized.year_16_20_god = normalized.old_leg;
-            normalized.master_ball = pick('master_ball', 'masterball');
-            normalized.special_background = normalized.bg_special || '';
-            normalized.pokemon_bag = pick('pokemon_bag', 'poke_bag');
             return normalized;
         };
 
         const mergeAiResults = (results = []) => {
-            const merged = {};
+            const merged = buildEmptyAiResult();
+            const fieldSources = {};
+
+            const assignPreferred = (field, value, imageType) => {
+                const normalizedValue = String(value || '').trim();
+                if (!normalizedValue) return;
+                const currentSource = fieldSources[field] || '';
+                const currentPriority = AI_FIELD_SOURCE_PRIORITY[field]?.[currentSource] || 0;
+                const nextPriority = AI_FIELD_SOURCE_PRIORITY[field]?.[imageType] || 0;
+                if (!merged[field] || nextPriority > currentPriority) {
+                    merged[field] = normalizedValue;
+                    fieldSources[field] = imageType;
+                }
+            };
 
             results.forEach(rawResult => {
                 const result = normalizeAiResult(rawResult);
-                const assignIfEmpty = (field) => {
-                    if (merged[field] !== undefined && String(merged[field]).trim() !== '') return;
-                    const value = String(result?.[field] || '').trim();
-                    if (value) merged[field] = value;
-                };
 
-                assignIfEmpty('team');
-                assignIfEmpty('legendary');
-                assignIfEmpty('shiny');
-                assignIfEmpty('shiny_leg');
-                assignIfEmpty('costume');
-                assignIfEmpty('bg_comm');
-                assignIfEmpty('bg_special');
-                assignIfEmpty('dyna');
-                assignIfEmpty('giga');
-                assignIfEmpty('perfect');
-                assignIfEmpty('old_poke');
-                assignIfEmpty('old_leg');
-                assignIfEmpty('masterball');
-                assignIfEmpty('rarecandy');
-                assignIfEmpty('coin');
-                assignIfEmpty('greenpass');
-                assignIfEmpty('poke_bag');
-                assignIfEmpty('item_bag');
-                assignIfEmpty('level');
-                assignIfEmpty('stardust');
-                assignIfEmpty('xp');
+                assignPreferred('legendary', result.legendary, result.image_type);
+                assignPreferred('shiny', result.shiny, result.image_type);
+                assignPreferred('shiny_leg', result.shiny_leg, result.image_type);
+                assignPreferred('costume', result.costume, result.image_type);
+                assignPreferred('bg_comm', result.bg_comm, result.image_type);
+                assignPreferred('bg_special', result.bg_special, result.image_type);
+                assignPreferred('dyna', result.dyna, result.image_type);
+                assignPreferred('giga', result.giga, result.image_type);
+                assignPreferred('perfect', result.perfect, result.image_type);
 
-                if (result.rare_list) {
-                    merged.rare_list = mergeUniqueTextValues(merged.rare_list, result.rare_list, /\n+/, '\n');
-                }
-
-                if (isExactHundredSource(result.hundred_source_filter)) {
-                    if (result.hundo_leg) merged.hundo_leg = result.hundo_leg;
+                if (result.image_type === 'search_hundo_legendary') {
+                    assignPreferred('hundo_leg', result.hundo_leg, result.image_type);
                     if (result.pokemon_list) {
                         const combinedList = [merged.pokemon_list, result.pokemon_list].filter(Boolean).join(',');
                         merged.pokemon_list = normalizePokemonList(combinedList);
-                        merged.hundred_list = merged.pokemon_list;
                     }
-                    merged.hundred_source_filter = HUNDO_LEGENDARY_FILTER;
                 }
             });
 
-            return normalizeAiResult(merged);
+            return merged;
         };
 
-        const buildAiPrompt = () => `你是寶可夢 GO 截圖資料擷取器。這次會一次收到多張截圖。你必須先逐張判斷每張圖的頁面類型與可讀內容，再合併成最後唯一一份 JSON。只能根據圖片中明確可見的文字、數字與圖示輸出；禁止自行推算、禁止跨圖加總、禁止猜測。不確定就留空字串。
+        const buildAiPrompt = () => `你是寶可夢 GO 截圖資料擷取器。這次只會收到 1 張圖片，你只能判斷「這一張圖」，禁止假設其他圖片存在，禁止跨圖合併，禁止自行加總，禁止猜測。不確定就留空字串。
 
-【多圖合併最高原則】
-1. 先逐張判斷，再輸出最後唯一一份合併 JSON。
-2. 有值的欄位不可被其他沒有該欄位的圖片覆蓋成空字串。
-3. 數字欄位只有在某張圖中明確看見數字時才可填。
-4. pokemon_list / hundred_list / hundred_source_filter 只有合法百神來源圖可更新；其他圖片不可新增也不可清空。
-5. 最終只輸出一份合併後 JSON，不要輸出逐張 JSON，不要輸出陣列。
+【輸出格式】
+只輸出 1 份 JSON，欄位固定為：
+{
+  "image_type": "",
+  "search_query": "",
+  "legendary": "",
+  "hundo_leg": "",
+  "shiny": "",
+  "shiny_leg": "",
+  "costume": "",
+  "bg_comm": "",
+  "bg_special": "",
+  "dyna": "",
+  "giga": "",
+  "perfect": "",
+  "pokemon_list": ""
+}
 
-【最高原則：統計數字】
-1. 只要畫面存在明確數字，永遠使用畫面數字。
-2. 統計欄位 legendary、hundo_leg、shiny、shiny_leg、costume、bg_comm、bg_special、dyna、giga、perfect、old_poke、old_leg 只能讀取某一張截圖中的畫面數字。
-3. 禁止用 pokemon_list 推算任何統計欄位。
-4. 禁止自行加總、禁止輸出算式、禁止猜測。
-5. 數字來源優先級：
-   - 搜尋結果頁頂部數字
-   - 分類總覽頁標籤下方數字
-   - 若以上都沒有明確數字，統計欄位直接留空，不可回推。
+image_type 只能是：
+- category_overview
+- search_legendary_total
+- search_hundo_legendary
+- search_shiny_legendary
+- search_shiny_total
+- search_costume_total
+- other
 
-【寶可夢名稱規則】
-1. 若畫面已有中文名稱，直接使用畫面名稱。
-2. 普通型態請直接輸出原名稱，例如：固拉多、蓋歐卡、酋雷姆。
-3. 不可自行發明俗名、錯別字、簡體字或額外後綴。
+【單張圖判斷規則】
+1. 搜尋欄完全符合「${LEGENDARY_FILTER}」
+   - image_type = search_legendary_total
+   - search_query = ${LEGENDARY_FILTER}
+   - legendary = 頂部數字
 
-【異色 / 暗影 / 淨化】
-1. 只有當寶可夢左上角明確出現異色星星時，才可在名稱前加「色違」。
-2. 只有當寶可夢身旁明確出現紫色暗影火焰時，才可在名稱前加「暗影」。
-3. 同時有異色星星與暗影火焰時，輸出格式必須是「色違暗影 + 名稱」。
-4. 淨化圖示只用來輔助辨識；輸出名稱時永遠忽略淨化狀態，絕對不可輸出「淨化」二字。
-5. 範例：色違固拉多、暗影蓋歐卡、色違暗影固拉多。
+2. 搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」
+   - image_type = search_hundo_legendary
+   - search_query = ${HUNDO_LEGENDARY_FILTER}
+   - hundo_leg = 頂部數字
+   - pokemon_list = 只列出這張圖畫面中實際看得到的寶可夢清單
 
-【百神清單唯一合法來源】
-1. 只有當某一張截圖的搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可填 pokemon_list、hundred_list、hundo_leg、hundred_source_filter。
-2. 如果某一張截圖的搜尋欄不是「${HUNDO_LEGENDARY_FILTER}」，該張圖對 pokemon_list、hundred_list、hundo_leg、hundred_source_filter 的貢獻一律視為空字串。
-3. 只有當你真的看見搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可掃描該張搜尋結果頁中的寶可夢來生成 pokemon_list / hundred_list，並讀取同一張搜尋結果頁頂部數字作為 hundo_leg。
-4. 除了完全符合「${HUNDO_LEGENDARY_FILTER}」以外，以下情況都禁止產生百神清單：異色、暗影、淨化、分類總覽頁、一般傳說搜尋頁、以及任何其他不完全相同的搜尋條件。
-5. hundred_source_filter 只有在合法來源成立時，才填入完全相同的字串「${HUNDO_LEGENDARY_FILTER}」；其他任何情況都必須留空字串。
+3. 搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」
+   - image_type = search_shiny_legendary
+   - search_query = ${SHINY_LEGENDARY_FILTER}
+   - shiny_leg = 頂部數字
 
-【百神清單 pokemon_list / hundred_list 格式】
-1. 必須逐格掃描，由上到下、由左到右，不可遺漏。
-2. 同名出現多次時，合併為「名稱*數量」。
-3. 單隻不可加「*1」。
-4. 輸出格式必須是單行字串，例如「固拉多,蓋歐卡,鳳王*2,雷吉奇卡斯*4」。
-5. 只能使用半形逗號分隔，不可換行、不可加空格、不可輸出 JSON array、不可輸出項目符號。
-6. pokemon_list 只整理清單內容，不可回填任何統計欄位。
-7. hundred_list 必須與 pokemon_list 完全相同。
+4. 搜尋欄完全符合「${SHINY_FILTER}」
+   - image_type = search_shiny_total
+   - search_query = ${SHINY_FILTER}
+   - shiny = 頂部數字
 
-【暗影 / 淨化名稱規則】
-1. 只有在合法的百神來源截圖中，若單隻寶可夢明確帶有暗影火焰，pokemon_list 名稱才可加上「暗影」前綴。
-2. 淨化圖示只用來輔助辨識；pokemon_list 名稱中仍然不可輸出「淨化」。
-3. 暗影、淨化都不可新增任何統計欄位。
-4. 不要新增 shadow_total。
-5. 不要新增 purified_total。
+5. 搜尋欄完全符合「${COSTUME_FILTER}」
+   - image_type = search_costume_total
+   - search_query = ${COSTUME_FILTER}
+   - costume = 頂部數字
 
-【分類總覽頁】
-1. 如果這一張截圖是圓形分類圖示頁，請讀取分類圖示下方數字。
-2. 傳說 → legendary
-3. 異色 → shiny
-4. 活動 → costume
-5. 紀念背卡 → bg_comm
-6. 特別背卡 → bg_special
-7. 極巨化 → dyna
-8. 超極巨化 → giga
-9. 完美 → perfect
-10. 暗影、淨化不要填，因為沒有對應欄位。
+6. 分類總覽頁
+   - image_type = category_overview
+   - search_query = 空字串
+   - 讀取：
+     異色 → shiny
+     活動 → costume
+     紀念背卡 → bg_comm
+     特別背卡 → bg_special
+     極巨化 → dyna
+     超極巨化 → giga
+     完美 → perfect
+     傳說 → legendary
 
-【搜尋結果頁】
-1. 搜尋欄完全等於「${LEGENDARY_FILTER}」時，讀取頂部數字填入 legendary。
-2. 搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，讀取頂部數字填入 hundo_leg；且只有這一種情況可以產生 pokemon_list / hundred_list / hundred_source_filter。
-3. 搜尋欄完全等於「${SHINY_LEGENDARY_FILTER}」時，讀取頂部數字填入 shiny_leg。這是「色違神」，只能填 shiny_leg，禁止填 shiny，禁止填 pokemon_list，禁止填 hundo_leg，禁止使用分類總覽頁的異色數字代替。
-4. 搜尋欄完全等於「${SHINY_FILTER}」時，讀取頂部數字填入 shiny。這是「色違總」，不是 shiny_leg。
-5. 搜尋欄完全等於「${COSTUME_FILTER}」時，讀取頂部數字填入 costume。
+7. 其他任何圖片
+   - image_type = other
+   - 除了 search_query 之外，其餘欄位都留空字串
 
-【指定統計欄位】
-1. legendary：搜尋欄完全等於「${LEGENDARY_FILTER}」時，讀取頂部數字；若是分類總覽頁出現「傳說」，則讀取其下方數字。
-2. hundo_leg：只有搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，讀取頂部數字。
-3. shiny_leg：只有搜尋欄完全等於「${SHINY_LEGENDARY_FILTER}」時，讀取頂部數字。
-4. shiny：搜尋欄完全等於「${SHINY_FILTER}」時，讀取頂部數字；若是分類總覽頁出現「異色」，則讀取其下方數字。
-5. costume：搜尋欄完全等於「${COSTUME_FILTER}」時，讀取頂部數字；若是分類總覽頁出現「活動」，則讀取其下方數字。
-6. bg_comm：分類頁出現「紀念背卡」時，讀取其下方數字。
-7. bg_special：分類頁出現「特別背卡」時，讀取其下方數字。
-8. dyna：分類頁出現「極巨化」時，讀取其下方數字。
-9. giga：分類頁出現「超極巨化」時，讀取其下方數字。
-10. perfect：分類頁出現「完美」時，讀取其下方數字。
-11. old_poke：只有搜尋欄完全等於「年16-20」時，讀取頂部數字。
-12. old_leg：只有搜尋欄完全等於「年16-20&傳說的寶可夢,幻,究極異獸」時，讀取頂部數字。
+【pokemon_list 規則】
+1. pokemon_list 只能在 image_type = search_hundo_legendary 時填入，其餘情況必須留空字串。
+2. 只列這張圖中實際看得到的寶可夢，不可推測畫面外內容。
+3. 由上到下、由左到右讀取。
+4. 同名出現多次時，合併為「名稱*數量」。
+5. 單隻不可加「*1」。
+6. 只能用半形逗號分隔，例如「固拉多,蓋歐卡,鳳王*2」。
+7. 若寶可夢明確同時有異色與暗影，名稱可寫成「色違暗影名稱」；若只有暗影，寫成「暗影名稱」；絕對不可輸出「淨化」。
 
-【既有數值欄位】
-1. team：訓練家個人檔案背景偏黃/紅/藍，分別填黃隊/紅隊/藍隊。
-2. level：讀取個人檔案左下方「等級」的大數字。
-3. xp：若畫面為「目前經驗值 / 目標經驗值」，只取斜線左邊的目前經驗值。
-4. poke_bag、item_bag：若畫面為「目前數量 / 總容量」，只取斜線右邊的總容量。
-5. coin：讀取商店畫面上方黃色硬幣旁數字。
-6. masterball、rarecandy、greenpass：只有畫面上有明確單一數字時才填。禁止將多個數字相加，禁止輸出算式。
-7. stardust：讀取畫面中的星塵總數。
-
-【客製化型態規則】
-1. 蒼響只有明確叼劍時才命名為「蒼響劍盾型態」，否則維持「蒼響」。
-2. 藏瑪然特只有明確持盾時才命名為「藏瑪然特劍盾型態」，否則維持「藏瑪然特」。
-3. 奈克洛茲瑪金色獅子外觀為「奈克洛茲瑪日獅型態」，雙翼蝙蝠外觀為「奈克洛茲瑪月亮型態」，普通黑色結晶外觀維持「奈克洛茲瑪」。
-4. 酋雷姆黑色閃電合體為「闇黑酋雷姆」，白色火焰合體為「焰白酋雷姆」，普通灰色外觀維持「酋雷姆」。
-5. 基格爾德巨大機器人外觀為「完全體基格爾德」，其餘蛇/狗型態維持「基格爾德」。
-
-【稀有清單】
-rare_list 只有在截圖中能明確辨識出值得獨立標註的稀有寶可夢時才填；不確定就留空。
-
-【同值欄位同步】
-perfect_god = hundo_leg
-god_total = legendary
-shiny_god = shiny_leg
-year_16_20 = old_poke
-year_16_20_god = old_leg
-master_ball = masterball
-special_background = bg_special
-pokemon_bag = poke_bag
+【數字規則】
+1. 只能使用這一張圖中明確可見的數字。
+2. 禁止自行計算、禁止輸出算式、禁止從 pokemon_list 回推數量。
+3. 沒看到就填空字串。
 
 【輸出要求】
 1. 只輸出乾淨 JSON。
-2. 所有欄位都必須存在，沒看到就填空字串。
+2. 所有欄位都必須存在。
 3. 不要 Markdown、不要 code fence、不要額外說明。`;
 
         const fileToResizedDataUrl = (file) => new Promise(resolve => {
@@ -865,18 +850,18 @@ pokemon_bag = poke_bag
             reader.readAsDataURL(file);
         });
 
-        const buildAiRequestContent = (dataUrls = []) => ([
+        const buildAiRequestContent = (dataUrl) => ([
             { type: 'text', text: buildAiPrompt() },
-            ...dataUrls.map(url => ({ type: 'image_url', image_url: { url, detail: 'high' } }))
+            { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
         ]);
 
-        const requestMultiImageAnalysis = async (apiKey, dataUrls, statusUpdater) => {
+        const requestSingleImageAnalysis = async (apiKey, dataUrl, statusUpdater) => {
             const payload = JSON.stringify({
                 model: OPENAI_MODEL,
                 temperature: 0.1,
                 messages: [{
                     role: 'user',
-                    content: buildAiRequestContent(dataUrls)
+                    content: buildAiRequestContent(dataUrl)
                 }],
                 response_format: {
                     type: 'json_schema',
@@ -900,7 +885,7 @@ pokemon_bag = poke_bag
                         if ((resp.status === 429 || resp.status >= 500) && attempt < maxRetries) {
                             const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
                             const delay = retryAfter > 0 ? retryAfter * 1000 : 3500;
-                            statusUpdater?.(`GPT 忙碌中，自動重試 (${attempt}/${maxRetries})...`);
+                            statusUpdater?.(attempt, maxRetries);
                             await new Promise(resolve => setTimeout(resolve, delay));
                             continue;
                         }
@@ -915,68 +900,28 @@ pokemon_bag = poke_bag
                 }
             }
 
-            return normalizeAiResult({});
+            return buildEmptyAiResult();
         };
 
         const applyAiResultToForm = (result = {}) => {
-            const res = normalizeAiResult(result);
+            const res = {
+                ...buildEmptyAiResult(),
+                ...result
+            };
             const setInputValueIfPresent = (id, value) => {
                 const normalizedValue = String(value || '').trim();
                 if (!normalizedValue) return;
                 document.getElementById(id).value = normalizedValue;
             };
 
-            if (res.team && ['藍隊', '紅隊', '黃隊'].includes(res.team)) {
-                document.getElementById('g_team').value = res.team;
-                highlightInput('g_team');
-            }
-
-            if (res.rare_list) {
-                document.getElementById('g_rare_list').value = res.rare_list;
-            }
-
-            if (isExactHundredSource(res.hundred_source_filter)) {
+            if (res.pokemon_list) {
                 setInputValueIfPresent('g_hundos', res.pokemon_list);
-                setInputValueIfPresent(ANALYSIS_RESULT_FIELD_TO_INPUT.hundo_leg, res.hundo_leg);
+                window.updateHundoCount();
             }
 
             Object.entries(ANALYSIS_RESULT_FIELD_TO_INPUT).forEach(([field, inputId]) => {
-                if (field === 'hundo_leg') return;
                 setInputValueIfPresent(inputId, res[field]);
             });
-
-            const masterball = extractSingleNumber(res.masterball);
-            if (masterball) document.getElementById('st_masterball').value = masterball;
-            const rc = extractSingleNumber(res.rarecandy);
-            if (rc && parseInt(rc, 10) >= 100) document.getElementById('st_rarecandy').value = rc;
-            const coin = extractSingleNumber(res.coin);
-            if (coin) document.getElementById('st_coin').value = coin;
-
-            // 綠票只接受畫面中明確單一數字，禁止把 AI 算式或自行加總結果灌進表單。
-            const pass = extractSingleNumber(res.greenpass);
-            if (pass) document.getElementById('st_greenpass').value = pass;
-
-            const pokeBag = extractSlashSideNumber(res.poke_bag, 'right');
-            const itemBag = extractSlashSideNumber(res.item_bag, 'right');
-            if (pokeBag) document.getElementById('st_poke_bag').value = pokeBag;
-            if (itemBag) document.getElementById('st_item_bag').value = itemBag;
-
-            const level = extractSingleNumber(res.level);
-            const stardust = extractSingleNumber(res.stardust);
-            const xp = extractSlashSideNumber(res.xp, 'left');
-
-            if (level) {
-                document.getElementById('g_level').value = level;
-                highlightInput('g_level');
-            }
-            if (stardust) {
-                document.getElementById('g_stardust').value = Math.floor(parseInt(stardust, 10) / 10000);
-                highlightInput('g_stardust');
-            }
-            if (xp) {
-                document.getElementById('g_xp').value = Math.floor(parseInt(xp, 10) / 10000);
-                highlightInput('g_xp');
-            }
         };
 
         window.analyzeMultipleImages = async function() {
@@ -986,20 +931,26 @@ pokemon_bag = poke_bag
             const totalFiles = files.length;
             const aiBtn = document.getElementById('aiBtn');
             aiBtn.disabled = true;
-            aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在準備 ${totalFiles} 張圖片...`;
+            aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在準備圖片 0/${totalFiles}`;
             try {
                 const dataUrls = [];
                 for (let i = 0; i < totalFiles; i++) {
+                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在準備圖片 ${i + 1}/${totalFiles}`;
                     dataUrls.push(await fileToResizedDataUrl(files[i]));
-                    if (i < totalFiles - 1) {
-                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在準備 ${totalFiles} 張圖片...`;
-                    }
                 }
-                aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 正在解析 ${totalFiles} 張圖片...`;
-                const res = await requestMultiImageAnalysis(apiKey, dataUrls, (statusText) => {
-                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${statusText}`;
-                });
-                applyAiResultToForm(res);
+                const imageResults = [];
+                for (let i = 0; i < dataUrls.length; i++) {
+                    const progressLabel = `${i + 1}/${totalFiles}`;
+                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 精準解析中 ${progressLabel}`;
+                    const imageResult = await requestSingleImageAnalysis(apiKey, dataUrls[i], (attempt, maxRetries) => {
+                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 精準解析中 ${progressLabel}（重試 ${attempt}/${maxRetries}）`;
+                    });
+                    imageResults.push(imageResult);
+                }
+                const mergedResult = mergeAiResults(imageResults);
+                applyAiResultToForm(mergedResult);
+                aiBtn.innerHTML = AI_SUCCESS_LABEL;
+                await new Promise(resolve => setTimeout(resolve, 1200));
             } catch (e) { 
                 alert("GPT 解析失敗，請稍後再試"); 
                 console.error('OpenAI GPT parsing failed:', e); 
