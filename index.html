@@ -589,6 +589,14 @@
 
         const isExactHundredSource = (value) => String(value || '').trim() === HUNDO_LEGENDARY_FILTER;
 
+        const mergeUniqueTextValues = (currentValue, incomingValue, splitter, joiner) => {
+            const values = [currentValue, incomingValue]
+                .flatMap(value => String(value || '').split(splitter))
+                .map(value => value.trim())
+                .filter(Boolean);
+            return [...new Set(values)].join(joiner);
+        };
+
         const normalizeAiResult = (result = {}) => {
             const pick = (...keys) => {
                 for (const key of keys) {
@@ -641,17 +649,62 @@
             return normalized;
         };
 
-        window.analyzeMultipleImages = async function() {
-            const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
-            if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
-            if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GPT 解析中...';
-            try {
-                const prompt = `你是寶可夢 GO 截圖資料擷取器。只能根據畫面上明確可見的文字、數字與圖示輸出 JSON；禁止自行推算、禁止加總、禁止猜測。不確定就留空字串。
+        const mergeAiResults = (results = []) => {
+            const merged = {};
+
+            results.forEach(rawResult => {
+                const result = normalizeAiResult(rawResult);
+                const assignIfEmpty = (field) => {
+                    if (merged[field] !== undefined && String(merged[field]).trim() !== '') return;
+                    const value = String(result?.[field] || '').trim();
+                    if (value) merged[field] = value;
+                };
+
+                assignIfEmpty('team');
+                assignIfEmpty('legendary');
+                assignIfEmpty('shiny');
+                assignIfEmpty('shiny_leg');
+                assignIfEmpty('costume');
+                assignIfEmpty('bg_comm');
+                assignIfEmpty('bg_special');
+                assignIfEmpty('dyna');
+                assignIfEmpty('giga');
+                assignIfEmpty('perfect');
+                assignIfEmpty('old_poke');
+                assignIfEmpty('old_leg');
+                assignIfEmpty('masterball');
+                assignIfEmpty('rarecandy');
+                assignIfEmpty('coin');
+                assignIfEmpty('greenpass');
+                assignIfEmpty('poke_bag');
+                assignIfEmpty('item_bag');
+                assignIfEmpty('level');
+                assignIfEmpty('stardust');
+                assignIfEmpty('xp');
+
+                if (result.rare_list) {
+                    merged.rare_list = mergeUniqueTextValues(merged.rare_list, result.rare_list, /\n+/, '\n');
+                }
+
+                if (isExactHundredSource(result.hundred_source_filter)) {
+                    if (result.hundo_leg) merged.hundo_leg = result.hundo_leg;
+                    if (result.pokemon_list) {
+                        const combinedList = [merged.pokemon_list, result.pokemon_list].filter(Boolean).join(',');
+                        merged.pokemon_list = normalizePokemonList(combinedList);
+                        merged.hundred_list = merged.pokemon_list;
+                    }
+                    merged.hundred_source_filter = HUNDO_LEGENDARY_FILTER;
+                }
+            });
+
+            return normalizeAiResult(merged);
+        };
+
+        const buildAiPrompt = () => `你是寶可夢 GO 截圖資料擷取器。只能根據這一張截圖中明確可見的文字、數字與圖示輸出 JSON；禁止自行推算、禁止加總、禁止猜測。不確定就留空字串。
 
 【最高原則：統計數字】
 1. 只要畫面存在明確數字，永遠使用畫面數字。
-2. 統計欄位 legendary、hundo_leg、shiny、shiny_leg、costume、bg_comm、bg_special、dyna、giga、perfect、old_poke、old_leg 只能讀取畫面數字。
+2. 統計欄位 legendary、hundo_leg、shiny、shiny_leg、costume、bg_comm、bg_special、dyna、giga、perfect、old_poke、old_leg 只能讀取這一張截圖中的畫面數字。
 3. 禁止用 pokemon_list 推算任何統計欄位。
 4. 禁止自行加總、禁止輸出算式、禁止猜測。
 5. 數字來源優先級：
@@ -672,12 +725,11 @@
 5. 範例：色違固拉多、暗影蓋歐卡、色違暗影固拉多。
 
 【百神清單唯一合法來源】
-1. pokemon_list、hundred_list、hundo_leg 的唯一合法來源，是搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」的搜尋結果截圖。
-2. 如果任何截圖的搜尋欄不是「${HUNDO_LEGENDARY_FILTER}」，就禁止填入、禁止修改 pokemon_list、hundred_list、hundo_leg，也禁止修改 g_hundos 對應內容。
-3. 下列情況全部禁止產生百神清單：異色、暗影、淨化、4*、傳說的寶可夢,幻,究極異獸、傳說的寶可夢,幻,究極異獸&異色、分類總覽頁、以及任何其他不完全相同的搜尋條件。
-4. 只有當你真的看見搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可掃描畫面中的寶可夢來生成 pokemon_list / hundred_list，並讀取同一張搜尋結果頁頂部數字作為 hundo_leg。
-5. 若未看到上述完全相同的搜尋欄，pokemon_list、hundred_list、hundo_leg、hundred_source_filter 一律留空字串。
-6. hundred_source_filter 只有在合法來源成立時，才填入完全相同的字串「${HUNDO_LEGENDARY_FILTER}」；其他任何情況都必須留空字串。
+1. 只有當這一張截圖的搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可填 pokemon_list、hundred_list、hundo_leg、hundred_source_filter。
+2. 如果這一張截圖的搜尋欄不是「${HUNDO_LEGENDARY_FILTER}」，pokemon_list、hundred_list、hundo_leg、hundred_source_filter 一律留空字串。
+3. 只有當你真的看見搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可掃描這一張搜尋結果頁中的寶可夢來生成 pokemon_list / hundred_list，並讀取同一張搜尋結果頁頂部數字作為 hundo_leg。
+4. 除了完全符合「${HUNDO_LEGENDARY_FILTER}」以外，以下情況都禁止產生百神清單：異色、暗影、淨化、分類總覽頁、一般傳說搜尋頁、以及任何其他不完全相同的搜尋條件。
+5. hundred_source_filter 只有在合法來源成立時，才填入完全相同的字串「${HUNDO_LEGENDARY_FILTER}」；其他任何情況都必須留空字串。
 
 【百神清單 pokemon_list / hundred_list 格式】
 1. 必須逐格掃描，由上到下、由左到右，不可遺漏。
@@ -688,18 +740,31 @@
 6. pokemon_list 只整理清單內容，不可回填任何統計欄位。
 7. hundred_list 必須與 pokemon_list 完全相同。
 
-【暗影 / 淨化截圖特別規則】
-1. 暗影截圖只影響 pokemon_list 名稱，不填任何統計欄位。
-2. 淨化截圖只影響 pokemon_list 名稱，不填任何統計欄位。
-3. 不要新增 shadow_total。
-4. 不要新增 purified_total。
+【暗影 / 淨化名稱規則】
+1. 只有在合法的百神來源截圖中，若單隻寶可夢明確帶有暗影火焰，pokemon_list 名稱才可加上「暗影」前綴。
+2. 淨化圖示只用來輔助辨識；pokemon_list 名稱中仍然不可輸出「淨化」。
+3. 暗影、淨化都不可新增任何統計欄位。
+4. 不要新增 shadow_total。
+5. 不要新增 purified_total。
+
+【分類總覽頁】
+1. 如果這一張截圖是圓形分類圖示頁，請讀取分類圖示下方數字。
+2. 傳說 → legendary
+3. 異色 → shiny
+4. 活動 → costume
+5. 紀念背卡 → bg_comm
+6. 特別背卡 → bg_special
+7. 極巨化 → dyna
+8. 超極巨化 → giga
+9. 完美 → perfect
+10. 暗影、淨化不要填，因為沒有對應欄位。
 
 【指定統計欄位】
-1. legendary：只有搜尋欄完全等於「傳說的寶可夢,幻,究極異獸」時，讀取頂部數字。
+1. legendary：搜尋欄完全等於「傳說的寶可夢,幻,究極異獸」時，讀取頂部數字；若是分類總覽頁出現「傳說」，則讀取其下方數字。
 2. hundo_leg：只有搜尋欄完全等於「傳說的寶可夢,幻,究極異獸&4*」時，讀取頂部數字。
 3. shiny_leg：只有搜尋欄完全等於「傳說的寶可夢,幻,究極異獸&異色」時，讀取頂部數字。
-4. shiny：只有搜尋欄完全等於「異色」時，讀取頂部數字。
-5. costume：只有搜尋欄完全等於「活動」時，讀取頂部數字。
+4. shiny：搜尋欄完全等於「異色」時，讀取頂部數字；若是分類總覽頁出現「異色」，則讀取其下方數字。
+5. costume：搜尋欄完全等於「活動」時，讀取頂部數字；若是分類總覽頁出現「活動」，則讀取其下方數字。
 6. bg_comm：分類頁出現「紀念背卡」時，讀取其下方數字。
 7. bg_special：分類頁出現「特別背卡」時，讀取其下方數字。
 8. dyna：分類頁出現「極巨化」時，讀取其下方數字。
@@ -742,74 +807,98 @@ pokemon_bag = poke_bag
 2. 所有欄位都必須存在，沒看到就填空字串。
 3. 不要 Markdown、不要 code fence、不要額外說明。`;
 
-                let content = [{ type: 'text', text: prompt }];
-                for(let i=0; i<files.length; i++){
-                    const dataUrl = await new Promise(r => {
-                        const reader = new FileReader(); reader.onload = (e) => {
-                            const img = new Image(); img.onload = () => {
-                                const maxSize = 1500; 
-                                let width = img.width;
-                                let height = img.height;
-                                if (width > height) {
-                                    if (width > maxSize) { height *= maxSize / width; width = maxSize; }
-                                } else {
-                                    if (height > maxSize) { width *= maxSize / height; height = maxSize; }
-                                }
-                                const canvas = document.createElement('canvas'); 
-                                canvas.width = width; 
-                                canvas.height = height;
-                                canvas.getContext('2d').drawImage(img, 0, 0, width, height); 
-                                r(canvas.toDataURL('image/jpeg', 0.8)); 
-                            }; img.src = e.target.result;
-                        }; reader.readAsDataURL(files[i]);
+        const fileToResizedDataUrl = (file) => new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const maxSize = 1500;
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height) {
+                        if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+                    } else if (height > maxSize) {
+                        width *= maxSize / height;
+                        height = maxSize;
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.8));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        const requestSingleImageAnalysis = async (apiKey, dataUrl, statusUpdater) => {
+            const payload = JSON.stringify({
+                model: OPENAI_MODEL,
+                temperature: 0.1,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: buildAiPrompt() },
+                        { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
+                    ]
+                }],
+                response_format: {
+                    type: 'json_schema',
+                    json_schema: OPENAI_JSON_SCHEMA
+                }
+            });
+
+            const maxRetries = 3;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    const resp = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`
+                        },
+                        body: payload
                     });
-                    content.push({ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } });
-                }
-                
-                const payload = JSON.stringify({ 
-                    model: OPENAI_MODEL,
-                    temperature: 0.1,
-                    messages: [{ role: 'user', content }],
-                    response_format: {
-                        type: 'json_schema',
-                        json_schema: OPENAI_JSON_SCHEMA
-                    }
-                });
 
-                let res = null;
-                const maxRetries = 3; 
-                
-                for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                    try {
-                        const resp = await fetch(OPENAI_CHAT_COMPLETIONS_URL, { 
-                            method: 'POST', 
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${apiKey}`
-                            }, 
-                            body: payload 
-                        });
-                        
-                        if (!resp.ok) {
-                            if ((resp.status === 429 || resp.status >= 500) && attempt < maxRetries) {
-                                const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
-                                const delay = retryAfter > 0 ? retryAfter * 1000 : 3500;
-                                aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 忙碌中，自動重試 (${attempt}/${maxRetries})...`;
-                                await new Promise(resolve => setTimeout(resolve, delay)); 
-                                continue; 
-                            }
-                            const errData = await resp.text(); 
-                            throw new Error(`錯誤代碼 ${resp.status}\nOpenAI 官方原因：${errData}`);
+                    if (!resp.ok) {
+                        if ((resp.status === 429 || resp.status >= 500) && attempt < maxRetries) {
+                            const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
+                            const delay = retryAfter > 0 ? retryAfter * 1000 : 3500;
+                            statusUpdater(`GPT 忙碌中，自動重試 (${attempt}/${maxRetries})...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue;
                         }
-
-                        const data = await resp.json(); 
-                        res = normalizeAiResult(parseJsonText(parseOpenAIMessageContent(data)));
-                        break; 
-
-                    } catch (error) {
-                        if (attempt === maxRetries) throw error; 
+                        const errData = await resp.text();
+                        throw new Error(`錯誤代碼 ${resp.status}\nOpenAI 官方原因：${errData}`);
                     }
+
+                    const data = await resp.json();
+                    return normalizeAiResult(parseJsonText(parseOpenAIMessageContent(data)));
+                } catch (error) {
+                    if (attempt === maxRetries) throw error;
                 }
+            }
+
+            return normalizeAiResult({});
+        };
+
+        window.analyzeMultipleImages = async function() {
+            const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
+            if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
+            if(files.length === 0) return;
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GPT 解析中...';
+            try {
+                const results = [];
+                for (let i = 0; i < files.length; i++) {
+                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 解析中 (${i + 1}/${files.length})...`;
+                    const dataUrl = await fileToResizedDataUrl(files[i]);
+                    const result = await requestSingleImageAnalysis(apiKey, dataUrl, (statusText) => {
+                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${statusText}（第 ${i + 1}/${files.length} 張）`;
+                    });
+                    results.push(result);
+                }
+                const res = mergeAiResults(results);
 
                 if(res.team && ['藍隊', '紅隊', '黃隊'].includes(res.team)) {
                     document.getElementById('g_team').value = res.team;
@@ -818,7 +907,9 @@ pokemon_bag = poke_bag
 
                 document.getElementById('g_rare_list').value = res.rare_list || '';
                 if (isExactHundredSource(res.hundred_source_filter)) {
-                    document.getElementById('g_hundos').value = res.pokemon_list || '';
+                    if (res.pokemon_list !== '') {
+                        document.getElementById('g_hundos').value = res.pokemon_list;
+                    }
                     if (res.hundo_leg !== '') document.getElementById('st_hundo_leg').value = res.hundo_leg;
                 }
                 if(res.legendary !== '') document.getElementById('st_legend').value = res.legendary;
