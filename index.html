@@ -451,6 +451,7 @@
 
         const OPENAI_MODEL = 'gpt-4.1-mini';
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
+        const HUNDO_LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸&4*';
         const OPENAI_JSON_SCHEMA = {
             name: 'pokemon_go_inventory_parse',
             strict: true,
@@ -481,6 +482,7 @@
                     old_poke: { type: 'string' },
                     old_leg: { type: 'string' },
                     hundo_leg: { type: 'string' },
+                    hundred_source_filter: { type: 'string' },
                     shiny_leg: { type: 'string' },
                     pokemon_list: { type: 'string' },
                     masterball: { type: 'string' },
@@ -496,7 +498,7 @@
                     'team', 'god_total', 'perfect_god', 'shiny_god', 'year_16_20', 'year_16_20_god',
                     'master_ball', 'special_background', 'pokemon_bag', 'item_bag', 'hundred_list', 'rare_list',
                     'legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
-                    'old_poke', 'old_leg', 'hundo_leg', 'shiny_leg', 'pokemon_list', 'masterball', 'rarecandy',
+                    'old_poke', 'old_leg', 'hundo_leg', 'hundred_source_filter', 'shiny_leg', 'pokemon_list', 'masterball', 'rarecandy',
                     'coin', 'greenpass', 'poke_bag', 'level', 'stardust', 'xp'
                 ]
             }
@@ -582,8 +584,10 @@
             return order.map(name => {
                 const total = counts.get(name) || 0;
                 return total > 1 ? `${name}*${total}` : name;
-            }).join('\n');
+            }).join(',');
         };
+
+        const isExactHundredSource = (value) => String(value || '').trim() === HUNDO_LEGENDARY_FILTER;
 
         const normalizeAiResult = (result = {}) => {
             const pick = (...keys) => {
@@ -606,7 +610,8 @@
                 poke_bag: pick('poke_bag', 'pokemon_bag'),
                 item_bag: pick('item_bag'),
                 pokemon_list: pick('pokemon_list', 'hundred_list'),
-                rare_list: pick('rare_list')
+                rare_list: pick('rare_list'),
+                hundred_source_filter: pick('hundred_source_filter')
             };
 
             SCREEN_COUNT_FIELDS.forEach(field => {
@@ -614,6 +619,11 @@
             });
 
             normalized.pokemon_list = normalizePokemonList(normalized.pokemon_list);
+            if (!isExactHundredSource(normalized.hundred_source_filter)) {
+                normalized.pokemon_list = '';
+                normalized.hundo_leg = '';
+                normalized.hundred_source_filter = '';
+            }
             normalized.hundred_list = normalized.pokemon_list;
             normalized.legendary = normalized.legendary || '';
             normalized.hundo_leg = normalized.hundo_leg || '';
@@ -661,12 +671,22 @@
 4. 淨化圖示只用來輔助辨識；輸出名稱時永遠忽略淨化狀態，絕對不可輸出「淨化」二字。
 5. 範例：色違固拉多、暗影蓋歐卡、色違暗影固拉多。
 
-【4* 百神清單 pokemon_list】
-1. pokemon_list 只能從「4* 清單截圖」取得。
-2. 必須逐格掃描，由上到下、由左到右，不可遺漏。
-3. 同名出現多次時，合併為「名稱*數量」。
-4. pokemon_list 只整理清單內容，不可回填任何統計欄位。
-5. hundred_list 必須與 pokemon_list 完全相同。
+【百神清單唯一合法來源】
+1. pokemon_list、hundred_list、hundo_leg 的唯一合法來源，是搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」的搜尋結果截圖。
+2. 如果任何截圖的搜尋欄不是「${HUNDO_LEGENDARY_FILTER}」，就禁止填入、禁止修改 pokemon_list、hundred_list、hundo_leg，也禁止修改 g_hundos 對應內容。
+3. 下列情況全部禁止產生百神清單：異色、暗影、淨化、4*、傳說的寶可夢,幻,究極異獸、傳說的寶可夢,幻,究極異獸&異色、分類總覽頁、以及任何其他不完全相同的搜尋條件。
+4. 只有當你真的看見搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可掃描畫面中的寶可夢來生成 pokemon_list / hundred_list，並讀取同一張搜尋結果頁頂部數字作為 hundo_leg。
+5. 若未看到上述完全相同的搜尋欄，pokemon_list、hundred_list、hundo_leg、hundred_source_filter 一律留空字串。
+6. hundred_source_filter 只有在合法來源成立時，才填入完全相同的字串「${HUNDO_LEGENDARY_FILTER}」；其他任何情況都必須留空字串。
+
+【百神清單 pokemon_list / hundred_list 格式】
+1. 必須逐格掃描，由上到下、由左到右，不可遺漏。
+2. 同名出現多次時，合併為「名稱*數量」。
+3. 單隻不可加「*1」。
+4. 輸出格式必須是單行字串，例如「固拉多,蓋歐卡,鳳王*2,雷吉奇卡斯*4」。
+5. 只能使用半形逗號分隔，不可換行、不可加空格、不可輸出 JSON array、不可輸出項目符號。
+6. pokemon_list 只整理清單內容，不可回填任何統計欄位。
+7. hundred_list 必須與 pokemon_list 完全相同。
 
 【暗影 / 淨化截圖特別規則】
 1. 暗影截圖只影響 pokemon_list 名稱，不填任何統計欄位。
@@ -797,20 +817,22 @@ pokemon_bag = poke_bag
                 }
 
                 document.getElementById('g_rare_list').value = res.rare_list || '';
-                document.getElementById('g_hundos').value = res.pokemon_list || ''; 
-                if(res.hundo_leg) document.getElementById('st_hundo_leg').value = res.hundo_leg;
-                if(res.legendary) document.getElementById('st_legend').value = res.legendary;
-                if(res.shiny_leg) document.getElementById('st_shiny_leg').value = res.shiny_leg; 
-                if(res.shiny) document.getElementById('st_shiny').value = res.shiny;
-                if(res.costume) document.getElementById('st_costume').value = res.costume;
-                if(res.bg_comm) document.getElementById('st_bg_comm').value = res.bg_comm;
-                if(res.bg_special) document.getElementById('st_bg_special').value = res.bg_special;
-                if(res.dyna) document.getElementById('st_dyna').value = res.dyna;
-                if(res.giga) document.getElementById('st_giga').value = res.giga;
-                if(res.perfect) document.getElementById('st_perfect').value = res.perfect;
+                if (isExactHundredSource(res.hundred_source_filter)) {
+                    document.getElementById('g_hundos').value = res.pokemon_list || '';
+                    if (res.hundo_leg !== '') document.getElementById('st_hundo_leg').value = res.hundo_leg;
+                }
+                if(res.legendary !== '') document.getElementById('st_legend').value = res.legendary;
+                if(res.shiny_leg !== '') document.getElementById('st_shiny_leg').value = res.shiny_leg; 
+                if(res.shiny !== '') document.getElementById('st_shiny').value = res.shiny;
+                if(res.costume !== '') document.getElementById('st_costume').value = res.costume;
+                if(res.bg_comm !== '') document.getElementById('st_bg_comm').value = res.bg_comm;
+                if(res.bg_special !== '') document.getElementById('st_bg_special').value = res.bg_special;
+                if(res.dyna !== '') document.getElementById('st_dyna').value = res.dyna;
+                if(res.giga !== '') document.getElementById('st_giga').value = res.giga;
+                if(res.perfect !== '') document.getElementById('st_perfect').value = res.perfect;
                 
-                if(res.old_poke) document.getElementById('st_old_poke').value = res.old_poke;
-                if(res.old_leg) document.getElementById('st_old_leg').value = res.old_leg;
+                if(res.old_poke !== '') document.getElementById('st_old_poke').value = res.old_poke;
+                if(res.old_leg !== '') document.getElementById('st_old_leg').value = res.old_leg;
 
                 const masterball = extractSingleNumber(res.masterball);
                 if(masterball) document.getElementById('st_masterball').value = masterball;
