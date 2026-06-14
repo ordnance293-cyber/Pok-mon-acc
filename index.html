@@ -225,12 +225,13 @@
             const getChk = (id) => document.getElementById(id).checked;
             const accountId = getVal('g_id').trim();
             if(!accountId) { showMsg("請輸入帳號代碼！", "red"); return; }
+            const normalizedHundos = syncNormalizedHundoList();
             
             const newItem = {
                 accountId, level: getVal('g_level'), team: getVal('g_team'), price: getVal('g_price') || "未標價",
                 stardust: getVal('g_stardust'), xp: getVal('g_xp'), rarecandy: getVal('st_rarecandy'), coin: getVal('st_coin'), 
                 greenpass: getVal('st_greenpass'), masterball: getVal('st_masterball'), poke_bag: getVal('st_poke_bag'), item_bag: getVal('st_item_bag'), 
-                rare_list: getVal('g_rare_list'), hundos: getVal('g_hundos'), st_hundo_leg: getVal('st_hundo_leg'), st_legend: getVal('st_legend'), 
+                rare_list: getVal('g_rare_list'), hundos: normalizedHundos, st_hundo_leg: getVal('st_hundo_leg'), st_legend: getVal('st_legend'), 
                 st_shiny: getVal('st_shiny'), st_shiny_leg: getVal('st_shiny_leg'), st_costume: getVal('st_costume'), st_bg_comm: getVal('st_bg_comm'), 
                 st_bg_special: getVal('st_bg_special'), st_dyna: getVal('st_dyna'), st_giga: getVal('st_giga'), st_perfect: getVal('st_perfect'),
                 st_old_poke: getVal('st_old_poke'), st_old_leg: getVal('st_old_leg'),
@@ -855,6 +856,49 @@
             syncFusionMegaSelectVisibility();
         };
 
+        const POKEMON_ALIAS_DICTIONARY = {
+            '雷公': ['雷公', '雷公公', '雷公王', '雷公獸'],
+            '拉帝歐斯': ['拉帝歐斯', '拉帝奧斯', '拉帝歐絲'],
+            '拉帝亞斯': ['拉帝亞斯', '拉帝亞絲'],
+            '基格爾德': ['基格爾德', '基格爾多', '基格德'],
+            '奈克洛茲瑪': ['奈克洛茲瑪', '奈克洛芝瑪', '奈克洛茲馬']
+        };
+        const POKEMON_ALIAS_LOOKUP = new Map(
+            Object.entries(POKEMON_ALIAS_DICTIONARY).flatMap(([canonical, aliases]) =>
+                aliases.map(alias => [String(alias || '').replace(/\s+/g, ''), canonical])
+            )
+        );
+        const POKEMON_ALIAS_SUFFIXES = [...POKEMON_ALIAS_LOOKUP.entries()].sort((a, b) => b[0].length - a[0].length);
+        const POKEMON_CANONICAL_STATE_ORDER = ['色違', '暗影', '淨化'];
+
+        const applyPokemonAlias = (value) => {
+            let text = String(value || '').replace(/\s+/g, '').trim();
+            if (!text) return '';
+            if (POKEMON_ALIAS_LOOKUP.has(text)) return POKEMON_ALIAS_LOOKUP.get(text) || text;
+            for (const [alias, canonical] of POKEMON_ALIAS_SUFFIXES) {
+                if (text.endsWith(alias)) {
+                    return `${text.slice(0, -alias.length)}${canonical}`;
+                }
+            }
+            return text;
+        };
+
+        const canonical_name = (value) => {
+            let text = String(value || '').trim();
+            if (!text) return '';
+            text = text.replace(/\s+/g, '');
+            const states = new Set();
+            POKEMON_CANONICAL_STATE_ORDER.forEach(state => {
+                if (text.includes(state)) states.add(state);
+                text = text.replaceAll(state, '');
+            });
+            text = text.replaceAll('普通', '');
+            text = applyPokemonAlias(text);
+            if (!text) return '';
+            const prefix = POKEMON_CANONICAL_STATE_ORDER.filter(state => states.has(state)).join('');
+            return `${prefix}${text}`;
+        };
+
         const normalizePokemonListEntry = (value) => {
             let text = String(value || '').trim();
             if (!text) return null;
@@ -862,18 +906,9 @@
             const countMatch = text.match(/(?:[*xXｘＸ])\s*(\d+)$/);
             const count = countMatch ? Math.max(parseInt(countMatch[1], 10) || 1, 1) : 1;
             if (countMatch) text = text.slice(0, countMatch.index).trim();
-            const hasShiny = text.includes('色違');
-            const hasShadow = text.includes('暗影');
-            const hasPurified = text.includes('淨化');
-            text = text
-                .replace(/淨化/g, '')
-                .replace(/色違/g, '')
-                .replace(/暗影/g, '')
-                .replace(/\s+/g, '')
-                .trim();
-            if (!text) return null;
-            const prefix = hasShiny ? '色違' : hasShadow ? '暗影' : hasPurified ? '淨化' : '';
-            return { name: `${prefix}${text}`, count };
+            const name = canonical_name(text);
+            if (!name) return null;
+            return { name, count };
         };
 
         const normalizePokemonList = (value) => {
@@ -891,6 +926,14 @@
                 const total = counts.get(name) || 0;
                 return total > 1 ? `${name}*${total}` : name;
             }).join(',');
+        };
+
+        const syncNormalizedHundoList = () => {
+            const listInput = document.getElementById('g_hundos');
+            if (!listInput) return '';
+            const normalized = normalizePokemonList(listInput.value);
+            if (normalized !== listInput.value.trim()) listInput.value = normalized;
+            return normalized;
         };
 
         const normalizeSearchQuery = (value) => String(value || '').trim().replace(/\s+/g, '');
@@ -1287,7 +1330,8 @@ ${outputTemplate}
 8. 暗影只看寶可夢旁邊是否有紫色暗影火焰；只有看到這個標記才可輸出「暗影名稱」。
 9. 淨化只看寶可夢旁邊是否有藍白色淨化符號；只有看到這個標記才可輸出「淨化名稱」。
 10. 若沒看到上述三種有效標記，就輸出普通名稱；禁止依收藏星、標籤、任何徽章或其他 UI 圖示推測色違、暗影、淨化或特殊性。
-11. 命名前綴優先權固定為：色違 > 暗影 > 淨化 > 普通。若同時看到色違與暗影，輸出「色違名稱」；若同時看到色違與淨化，輸出「色違名稱」。
+11. 命名前綴順序固定為：色違 > 暗影 > 淨化 > 普通。若同時看到多個有效標記，必須全部保留並依序組合，例如「色違暗影雷公」、「色違淨化雷公」；只有完全相同名稱才可視為同類。
+12. 特殊型態、合體型態都必須保留完整名稱，例如「焰白酋雷姆」、「闇黑酋雷姆」、「黃昏之鬃奈克洛茲瑪」、「拂曉之翼奈克洛茲瑪」；禁止簡化成基底名稱。
 
 除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
                 case 'SHINY_LEGENDARY_SCREEN':
@@ -1786,6 +1830,7 @@ ${outputTemplate}
         window.generateText = function() {
             const v = (id) => document.getElementById(id).value.trim(); 
             const checked = (id) => document.getElementById(id).checked;
+            const normalizedHundos = syncNormalizedHundoList();
             
             const valid = (val) => {
                 if (!val) return false;
@@ -1847,7 +1892,7 @@ ${outputTemplate}
                 if (stardustDisplay) res.push(`星塵 ${stardustDisplay}`);
             }
             
-            if(valid(v('st_hundo_leg'))) { let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
+            if(valid(v('st_hundo_leg'))) { let listStr = normalizedHundos ? ` ${normalizedHundos}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
             if(valid(v('st_legend'))) res.push(`✅神獸總數${v('st_legend')}隻`); 
             if(valid(v('st_shiny'))) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
             if(valid(v('st_shiny_leg'))) res.push(`✅色違神獸${v('st_shiny_leg')}隻`); 
