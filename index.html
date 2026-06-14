@@ -432,17 +432,11 @@
         window.clearImage = function() { document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; document.getElementById('aiBtn').classList.add('hidden'); };
 
         window.updateHundoCount = function() {
-            const text = document.getElementById('g_hundos').value.trim();
-            const countInput = document.getElementById('st_hundo_leg');
-            if (!text) { countInput.value = ''; return; }
-            const items = text.split(/[,，、\n]+/).filter(item => item.trim() !== '');
-            let total = 0;
-            items.forEach(item => {
-                const match = item.match(/[*xXｘＸ]\s*(\d+)/);
-                if (match) total += parseInt(match[1], 10); else total += 1;
-            });
-            countInput.value = total;
-            countInput.classList.add('bg-green-100'); setTimeout(() => countInput.classList.remove('bg-green-100'), 300);
+            const listInput = document.getElementById('g_hundos');
+            if (!listInput) return;
+            // 百神數只能來自畫面數字，禁止再由 pokemon_list 自動回推統計。
+            listInput.classList.add('ring-2', 'ring-blue-200');
+            setTimeout(() => listInput.classList.remove('ring-2', 'ring-blue-200'), 300);
         };
 
         const parseNum = (val) => {
@@ -527,6 +521,70 @@
             return JSON.parse(cleanText);
         };
 
+        const SCREEN_COUNT_FIELDS = ['legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'old_poke', 'old_leg'];
+
+        const extractSingleNumber = (value) => {
+            if (value === undefined || value === null) return '';
+            const raw = String(value).trim();
+            if (!raw) return '';
+            const normalized = raw
+                .replace(/,/g, '')
+                .replace(/[()（）[\]【】]/g, '')
+                .replace(/\s+/g, '');
+            if (!normalized || /[+＋=＝]/.test(normalized)) return '';
+            const matches = normalized.match(/\d+/g);
+            if (!matches || matches.length !== 1) return '';
+            const residue = normalized.replace(/\d+/g, '');
+            if (residue && !/^[隻張個顆等級級cpCP萬億.%％]+$/.test(residue)) return '';
+            return matches[0];
+        };
+
+        const extractSlashSideNumber = (value, side = 'left') => {
+            if (value === undefined || value === null) return '';
+            const raw = String(value).trim().replace(/,/g, '');
+            if (!raw) return '';
+            const slashMatch = raw.match(/(\d+)\s*[\/／]\s*(\d+)/);
+            if (slashMatch) return side === 'right' ? slashMatch[2] : slashMatch[1];
+            return extractSingleNumber(raw);
+        };
+
+        const normalizePokemonListEntry = (value) => {
+            let text = String(value || '').trim();
+            if (!text) return null;
+            text = text.replace(/^[•\-\d.\s]+/, '');
+            const countMatch = text.match(/(?:[*xXｘＸ])\s*(\d+)$/);
+            const count = countMatch ? Math.max(parseInt(countMatch[1], 10) || 1, 1) : 1;
+            if (countMatch) text = text.slice(0, countMatch.index).trim();
+            const hasShiny = text.includes('色違');
+            const hasShadow = text.includes('暗影');
+            text = text
+                .replace(/淨化/g, '')
+                .replace(/色違/g, '')
+                .replace(/暗影/g, '')
+                .replace(/\s+/g, '')
+                .trim();
+            if (!text) return null;
+            const prefix = hasShiny && hasShadow ? '色違暗影' : hasShiny ? '色違' : hasShadow ? '暗影' : '';
+            return { name: `${prefix}${text}`, count };
+        };
+
+        const normalizePokemonList = (value) => {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+            const counts = new Map();
+            const order = [];
+            raw.split(/[\n,，、]+/).map(item => item.trim()).filter(Boolean).forEach(item => {
+                const parsed = normalizePokemonListEntry(item);
+                if (!parsed) return;
+                if (!counts.has(parsed.name)) order.push(parsed.name);
+                counts.set(parsed.name, (counts.get(parsed.name) || 0) + parsed.count);
+            });
+            return order.map(name => {
+                const total = counts.get(name) || 0;
+                return total > 1 ? `${name}*${total}` : name;
+            }).join('\n');
+        };
+
         const normalizeAiResult = (result = {}) => {
             const pick = (...keys) => {
                 for (const key of keys) {
@@ -536,7 +594,7 @@
                 return '';
             };
 
-            return {
+            const normalized = {
                 ...result,
                 legendary: pick('legendary', 'god_total'),
                 hundo_leg: pick('hundo_leg', 'perfect_god'),
@@ -550,6 +608,27 @@
                 pokemon_list: pick('pokemon_list', 'hundred_list'),
                 rare_list: pick('rare_list')
             };
+
+            SCREEN_COUNT_FIELDS.forEach(field => {
+                normalized[field] = extractSingleNumber(normalized[field]);
+            });
+
+            normalized.pokemon_list = normalizePokemonList(normalized.pokemon_list);
+            normalized.hundred_list = normalized.pokemon_list;
+            normalized.legendary = normalized.legendary || '';
+            normalized.hundo_leg = normalized.hundo_leg || '';
+            normalized.shiny_leg = normalized.shiny_leg || '';
+            normalized.old_poke = normalized.old_poke || '';
+            normalized.old_leg = normalized.old_leg || '';
+            normalized.god_total = normalized.legendary;
+            normalized.perfect_god = normalized.hundo_leg;
+            normalized.shiny_god = normalized.shiny_leg;
+            normalized.year_16_20 = normalized.old_poke;
+            normalized.year_16_20_god = normalized.old_leg;
+            normalized.master_ball = pick('master_ball', 'masterball');
+            normalized.special_background = normalized.bg_special || '';
+            normalized.pokemon_bag = pick('pokemon_bag', 'poke_bag');
+            return normalized;
         };
 
         window.analyzeMultipleImages = async function() {
@@ -558,92 +637,90 @@
             if(files.length === 0) return;
             const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GPT 解析中...';
             try {
-                const prompt = `你是一位非常精準的寶可夢GO數據分析官。
+                const prompt = `你是寶可夢 GO 截圖資料擷取器。只能根據畫面上明確可見的文字、數字與圖示輸出 JSON；禁止自行推算、禁止加總、禁止猜測。不確定就留空字串。
 
-【🥇最高辨識優先策略 — 直接讀取圖上文字】（命名辨識最高優先權）：
-1. 若截圖是寶可夢清單畫面，且每隻寶可夢下方有顯示中文名稱文字，請「優先直接讀取該文字作為名稱」，這是第一判定來源。
-2. 只有在文字被遮擋、模糊到無法辨識時，才可輔助使用外觀特徵推測；若仍不確定，請留空，不可亂猜。
-3. 若是格狀排列清單（例如 3～12 隻），必須逐格掃描（由上到下、由左到右）辨識每一隻，不可遺漏任何一格。
-4. 每一格都要同時檢查：名稱文字、是否色違星星、數量統計；最終 pokemon_list 必須完整涵蓋畫面中所有寶可夢。
-（說明：本段只定義寶可夢名稱辨識優先順序；其餘欄位擷取與防呆規則仍全面遵守下方【🚨最高指令🚨】）
+【最高原則：統計數字】
+1. 只要畫面存在明確數字，永遠使用畫面數字。
+2. 統計欄位 legendary、hundo_leg、shiny、shiny_leg、costume、bg_comm、bg_special、dyna、giga、perfect、old_poke、old_leg 只能讀取畫面數字。
+3. 禁止用 pokemon_list 推算任何統計欄位。
+4. 禁止自行加總、禁止輸出算式、禁止猜測。
+5. 數字來源優先級：
+   - 搜尋結果頁頂部數字
+   - 分類總覽頁標籤下方數字
+   - 若以上都沒有明確數字，統計欄位直接留空，不可回推。
 
-【🚨最高指令🚨】：
-請你「非常仔細、逐一對比」地掃描每一張截圖！確保你抓取的每一個數字，都100%精準填入對應的 JSON 欄位中。如果不確定，請留空，絕對不要亂填或填錯格子！請在輸出前再三確認對應關係！
+【寶可夢名稱規則】
+1. 若畫面已有中文名稱，直接使用畫面名稱。
+2. 普通型態請直接輸出原名稱，例如：固拉多、蓋歐卡、酋雷姆。
+3. 不可自行發明俗名、錯別字、簡體字或額外後綴。
 
-【🛡️隊伍顏色自動辨識】（極重要）：
-當你看到「訓練家個人檔案」的截圖（有顯示人物、夥伴寶可夢、等級、經驗值的畫面），請觀察該畫面的「整體背景顏色」：
-- 若背景偏黃色 ➔ 請在 team 欄位填入「黃隊」
-- 若背景偏紅色 ➔ 請在 team 欄位填入「紅隊」
-- 若背景偏藍色 ➔ 請在 team 欄位填入「藍隊」
+【異色 / 暗影 / 淨化】
+1. 只有當寶可夢左上角明確出現異色星星時，才可在名稱前加「色違」。
+2. 只有當寶可夢身旁明確出現紫色暗影火焰時，才可在名稱前加「暗影」。
+3. 同時有異色星星與暗影火焰時，輸出格式必須是「色違暗影 + 名稱」。
+4. 淨化圖示只用來輔助辨識；輸出名稱時永遠忽略淨化狀態，絕對不可輸出「淨化」二字。
+5. 範例：色違固拉多、暗影蓋歐卡、色違暗影固拉多。
 
-【📊等級與經驗值(XP)辨識規則】（極重要防呆）：
-當看到「訓練家個人檔案」的截圖（有顯示人物與夥伴寶可夢）時：
-1. 等級 (level)：請看畫面左下方，經驗值進度條的左邊有一個「極大的數字」（數字下方標示「等級」），請提取該數字作為 level。
-2. 經驗值 (xp)：請看畫面中下方的經驗值進度條，上面會顯示「目前經驗值 / 目標經驗值」（例如：320,665 / 8,000,000）。請「永遠只提取斜線左邊的目前經驗值數字」（以此例為 320665），並填入 xp 欄位。
+【4* 百神清單 pokemon_list】
+1. pokemon_list 只能從「4* 清單截圖」取得。
+2. 必須逐格掃描，由上到下、由左到右，不可遺漏。
+3. 同名出現多次時，合併為「名稱*數量」。
+4. pokemon_list 只整理清單內容，不可回填任何統計欄位。
+5. hundred_list 必須與 pokemon_list 完全相同。
 
-【📖寶可夢基礎命名與圖鑑防呆】（極重要）：
-請在腦中嚴格對照「台灣官方寶可夢圖鑑」的特徵與繁體中文官方譯名來辨識截圖中的寶可夢，絕對不可自行發明俗名、錯別字或簡體字（例如：不可將烈空坐打成裂空座）！
-若圖上已有中文文字名稱，直接使用圖上的名稱，不需要重新翻譯。
+【暗影 / 淨化截圖特別規則】
+1. 暗影截圖只影響 pokemon_list 名稱，不填任何統計欄位。
+2. 淨化截圖只影響 pokemon_list 名稱，不填任何統計欄位。
+3. 不要新增 shadow_total。
+4. 不要新增 purified_total。
 
-【🤖特定神獸「客製化覆寫」命名規則】（極度重要防呆，避免幻覺）：
-基於上述的官方圖鑑辨識結果，【只有】遇到以下 5 隻神獸時，請強制「覆寫」為以下專屬客製化名稱。若為普通型態或不在此名單內的寶可夢，請一律維持「官方純淨原名」，絕對不准亂加任何後綴：
-1. 蒼響：【極度警告】預設為普通型態！請睜大眼睛看清楚，【只有】當牠嘴裡「明確叼著一把劍」時，才可命名為「蒼響劍盾型態」。如果沒有叼劍，一律強制維持原名「蒼響」！嚴禁將所有蒼響都誤認為劍盾型態！
-2. 藏瑪然特：【極度警告】預設為普通型態！【只有】當牠胸前有「明顯的金色巨大盾牌」時，才可命名為「藏瑪然特劍盾型態」。如果沒有盾牌，一律強制維持原名「藏瑪然特」！嚴禁將所有藏瑪然特都誤認為劍盾型態！
-3. 奈克洛茲瑪：若外觀像「金黃色獅子」 ➔ 命名為「奈克洛茲瑪日獅型態」。若外觀像「發光雙翼蝙蝠」 ➔ 命名為「奈克洛茲瑪月亮型態」。若為黑色結晶異形(普通型態) ➔ 維持原名「奈克洛茲瑪」。
-4. 酋雷姆：若結合黑色身體與藍色閃電 ➔ 命名為「闇黑酋雷姆」。若結合白色冰塊與紅色火焰 ➔ 命名為「焰白酋雷姆」。若為灰色身體(普通型態) ➔ 維持原名「酋雷姆」。
-5. 基格爾德：若外觀像「巨大機器人/鋼彈」 ➔ 命名為「完全體基格爾德」。若為蛇/狗型態 ➔ 維持原名「基格爾德」。
+【指定統計欄位】
+1. legendary：只有搜尋欄完全等於「傳說的寶可夢,幻,究極異獸」時，讀取頂部數字。
+2. hundo_leg：只有搜尋欄完全等於「傳說的寶可夢,幻,究極異獸&4*」時，讀取頂部數字。
+3. shiny_leg：只有搜尋欄完全等於「傳說的寶可夢,幻,究極異獸&異色」時，讀取頂部數字。
+4. shiny：只有搜尋欄完全等於「異色」時，讀取頂部數字。
+5. costume：只有搜尋欄完全等於「活動」時，讀取頂部數字。
+6. bg_comm：分類頁出現「紀念背卡」時，讀取其下方數字。
+7. bg_special：分類頁出現「特別背卡」時，讀取其下方數字。
+8. dyna：分類頁出現「極巨化」時，讀取其下方數字。
+9. giga：分類頁出現「超極巨化」時，讀取其下方數字。
+10. perfect：分類頁出現「完美」時，讀取其下方數字。
+11. old_poke：只有搜尋欄完全等於「年16-20」時，讀取頂部數字。
+12. old_leg：只有搜尋欄完全等於「年16-20&傳說的寶可夢,幻,究極異獸」時，讀取頂部數字。
 
-【✨色違(Shiny)終極強制檢核機制】（極重要防呆，絕對不可違反）：
-1. 判斷色違的【唯一標準】：請死盯著「該隻寶可夢圖示的左上方（CP數字的下方）」！
-2. 如果在這個「左上方」位置，有看到「三顆純黑色四角星星 ✨」的圖案，才可以在名字前面加上「色違」。
-3. 如果左上方「沒有」純黑色星星，無論背景多亮、有沒有黃色光暈，都【絕對不是色違】！請維持原名。
-4. 在輸出 pokemon_list 之前，你必須在腦中對每一隻寶可夢執行這個「左上方星星檢查」，沒有星星就絕對不能加上「色違」兩字！
-5. 若截圖為格狀寶可夢清單，請對每一格個別執行此色違檢查，不可只抽查部分格子。
+【既有數值欄位】
+1. team：訓練家個人檔案背景偏黃/紅/藍，分別填黃隊/紅隊/藍隊。
+2. level：讀取個人檔案左下方「等級」的大數字。
+3. xp：若畫面為「目前經驗值 / 目標經驗值」，只取斜線左邊的目前經驗值。
+4. poke_bag、item_bag：若畫面為「目前數量 / 總容量」，只取斜線右邊的總容量。
+5. coin：讀取商店畫面上方黃色硬幣旁數字。
+6. masterball、rarecandy、greenpass：只有畫面上有明確單一數字時才填。禁止將多個數字相加，禁止輸出算式。
+7. stardust：讀取畫面中的星塵總數。
 
-【🦄神獸總數嚴格辨識】（極重要防呆）：
-請尋找遊戲畫面上方的搜尋欄。**只有當搜尋欄內的文字「完全符合」：『傳說的寶可夢,幻,究極異獸』時**，才提取該畫面頂部顯示的數字作為「神獸總數 (legendary)」。
-如果搜尋欄包含其他條件（例如加了 &4* 或 &異色），或者根本沒有這個搜尋條件，請將數量歸類到對應的欄位（如完美神獸 hundo_leg、色違神獸 shiny_leg），**絕對不要**把這些數字誤認為「神獸總數」。
+【客製化型態規則】
+1. 蒼響只有明確叼劍時才命名為「蒼響劍盾型態」，否則維持「蒼響」。
+2. 藏瑪然特只有明確持盾時才命名為「藏瑪然特劍盾型態」，否則維持「藏瑪然特」。
+3. 奈克洛茲瑪金色獅子外觀為「奈克洛茲瑪日獅型態」，雙翼蝙蝠外觀為「奈克洛茲瑪月亮型態」，普通黑色結晶外觀維持「奈克洛茲瑪」。
+4. 酋雷姆黑色閃電合體為「闇黑酋雷姆」，白色火焰合體為「焰白酋雷姆」，普通灰色外觀維持「酋雷姆」。
+5. 基格爾德巨大機器人外觀為「完全體基格爾德」，其餘蛇/狗型態維持「基格爾德」。
 
-【🕰️16-20年老怪嚴格辨識】（極重要防呆）：
-請尋找遊戲畫面上方的搜尋欄：
-1. 若搜尋欄內的文字「完全符合」：『年16-20』，請將該畫面頂部顯示的數字作為「16-20年寶可夢總數 (old_poke)」，對應前端的「16-20怪」格子。
-2. 若搜尋欄內的文字「完全符合」：『年16-20&傳說的寶可夢,幻,究極異獸』，請將該畫面頂部顯示的數字作為「16-20年神獸總數 (old_leg)」，對應前端的「16-20神」格子。
+【稀有清單】
+rare_list 只有在截圖中能明確辨識出值得獨立標註的稀有寶可夢時才填；不確定就留空。
 
-【🎒包包容量辨識規則】（極重要防呆）：
-寶可夢背包 (poke_bag) 與 道具背包 (item_bag) 在截圖中通常顯示為「目前數量 / 總容量」（例如：345/1000）。
-請「永遠只提取右邊的總容量數字」（以此例為 1000）。絕對不要提取左邊的數字！不管左邊的值是什麼，永遠只輸出右邊的值。
+【同值欄位同步】
+perfect_god = hundo_leg
+god_total = legendary
+shiny_god = shiny_leg
+year_16_20 = old_poke
+year_16_20_god = old_leg
+master_ball = masterball
+special_background = bg_special
+pokemon_bag = poke_bag
 
-【🪙寶可幣(Pokecoin)數量辨識】（極重要防呆）：
-當看到遊戲「商店」的截圖時，畫面正上方會有一個「黃色皮卡丘圖案的圓形硬幣」圖示。請精準提取該黃色硬幣旁邊的數字，這就是「寶可幣總數」，並將其填入 \`coin\` 欄位中。
-
-【🎫入場券總數辨識(對應綠票欄位)】（極重要防呆）：
-請仔細檢查截圖中是否有出現「橘色、綠色、藍色」的對戰入場券圖示（如特級對戰入場券、遠距團體戰入場券等）。
-1. 只要有看到入場券，請精準提取這些圖示「旁邊或下方」的持有數量。
-2. 將畫面上所有種類的入場券數量【全部加總】。
-3. 【嚴格要求】：greenpass 欄位「只能填寫純阿拉伯數字」，絕對不可填寫算式或文字（例如：算出來總和是 15，就只能填 15，絕對不可填 10+5 或 共15張）。如果不確定或沒看到，請直接留空。
-
-【🖼️背卡(Background)嚴格辨識】：
-請仔細辨識截圖中的分類標籤或圖示特徵：
-1. 「紀念背卡」(bg_comm)：圖示特徵為淺藍色圓底，帶有「白色地球/網格球體」圖案。
-2. 「特別背卡」(bg_special)：圖示特徵為偏深藍色圓底，帶有「三朵白色小花」圖案。
-請根據文字標籤或上述明確的圖示特徵，準確提取下方的對應數量。
-
-【🌟特殊標籤嚴格辨識（極巨化、超極巨化、活動）】：
-請仔細辨識截圖中的分類標籤，並提取該標籤「下方」的數字：
-1. 「活動」(costume)：標籤圖示為「淺紫色圓底＋白色派對帽」。
-2. 「極巨化」(dyna)：標籤圖示為「桃紅色(粉紅)圓底＋白色發光交叉/X型圖案」。
-3. 「超極巨化」(giga)：標籤圖示為「深紫紅色圓底＋白色發光交叉/X型圖案」。
-請根據上述圖示特徵與文字，將對應的數量準確填入 costume, dyna, giga 欄位中。
-
-【資料輸出規則】：
-1. pokemon_list（將填入 g_hundos清單）：
-    - 從格狀清單截圖中，請逐格辨識每一隻寶可夢，不論有幾隻都要完整列出，絕對不可遺漏。
-    - 數量規則：同品種出現兩隻以上，在名字最後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違奈克洛茲瑪月亮型態*3\`。
-2. 提取括號內的數字即為總數。
-3. rare_list 只有在截圖中能明確辨識出值得獨立標註的稀有寶可夢時才填入；不確定就留空。
-4. hundred_list 必須與 pokemon_list 相同內容。
-5. perfect_god 必須與 hundo_leg 相同內容；god_total 必須與 legendary 相同內容；shiny_god 必須與 shiny_leg 相同內容；year_16_20 必須與 old_poke 相同內容；year_16_20_god 必須與 old_leg 相同內容；master_ball 必須與 masterball 相同內容；special_background 必須與 bg_special 相同內容；pokemon_bag 必須與 poke_bag 相同內容。
-6. 只輸出乾淨 JSON，不要 Markdown，不要 code fence，不要額外說明。`;
+【輸出要求】
+1. 只輸出乾淨 JSON。
+2. 所有欄位都必須存在，沒看到就填空字串。
+3. 不要 Markdown、不要 code fence、不要額外說明。`;
 
                 let content = [{ type: 'text', text: prompt }];
                 for(let i=0; i<files.length; i++){
@@ -735,35 +812,38 @@
                 if(res.old_poke) document.getElementById('st_old_poke').value = res.old_poke;
                 if(res.old_leg) document.getElementById('st_old_leg').value = res.old_leg;
 
-                if(res.masterball) document.getElementById('st_masterball').value = parseNum(res.masterball) || res.masterball;
-                let rc = parseNum(res.rarecandy); if(!isNaN(rc) && rc >= 100) document.getElementById('st_rarecandy').value = rc;
-                let coin = parseNum(res.coin); if(!isNaN(coin)) document.getElementById('st_coin').value = coin;
+                const masterball = extractSingleNumber(res.masterball);
+                if(masterball) document.getElementById('st_masterball').value = masterball;
+                const rc = extractSingleNumber(res.rarecandy);
+                if(rc && parseInt(rc, 10) >= 100) document.getElementById('st_rarecandy').value = rc;
+                const coin = extractSingleNumber(res.coin);
+                if(coin) document.getElementById('st_coin').value = coin;
                 
-                // 讓綠票無條件填入輸入框，方便你檢查 AI 是否抓對
-                let pass = parseNum(res.greenpass); 
-                if(!isNaN(pass)) document.getElementById('st_greenpass').value = pass;
+                // 綠票只接受畫面中明確單一數字，禁止把 AI 算式或自行加總結果灌進表單。
+                const pass = extractSingleNumber(res.greenpass); 
+                if(pass) document.getElementById('st_greenpass').value = pass;
                 
-                if(res.poke_bag) document.getElementById('st_poke_bag').value = parseNum(res.poke_bag) || res.poke_bag;
-                if(res.item_bag) document.getElementById('st_item_bag').value = parseNum(res.item_bag) || res.item_bag;
+                const pokeBag = extractSlashSideNumber(res.poke_bag, 'right');
+                const itemBag = extractSlashSideNumber(res.item_bag, 'right');
+                if(pokeBag) document.getElementById('st_poke_bag').value = pokeBag;
+                if(itemBag) document.getElementById('st_item_bag').value = itemBag;
 
-                let oL = parseNum(res.level); 
-                let oS = parseNum(res.stardust); 
-                let oX = parseNum(res.xp);
+                const level = extractSingleNumber(res.level);
+                const stardust = extractSingleNumber(res.stardust);
+                const xp = extractSlashSideNumber(res.xp, 'left');
                 
-                if (!isNaN(oL)) {
-                    document.getElementById('g_level').value = oL; 
+                if (level) {
+                    document.getElementById('g_level').value = level; 
                     highlightInput('g_level');
                 }
-                if (!isNaN(oS)) { 
-                    document.getElementById('g_stardust').value = Math.floor(oS / 10000); 
+                if (stardust) { 
+                    document.getElementById('g_stardust').value = Math.floor(parseInt(stardust, 10) / 10000); 
                     highlightInput('g_stardust'); 
                 }
-                if (!isNaN(oX)) { 
-                    document.getElementById('g_xp').value = Math.floor(oX / 10000); 
+                if (xp) { 
+                    document.getElementById('g_xp').value = Math.floor(parseInt(xp, 10) / 10000); 
                     highlightInput('g_xp'); 
                 }
-
-                window.updateHundoCount(); 
             } catch (e) { 
                 alert("GPT 解析失敗，請稍後再試"); 
                 console.error('OpenAI GPT parsing failed:', e); 
