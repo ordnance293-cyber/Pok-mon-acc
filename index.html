@@ -456,42 +456,41 @@
         const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
         const OLD_POKEMON_FILTER = '年16-20';
         const OLD_LEGENDARY_FILTER = `${OLD_POKEMON_FILTER}&${LEGENDARY_FILTER}`;
-        const AI_SCAN_MODES = new Set(['quick', 'full']);
-        const AI_SCAN_MODE_LABELS = {
-            quick: '快速模式',
-            full: '完整模式'
-        };
-        const AI_SCAN_BUTTON_LABELS = {
-            quick: '⚡ 快速掃描',
-            full: '🧠 完整掃描百神'
-        };
-        const AI_ACTION_BUTTON_IDS = {
-            quick: 'aiQuickBtn',
-            full: 'aiFullBtn'
-        };
+        const AI_SCAN_BUTTON_LABEL = '🤖 AI自動掃描';
+        const AI_SCAN_STATUS_LABEL = 'AI自動掃描';
+        const AI_ACTION_BUTTON_ID = 'aiAutoBtn';
         const AI_MAX_IMAGE_SIZE = 1000;
         const AI_JPEG_QUALITY = 0.7;
         const AI_IMAGE_DETAIL = 'auto';
         const AI_SUCCESS_LABEL = '合併完成';
         const AI_IMAGE_TYPES = new Set([
-            'category_overview',
-            'search_legendary_total',
-            'search_hundo_legendary',
-            'search_shiny_legendary',
-            'search_old_pokemon',
-            'search_old_legendary',
-            'trainer_profile',
-            'pokemon_detail',
-            'resource_overview',
-            'other'
+            'HUNDO_LEGENDARY_SCREEN',
+            'LEGENDARY_TOTAL_SCREEN',
+            'SHINY_LEGENDARY_SCREEN',
+            'OLD_POKEMON_SCREEN',
+            'OLD_LEGENDARY_SCREEN',
+            'SHINY_CATEGORY_SCREEN',
+            'COSTUME_CATEGORY_SCREEN',
+            'BG_COMM_CATEGORY_SCREEN',
+            'BG_SPECIAL_CATEGORY_SCREEN',
+            'DYNA_CATEGORY_SCREEN',
+            'GIGA_CATEGORY_SCREEN',
+            'TRAINER_PROFILE_SCREEN',
+            'POKEMON_DETAIL_SCREEN',
+            'RESOURCE_SCREEN',
+            'OTHER'
         ]);
-        const AI_IMAGE_TYPE_TO_QUERY = {
-            search_legendary_total: LEGENDARY_FILTER,
-            search_hundo_legendary: HUNDO_LEGENDARY_FILTER,
-            search_shiny_legendary: SHINY_LEGENDARY_FILTER,
-            search_old_pokemon: OLD_POKEMON_FILTER,
-            search_old_legendary: OLD_LEGENDARY_FILTER
-        };
+        const AI_SEARCH_QUERY_IMAGE_TYPES = [
+            { query: HUNDO_LEGENDARY_FILTER, imageType: 'HUNDO_LEGENDARY_SCREEN' },
+            { query: SHINY_LEGENDARY_FILTER, imageType: 'SHINY_LEGENDARY_SCREEN' },
+            { query: OLD_LEGENDARY_FILTER, imageType: 'OLD_LEGENDARY_SCREEN' },
+            { query: OLD_POKEMON_FILTER, imageType: 'OLD_POKEMON_SCREEN' },
+            { query: LEGENDARY_FILTER, imageType: 'LEGENDARY_TOTAL_SCREEN' }
+        ];
+        const AI_IMAGE_TYPE_TO_QUERY = Object.fromEntries(
+            AI_SEARCH_QUERY_IMAGE_TYPES.map(({ query, imageType }) => [imageType, query])
+        );
+        const AI_SEARCH_IMAGE_TYPES = new Set(AI_SEARCH_QUERY_IMAGE_TYPES.map(({ imageType }) => imageType));
         const AI_NUMERIC_RESULT_FIELDS = [
             'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
             'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag', 'level'
@@ -501,63 +500,77 @@
         const AI_IMAGE_RESULT_FIELDS = [...AI_NUMERIC_RESULT_FIELDS, ...AI_TEXT_RESULT_FIELDS, ...AI_WAN_RESULT_FIELDS];
         const AI_MERGED_RESULT_FIELDS = [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'];
         const AI_IMAGE_TYPE_ALLOWED_FIELDS = {
-            category_overview: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
-            search_legendary_total: ['legendary'],
-            search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
-            search_shiny_legendary: ['shiny_leg'],
-            search_old_pokemon: ['old_poke'],
-            search_old_legendary: ['old_leg'],
-            trainer_profile: ['level', 'team', 'xp'],
-            pokemon_detail: ['stardust'],
-            resource_overview: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
-            other: []
+            HUNDO_LEGENDARY_SCREEN: ['hundo_leg', 'pokemon_list'],
+            LEGENDARY_TOTAL_SCREEN: ['legendary'],
+            SHINY_LEGENDARY_SCREEN: ['shiny_leg'],
+            OLD_POKEMON_SCREEN: ['old_poke'],
+            OLD_LEGENDARY_SCREEN: ['old_leg'],
+            SHINY_CATEGORY_SCREEN: ['shiny'],
+            COSTUME_CATEGORY_SCREEN: ['costume'],
+            BG_COMM_CATEGORY_SCREEN: ['bg_comm'],
+            BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
+            DYNA_CATEGORY_SCREEN: ['dyna'],
+            GIGA_CATEGORY_SCREEN: ['giga'],
+            TRAINER_PROFILE_SCREEN: ['level', 'team', 'xp'],
+            POKEMON_DETAIL_SCREEN: ['stardust'],
+            RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
+            OTHER: []
         };
         const AI_EXPECTED_FIELDS_BY_IMAGE_TYPE = {
-            category_overview: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
-            search_legendary_total: ['legendary'],
-            search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
-            search_shiny_legendary: ['shiny_leg'],
-            search_old_pokemon: ['old_poke'],
-            search_old_legendary: ['old_leg'],
-            trainer_profile: ['level', 'team', 'xp'],
-            pokemon_detail: ['stardust'],
-            resource_overview: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
-            other: []
+            HUNDO_LEGENDARY_SCREEN: ['hundo_leg', 'pokemon_list'],
+            LEGENDARY_TOTAL_SCREEN: ['legendary'],
+            SHINY_LEGENDARY_SCREEN: ['shiny_leg'],
+            OLD_POKEMON_SCREEN: ['old_poke'],
+            OLD_LEGENDARY_SCREEN: ['old_leg'],
+            SHINY_CATEGORY_SCREEN: ['shiny'],
+            COSTUME_CATEGORY_SCREEN: ['costume'],
+            BG_COMM_CATEGORY_SCREEN: ['bg_comm'],
+            BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
+            DYNA_CATEGORY_SCREEN: ['dyna'],
+            GIGA_CATEGORY_SCREEN: ['giga'],
+            TRAINER_PROFILE_SCREEN: ['level', 'team', 'xp'],
+            POKEMON_DETAIL_SCREEN: ['stardust'],
+            RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
+            OTHER: []
         };
         const AI_RETRY_REQUIRED_FIELDS_BY_IMAGE_TYPE = {
-            category_overview: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
-            search_legendary_total: ['legendary'],
-            search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
-            search_shiny_legendary: ['shiny_leg'],
-            search_old_pokemon: ['old_poke'],
-            search_old_legendary: ['old_leg'],
-            trainer_profile: ['level', 'team', 'xp'],
-            pokemon_detail: ['stardust'],
-            resource_overview: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag']
+            HUNDO_LEGENDARY_SCREEN: ['hundo_leg', 'pokemon_list'],
+            LEGENDARY_TOTAL_SCREEN: ['legendary'],
+            SHINY_LEGENDARY_SCREEN: ['shiny_leg'],
+            OLD_POKEMON_SCREEN: ['old_poke'],
+            OLD_LEGENDARY_SCREEN: ['old_leg'],
+            SHINY_CATEGORY_SCREEN: ['shiny'],
+            COSTUME_CATEGORY_SCREEN: ['costume'],
+            BG_COMM_CATEGORY_SCREEN: ['bg_comm'],
+            BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
+            DYNA_CATEGORY_SCREEN: ['dyna'],
+            GIGA_CATEGORY_SCREEN: ['giga'],
+            TRAINER_PROFILE_SCREEN: ['level', 'team', 'xp'],
+            POKEMON_DETAIL_SCREEN: ['stardust'],
+            RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag']
         };
         const AI_FIELD_SOURCE_PRIORITY = {
-            legendary: { search_legendary_total: 1 },
-            shiny: { category_overview: 1 },
-            hundo_leg: { search_hundo_legendary: 1 },
-            shiny_leg: { search_shiny_legendary: 1 },
-            costume: { category_overview: 1 },
-            bg_comm: { category_overview: 1 },
-            bg_special: { category_overview: 1 },
-            dyna: { category_overview: 1 },
-            giga: { category_overview: 1 },
-            perfect: { category_overview: 1 },
-            old_poke: { search_old_pokemon: 1 },
-            old_leg: { search_old_legendary: 1 },
-            masterball: { resource_overview: 1 },
-            greenpass: { resource_overview: 1 },
-            rarecandy: { resource_overview: 1 },
-            coin: { resource_overview: 1 },
-            poke_bag: { resource_overview: 1 },
-            item_bag: { resource_overview: 1 },
-            level: { trainer_profile: 1 },
-            team: { trainer_profile: 1 },
-            xp: { trainer_profile: 1 },
-            stardust: { pokemon_detail: 1 }
+            legendary: { LEGENDARY_TOTAL_SCREEN: 1 },
+            shiny: { SHINY_CATEGORY_SCREEN: 1 },
+            hundo_leg: { HUNDO_LEGENDARY_SCREEN: 1 },
+            shiny_leg: { SHINY_LEGENDARY_SCREEN: 1 },
+            costume: { COSTUME_CATEGORY_SCREEN: 1 },
+            bg_comm: { BG_COMM_CATEGORY_SCREEN: 1 },
+            bg_special: { BG_SPECIAL_CATEGORY_SCREEN: 1 },
+            dyna: { DYNA_CATEGORY_SCREEN: 1 },
+            giga: { GIGA_CATEGORY_SCREEN: 1 },
+            old_poke: { OLD_POKEMON_SCREEN: 1 },
+            old_leg: { OLD_LEGENDARY_SCREEN: 1 },
+            masterball: { RESOURCE_SCREEN: 1 },
+            greenpass: { RESOURCE_SCREEN: 1 },
+            rarecandy: { RESOURCE_SCREEN: 1 },
+            coin: { RESOURCE_SCREEN: 1 },
+            poke_bag: { RESOURCE_SCREEN: 1 },
+            item_bag: { RESOURCE_SCREEN: 1 },
+            level: { TRAINER_PROFILE_SCREEN: 1 },
+            team: { TRAINER_PROFILE_SCREEN: 1 },
+            xp: { TRAINER_PROFILE_SCREEN: 1 },
+            stardust: { POKEMON_DETAIL_SCREEN: 1 }
         };
         const AI_FIELD_LABELS = {
             legendary: '神獸總',
@@ -568,12 +581,12 @@
             bg_comm: '紀念卡',
             bg_special: '特別卡',
             dyna: '極巨化',
-            giga: '超極巨',
+            giga: '超極巨化',
             perfect: '完美數',
             old_poke: '16-20怪',
             old_leg: '16-20神',
             masterball: '大師球',
-            greenpass: '綠票券',
+            greenpass: '綠票',
             rarecandy: '神奇糖果',
             coin: '寶可幣',
             poke_bag: '寶可夢包',
@@ -581,7 +594,7 @@
             level: '等級',
             team: '隊伍',
             xp: '經驗',
-            stardust: '星塵',
+            stardust: '星星沙子',
             pokemon_list: '百神清單'
         };
         const OPENAI_CLASSIFICATION_JSON_SCHEMA = {
@@ -594,16 +607,21 @@
                     image_type: {
                         type: 'string',
                         enum: [
-                            'category_overview',
-                            'search_legendary_total',
-                            'search_hundo_legendary',
-                            'search_shiny_legendary',
-                            'search_old_pokemon',
-                            'search_old_legendary',
-                            'trainer_profile',
-                            'pokemon_detail',
-                            'resource_overview',
-                            'other'
+                            'HUNDO_LEGENDARY_SCREEN',
+                            'LEGENDARY_TOTAL_SCREEN',
+                            'SHINY_LEGENDARY_SCREEN',
+                            'OLD_POKEMON_SCREEN',
+                            'OLD_LEGENDARY_SCREEN',
+                            'SHINY_CATEGORY_SCREEN',
+                            'COSTUME_CATEGORY_SCREEN',
+                            'BG_COMM_CATEGORY_SCREEN',
+                            'BG_SPECIAL_CATEGORY_SCREEN',
+                            'DYNA_CATEGORY_SCREEN',
+                            'GIGA_CATEGORY_SCREEN',
+                            'TRAINER_PROFILE_SCREEN',
+                            'POKEMON_DETAIL_SCREEN',
+                            'RESOURCE_SCREEN',
+                            'OTHER'
                         ]
                     },
                     search_query: { type: 'string' }
@@ -657,27 +675,20 @@
         };
 
         const setAiActionButtonsDisabled = (disabled) => {
-            Object.values(AI_ACTION_BUTTON_IDS).forEach(id => {
-                const button = document.getElementById(id);
-                if (button) button.disabled = disabled;
-            });
+            const button = document.getElementById(AI_ACTION_BUTTON_ID);
+            if (button) button.disabled = disabled;
         };
 
         const resetAiActionButtons = () => {
-            Object.entries(AI_ACTION_BUTTON_IDS).forEach(([mode, id]) => {
-                const button = document.getElementById(id);
-                if (!button) return;
-                button.disabled = false;
-                button.innerHTML = AI_SCAN_BUTTON_LABELS[mode];
-            });
+            const button = document.getElementById(AI_ACTION_BUTTON_ID);
+            if (!button) return;
+            button.disabled = false;
+            button.innerHTML = AI_SCAN_BUTTON_LABEL;
         };
 
-        const setActiveAiButtonStatus = (scanMode, statusHtml) => {
-            Object.entries(AI_ACTION_BUTTON_IDS).forEach(([mode, id]) => {
-                const button = document.getElementById(id);
-                if (!button) return;
-                button.innerHTML = mode === scanMode ? statusHtml : AI_SCAN_BUTTON_LABELS[mode];
-            });
+        const setAiActionButtonStatus = (statusHtml) => {
+            const button = document.getElementById(AI_ACTION_BUTTON_ID);
+            if (button) button.innerHTML = statusHtml;
         };
 
         const parseOpenAIMessageContent = (data) => {
@@ -871,7 +882,7 @@
         const normalizeSearchQuery = (value) => String(value || '').trim().replace(/\s+/g, '');
 
         const buildEmptyAiResult = () => ({
-            image_type: 'other',
+            image_type: 'OTHER',
             search_query: '',
             legendary: '',
             hundo_leg: '',
@@ -899,7 +910,8 @@
         });
 
         const inferImageTypeFromSearchQuery = (searchQuery) => {
-            return Object.entries(AI_IMAGE_TYPE_TO_QUERY).find(([, query]) => query === searchQuery)?.[0] || '';
+            const normalizedQuery = normalizeSearchQuery(searchQuery);
+            return AI_SEARCH_QUERY_IMAGE_TYPES.find(({ query }) => normalizedQuery.includes(query))?.imageType || '';
         };
 
         const mergeUniqueTextValues = (currentValue, incomingValue, splitter, joiner) => {
@@ -937,35 +949,31 @@
         });
 
         const normalizeAiClassification = (result = {}) => {
-            const rawImageType = AI_IMAGE_TYPES.has(String(result?.image_type || '').trim()) ? String(result.image_type).trim() : 'other';
+            const rawImageType = AI_IMAGE_TYPES.has(String(result?.image_type || '').trim()) ? String(result.image_type).trim() : 'OTHER';
             const rawSearchQuery = normalizeSearchQuery(result?.search_query);
             const inferredType = inferImageTypeFromSearchQuery(rawSearchQuery);
 
             let imageType = rawImageType;
             if (inferredType) {
                 imageType = inferredType;
-            } else if (rawImageType.startsWith('search_')) {
-                imageType = 'other';
+            } else if (AI_SEARCH_IMAGE_TYPES.has(rawImageType)) {
+                imageType = 'OTHER';
             }
 
             return {
                 image_type: imageType,
-                search_query: AI_IMAGE_TYPE_TO_QUERY[imageType] || (imageType === 'other' ? rawSearchQuery : '')
+                search_query: AI_IMAGE_TYPE_TO_QUERY[imageType] || (imageType === 'OTHER' ? rawSearchQuery : '')
             };
         };
 
-        const getAiExtractionFields = (classification = {}, scanMode = 'quick') => {
-            const imageType = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'other';
-            const baseFields = [...(AI_IMAGE_TYPE_ALLOWED_FIELDS[imageType] || [])];
-            if (imageType === 'search_hundo_legendary' && scanMode !== 'full') {
-                return baseFields.filter(field => field !== 'pokemon_list');
-            }
-            return baseFields;
+        const getAiExtractionFields = (classification = {}) => {
+            const imageType = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'OTHER';
+            return [...(AI_IMAGE_TYPE_ALLOWED_FIELDS[imageType] || [])];
         };
 
         const normalizeAiExtraction = (result = {}, classification = {}, allowedFields = null) => {
             const normalized = buildEmptyAiResult();
-            normalized.image_type = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'other';
+            normalized.image_type = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'OTHER';
             normalized.search_query = AI_IMAGE_TYPE_TO_QUERY[normalized.image_type] || String(classification?.search_query || '').trim();
 
             AI_NUMERIC_RESULT_FIELDS.forEach(field => {
@@ -1001,7 +1009,7 @@
         const mergeSingleImageAttempts = (firstAttempt = buildEmptyAiResult(), secondAttempt = buildEmptyAiResult(), allowedFields = null) => {
             const merged = {
                 ...firstAttempt,
-                image_type: firstAttempt.image_type || secondAttempt.image_type || 'other',
+                image_type: firstAttempt.image_type || secondAttempt.image_type || 'OTHER',
                 search_query: firstAttempt.search_query || secondAttempt.search_query || ''
             };
 
@@ -1045,7 +1053,7 @@
                 Object.keys(AI_FIELD_SOURCE_PRIORITY).forEach(field => {
                     assignPreferred(field, result[field], result.image_type);
                 });
-                if (result.image_type === 'search_hundo_legendary') {
+                if (result.image_type === 'HUNDO_LEGENDARY_SCREEN') {
                     assignPreferred('hundo_leg', result.hundo_leg, result.image_type);
                     if (result.pokemon_list) {
                         const combinedList = [merged.pokemon_list, result.pokemon_list].filter(Boolean).join(',');
@@ -1067,62 +1075,89 @@
 }
 
 image_type 只能是：
-- category_overview
-- search_legendary_total
-- search_hundo_legendary
-- search_shiny_legendary
-- search_old_pokemon
-- search_old_legendary
-- trainer_profile
-- pokemon_detail
-- resource_overview
-- other
+- HUNDO_LEGENDARY_SCREEN
+- LEGENDARY_TOTAL_SCREEN
+- SHINY_LEGENDARY_SCREEN
+- OLD_POKEMON_SCREEN
+- OLD_LEGENDARY_SCREEN
+- SHINY_CATEGORY_SCREEN
+- COSTUME_CATEGORY_SCREEN
+- BG_COMM_CATEGORY_SCREEN
+- BG_SPECIAL_CATEGORY_SCREEN
+- DYNA_CATEGORY_SCREEN
+- GIGA_CATEGORY_SCREEN
+- TRAINER_PROFILE_SCREEN
+- POKEMON_DETAIL_SCREEN
+- RESOURCE_SCREEN
+- OTHER
 
 【分類規則】
-1. 若搜尋欄完全符合「${LEGENDARY_FILTER}」
-   - image_type = search_legendary_total
-   - search_query = "${LEGENDARY_FILTER}"
-
-2. 若搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」
-   - image_type = search_hundo_legendary
+先檢查搜尋欄。只要搜尋欄「包含」以下字串，就依照下列優先順序分類：
+1. 若搜尋欄包含「${HUNDO_LEGENDARY_FILTER}」
+   - image_type = HUNDO_LEGENDARY_SCREEN
    - search_query = "${HUNDO_LEGENDARY_FILTER}"
 
-3. 若搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」
-   - image_type = search_shiny_legendary
+2. 若搜尋欄包含「${SHINY_LEGENDARY_FILTER}」
+   - image_type = SHINY_LEGENDARY_SCREEN
    - search_query = "${SHINY_LEGENDARY_FILTER}"
 
-4. 若搜尋欄完全符合「${OLD_POKEMON_FILTER}」
-   - image_type = search_old_pokemon
-   - search_query = "${OLD_POKEMON_FILTER}"
-
-5. 若搜尋欄完全符合「${OLD_LEGENDARY_FILTER}」
-   - image_type = search_old_legendary
+3. 若搜尋欄包含「${OLD_LEGENDARY_FILTER}」
+   - image_type = OLD_LEGENDARY_SCREEN
    - search_query = "${OLD_LEGENDARY_FILTER}"
 
-6. 若是訓練家基本資料頁，且可看到左下角超大等級數字、下方有「等級」、以及訓練家背景／經驗條
-   - image_type = trainer_profile
+4. 若搜尋欄包含「${OLD_POKEMON_FILTER}」
+   - image_type = OLD_POKEMON_SCREEN
+   - search_query = "${OLD_POKEMON_FILTER}"
+
+5. 若搜尋欄包含「${LEGENDARY_FILTER}」
+   - image_type = LEGENDARY_TOTAL_SCREEN
+   - search_query = "${LEGENDARY_FILTER}"
+
+若不是上述搜尋頁，則判斷頁面用途：
+6. 若是異色分類頁，只對應色違總
+   - image_type = SHINY_CATEGORY_SCREEN
    - search_query = ""
 
-7. 若是寶可夢詳細頁，且可看到「星星沙子」數字
-   - image_type = pokemon_detail
+7. 若是活動分類頁，只對應活動總
+   - image_type = COSTUME_CATEGORY_SCREEN
    - search_query = ""
 
-8. 若是資源／背包頁，並可看到大師球、綠票/卷、神奇糖果、寶可幣、寶可夢包或道具背包
-   - image_type = resource_overview
+8. 若是紀念背卡分類頁，只對應紀念卡
+   - image_type = BG_COMM_CATEGORY_SCREEN
    - search_query = ""
 
-9. 若是分類總覽頁
-   - image_type = category_overview
+9. 若是特別背卡分類頁，只對應特別卡
+   - image_type = BG_SPECIAL_CATEGORY_SCREEN
    - search_query = ""
 
-10. 其他任何圖片
-   - image_type = other
+10. 若是極巨化分類頁，只對應極巨化
+   - image_type = DYNA_CATEGORY_SCREEN
+   - search_query = ""
+
+11. 若是超極巨化分類頁，只對應超極巨化
+   - image_type = GIGA_CATEGORY_SCREEN
+   - search_query = ""
+
+12. 若是個人檔案頁，且可看到左下角超大等級數字、下方有「等級」、以及訓練家背景／經驗條
+   - image_type = TRAINER_PROFILE_SCREEN
+   - search_query = ""
+
+13. 若是寶可夢資訊頁，且可看到「星星沙子」數字
+   - image_type = POKEMON_DETAIL_SCREEN
+   - search_query = ""
+
+14. 若是資源頁／背包頁，並可看到寶可幣、寶可夢包、道具背包、神奇糖果、大師球或綠票
+   - image_type = RESOURCE_SCREEN
+   - search_query = ""
+
+15. 其他任何圖片
+   - image_type = OTHER
    - 若看得到搜尋欄文字，就把實際搜尋字串填入 search_query；若看不到則填 ""
 
 【重要】
-1. 只有「完全符合」上述搜尋字串才可判成 search_*。
-2. 例如「年16-20&異色」「年16-20&4*」「${LEGENDARY_FILTER}&異色&4*」「異色」都不是上述允許的 search_* 類型，必須判成 other。
-3. 「神獸總」只能來自「${LEGENDARY_FILTER}」搜尋圖；「色違總」只能來自分類總覽頁；「星塵」只能來自寶可夢詳細頁。
+1. 優先順序固定為：HUNDO > SHINY_LEGENDARY > OLD_LEGENDARY > OLD_POKEMON > LEGENDARY。
+2. 只有 HUNDO_LEGENDARY_SCREEN 之後才會啟用百神清單辨識；其他任何類型都不能視為百神清單圖。
+3. 完美分類頁不是這次自動掃描目標，若看到完美/4* 分類頁但不是「${HUNDO_LEGENDARY_FILTER}」搜尋圖，請判成 OTHER。
 4. 只分類這一張圖，不要猜其他圖。
 5. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
 
@@ -1180,38 +1215,24 @@ ${outputTemplate}
 9. 不要 Markdown、不要 code fence、不要額外說明。${retryRules}`;
 
             switch (image_type) {
-                case 'category_overview':
+                case 'LEGENDARY_TOTAL_SCREEN':
                     return `${baseRules}
 
-這是一張分類總覽頁。請逐一檢查以下圖示，只要畫面上有圖示與數字，就必須填入：
-- 異色 -> shiny
-- 活動 -> costume
-- 紀念背卡 -> bg_comm
-- 特別背卡 -> bg_special
-- 極巨化 -> dyna
-- 超極巨化 -> giga
-- 完美 -> perfect
-
-不能因為你認為其他截圖會補資料就略過。
-除了上述 7 個欄位外，其餘欄位與 pokemon_list 必須留空字串。`;
-                case 'search_legendary_total':
-                    return `${baseRules}
-
-這是一張搜尋頁，搜尋欄完全符合「${LEGENDARY_FILTER}」。
+這是一張搜尋頁，搜尋欄包含「${LEGENDARY_FILTER}」。
 你必須讀取頂部數字並填入 legendary。
 除了 legendary 之外，其餘欄位都必須留空字串。`;
-                case 'search_hundo_legendary':
+                case 'HUNDO_LEGENDARY_SCREEN':
                     if (!allow_pokemon_list) {
                         return `${baseRules}
 
-這是一張搜尋頁，搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」。
+這是一張搜尋頁，搜尋欄包含「${HUNDO_LEGENDARY_FILTER}」。
 你必須讀取頂部數字並填入 hundo_leg。
-這一輪是快速模式，只做數字辨識，pokemon_list 必須留空字串，禁止辨識任何寶可夢名稱。
+這是唯一可能啟用百神清單辨識的圖片類型；若這次未要求 pokemon_list，就只做 hundo_leg 數字辨識。
 除了 hundo_leg 之外，其餘欄位都必須留空字串。`;
                     }
                     return `${baseRules}
 
-這是一張搜尋頁，搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」。
+這是一張搜尋頁，搜尋欄包含「${HUNDO_LEGENDARY_FILTER}」。
 你必須讀取頂部數字並填入 hundo_leg。
 這也是唯一可以填 pokemon_list 的圖片類型。
 
@@ -1227,63 +1248,111 @@ ${outputTemplate}
 9. 命名前綴優先權固定為：色違 > 暗影 > 普通 > 淨化。若同時看到色違與暗影，輸出「色違名稱」。
 
 除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
-                case 'search_shiny_legendary':
+                case 'SHINY_LEGENDARY_SCREEN':
                     return `${baseRules}
 
-這是一張搜尋頁，搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」。
+這是一張搜尋頁，搜尋欄包含「${SHINY_LEGENDARY_FILTER}」。
 你必須讀取頂部數字並填入 shiny_leg。
 除了 shiny_leg 之外，其餘欄位都必須留空字串。`;
-                case 'search_old_pokemon':
+                case 'OLD_POKEMON_SCREEN':
                     return `${baseRules}
 
-這是一張搜尋頁，搜尋欄完全符合「${OLD_POKEMON_FILTER}」。
+這是一張搜尋頁，搜尋欄包含「${OLD_POKEMON_FILTER}」。
 你必須讀取頂部數字並填入 old_poke。
 除了 old_poke 之外，其餘欄位都必須留空字串。`;
-                case 'search_old_legendary':
+                case 'OLD_LEGENDARY_SCREEN':
                     return `${baseRules}
 
-這是一張搜尋頁，搜尋欄完全符合「${OLD_LEGENDARY_FILTER}」。
+這是一張搜尋頁，搜尋欄包含「${OLD_LEGENDARY_FILTER}」。
 你必須讀取頂部數字並填入 old_leg。
 除了 old_leg 之外，其餘欄位都必須留空字串。`;
-                case 'trainer_profile':
+                case 'SHINY_CATEGORY_SCREEN':
                     return `${baseRules}
 
-這是一張訓練家基本資料頁，只能填以下欄位：
+這是一張異色分類頁，只能填以下欄位：
+- 色違總 -> shiny
+
+你必須讀取這個分類頁的對應總數並填入 shiny。
+除了 shiny 之外，其餘欄位都必須留空字串。`;
+                case 'COSTUME_CATEGORY_SCREEN':
+                    return `${baseRules}
+
+這是一張活動分類頁，只能填以下欄位：
+- 活動總 -> costume
+
+你必須讀取這個分類頁的對應總數並填入 costume。
+除了 costume 之外，其餘欄位都必須留空字串。`;
+                case 'BG_COMM_CATEGORY_SCREEN':
+                    return `${baseRules}
+
+這是一張紀念背卡分類頁，只能填以下欄位：
+- 紀念卡 -> bg_comm
+
+你必須讀取這個分類頁的對應總數並填入 bg_comm。
+除了 bg_comm 之外，其餘欄位都必須留空字串。`;
+                case 'BG_SPECIAL_CATEGORY_SCREEN':
+                    return `${baseRules}
+
+這是一張特別背卡分類頁，只能填以下欄位：
+- 特別卡 -> bg_special
+
+你必須讀取這個分類頁的對應總數並填入 bg_special。
+除了 bg_special 之外，其餘欄位都必須留空字串。`;
+                case 'DYNA_CATEGORY_SCREEN':
+                    return `${baseRules}
+
+這是一張極巨化分類頁，只能填以下欄位：
+- 極巨化 -> dyna
+
+你必須讀取這個分類頁的對應總數並填入 dyna。
+除了 dyna 之外，其餘欄位都必須留空字串。`;
+                case 'GIGA_CATEGORY_SCREEN':
+                    return `${baseRules}
+
+這是一張超極巨化分類頁，只能填以下欄位：
+- 超極巨化 -> giga
+
+你必須讀取這個分類頁的對應總數並填入 giga。
+除了 giga 之外，其餘欄位都必須留空字串。`;
+                case 'TRAINER_PROFILE_SCREEN':
+                    return `${baseRules}
+
+這是一張個人檔案頁，只能填以下欄位：
 - 等級 -> level
 - 隊伍 -> team（只能輸出「藍隊」「紅隊」「黃隊」其中一種）
 - 經驗 -> xp
 
-【trainer_profile 規則】
+【TRAINER_PROFILE_SCREEN 規則】
 1. level 只能讀左下角超大數字，且下方必須看得到「等級」。
 2. team 只能依背景顏色 + 經驗條顏色判斷：紅色=紅隊、藍色=藍隊、黃色=黃隊。
 3. xp 只能讀進度條文字，例如「1,589,839 / 3,350,000」時，只能填左邊的「1589839」。
 4. 禁止從這張圖填入 stardust。
 
 除了 level、team、xp 之外，其餘欄位都必須留空字串。`;
-                case 'pokemon_detail':
+                case 'POKEMON_DETAIL_SCREEN':
                     return `${baseRules}
 
-這是一張寶可夢詳細頁，只能填以下欄位：
-- 星塵 -> stardust
+這是一張寶可夢資訊頁，只能填以下欄位：
+- 星星沙子 -> stardust
 
-【pokemon_detail 規則】
+【POKEMON_DETAIL_SCREEN 規則】
 1. 只能尋找「星星沙子」旁邊的數字。
 2. 直接填入畫面上的原始數字，例如「2683836」。
-3. 禁止從訓練家頁、分類頁、搜尋頁或資源頁推測 stardust。
+3. 禁止從個人檔案頁、分類頁、搜尋頁或資源頁推測 stardust。
 
 除了 stardust 之外，其餘欄位都必須留空字串。`;
-                case 'resource_overview':
+                case 'RESOURCE_SCREEN':
                     return `${baseRules}
 
-這是一張資源／背包頁，只能填以下欄位：
-- 大師球 -> masterball
-- 綠票/卷 -> greenpass
-- 神奇糖果 -> rarecandy
+這是一張資源頁／背包頁，只能填以下欄位：
 - 寶可幣 -> coin
 - 寶可夢包 -> poke_bag
 - 道具背包 -> item_bag
+- 神奇糖果 -> rarecandy
+- 大師球 -> masterball
+- 綠票 -> greenpass
 
-【背包規則】
+【RESOURCE_SCREEN 規則】
 1. 若畫面顯示為「目前/上限」，例如「4200/7800」，請取右邊上限數字。
 2. 若只看得到其中一種背包，就只填看得到的那一種。
 3. 若沒看到明確數字就留空字串。
@@ -1419,16 +1488,35 @@ ${outputTemplate}
             restoreProtectedAiState(protectedState);
         };
 
-        const processSingleAiImage = async ({ apiKey, dataUrl, scanMode, imageIndex, totalFiles, updateStatus }) => {
+        const classifySingleAiImage = async ({ apiKey, dataUrl, imageIndex, totalFiles, updateStatus }) => {
             const progressLabel = `${imageIndex + 1}/${totalFiles}`;
             updateStatus(`GPT 第一階段分類中 ${progressLabel}`);
             const classification = await requestSingleImageClassification(apiKey, dataUrl, (attempt, maxRetries) => {
                 updateStatus(`GPT 第一階段分類中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
             });
 
-            const extractionFields = getAiExtractionFields(classification, scanMode);
-            const isDetailedScan = extractionFields.includes('pokemon_list');
-            const extractionPhaseLabel = isDetailedScan ? 'GPT 第二階段完整辨識中' : 'GPT 第二階段數字抽值中';
+            console.log({
+                imageIndex: imageIndex + 1,
+                stage: 'classification',
+                image_type: classification.image_type,
+                search_query: classification.search_query
+            });
+
+            return classification;
+        };
+
+        const extractSingleAiImage = async ({ apiKey, dataUrl, classification, imageIndex, totalFiles, updateStatus }) => {
+            const progressLabel = `${imageIndex + 1}/${totalFiles}`;
+            const extractionFields = getAiExtractionFields(classification);
+            if (extractionFields.length === 0) {
+                return {
+                    imageResult: normalizeAiExtraction({}, classification, extractionFields),
+                    expectedFields: extractionFields
+                };
+            }
+
+            const isHundoListScan = classification.image_type === 'HUNDO_LEGENDARY_SCREEN' && extractionFields.includes('pokemon_list');
+            const extractionPhaseLabel = isHundoListScan ? 'GPT 第二階段百神清單辨識中' : 'GPT 第二階段數字抽值中';
             updateStatus(`${extractionPhaseLabel} ${progressLabel}`);
             let imageResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
                 updateStatus(`${extractionPhaseLabel} ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
@@ -1436,7 +1524,7 @@ ${outputTemplate}
 
             const retryableMissingFields = getRetryableMissingFields(imageResult, extractionFields);
             if (retryableMissingFields.length > 0) {
-                const retryPhaseLabel = isDetailedScan ? 'GPT 第二階段完整補抓中' : 'GPT 第二階段補抓中';
+                const retryPhaseLabel = isHundoListScan ? 'GPT 第二階段百神補抓中' : 'GPT 第二階段補抓中';
                 updateStatus(`${retryPhaseLabel} ${progressLabel}`);
                 const retriedResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
                     updateStatus(`${retryPhaseLabel} ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
@@ -1446,54 +1534,74 @@ ${outputTemplate}
 
             console.log({
                 imageIndex: imageIndex + 1,
+                stage: 'extraction',
                 image_type: imageResult.image_type,
                 search_query: imageResult.search_query,
-                scan_mode: scanMode,
                 extracted_fields: getExtractedFieldsForLog(imageResult, extractionFields)
             });
 
             return { imageResult, expectedFields: extractionFields };
         };
 
-        window.analyzeMultipleImages = async function(scanMode = 'quick') {
+        window.analyzeMultipleImages = async function() {
             const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files;
             if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const normalizedScanMode = AI_SCAN_MODES.has(scanMode) ? scanMode : 'quick';
             const totalFiles = files.length;
             setAiActionButtonsDisabled(true);
-            setActiveAiButtonStatus(normalizedScanMode, `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_MODE_LABELS[normalizedScanMode]} 準備圖片 0/${totalFiles}`);
+            setAiActionButtonStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 0/${totalFiles}`);
             try {
                 let preparedCount = 0;
                 const dataUrls = await Promise.all(Array.from(files).map(file =>
                     fileToResizedDataUrl(file).then(dataUrl => {
                         preparedCount += 1;
-                        setActiveAiButtonStatus(normalizedScanMode, `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_MODE_LABELS[normalizedScanMode]} 準備圖片 ${preparedCount}/${totalFiles}`);
+                        setAiActionButtonStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 ${preparedCount}/${totalFiles}`);
                         return dataUrl;
                     })
                 ));
 
-                let completedCount = 0;
-                const updateStatus = (message) => {
-                    setActiveAiButtonStatus(
-                        normalizedScanMode,
-                        `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_MODE_LABELS[normalizedScanMode]} ${message}｜完成 ${completedCount}/${totalFiles}`
+                let classifiedCount = 0;
+                const updateClassificationStatus = (message) => {
+                    setAiActionButtonStatus(
+                        `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} ${message}｜已分類 ${classifiedCount}/${totalFiles}`
+                    );
+                };
+
+                const classifications = await Promise.all(dataUrls.map((dataUrl, index) =>
+                    classifySingleAiImage({
+                        apiKey,
+                        dataUrl,
+                        imageIndex: index,
+                        totalFiles,
+                        updateStatus: updateClassificationStatus
+                    }).then(classification => {
+                        classifiedCount += 1;
+                        setAiActionButtonStatus(
+                            `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 類型分析完成｜已分類 ${classifiedCount}/${totalFiles}`
+                        );
+                        return classification;
+                    })
+                ));
+
+                let extractedCount = 0;
+                const updateExtractionStatus = (message) => {
+                    setAiActionButtonStatus(
+                        `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} ${message}｜已擷取 ${extractedCount}/${totalFiles}`
                     );
                 };
 
                 const taskResults = await Promise.all(dataUrls.map((dataUrl, index) =>
-                    processSingleAiImage({
+                    extractSingleAiImage({
                         apiKey,
                         dataUrl,
-                        scanMode: normalizedScanMode,
+                        classification: classifications[index],
                         imageIndex: index,
                         totalFiles,
-                        updateStatus
+                        updateStatus: updateExtractionStatus
                     }).then(result => {
-                        completedCount += 1;
-                        setActiveAiButtonStatus(
-                            normalizedScanMode,
-                            `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_MODE_LABELS[normalizedScanMode]} 合併中｜完成 ${completedCount}/${totalFiles}`
+                        extractedCount += 1;
+                        setAiActionButtonStatus(
+                            `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 統整中｜已擷取 ${extractedCount}/${totalFiles}`
                         );
                         return result;
                     })
@@ -1505,7 +1613,7 @@ ${outputTemplate}
                 console.log({
                     finalResult: mergedResult,
                     missingButExpectedFields,
-                    scanMode: normalizedScanMode
+                    classifications
                 });
                 applyAiResultToForm(mergedResult);
                 if (missingButExpectedFields.length > 0) {
@@ -1513,7 +1621,7 @@ ${outputTemplate}
                     console.warn('AI unresolved fields after retry:', unresolvedLabels);
                     alert(`以下欄位已有對應截圖且已自動重檢 1 次，但仍未成功讀取，請人工複查：\n${unresolvedLabels.join('、')}`);
                 }
-                setActiveAiButtonStatus(normalizedScanMode, AI_SUCCESS_LABEL);
+                setAiActionButtonStatus(AI_SUCCESS_LABEL);
                 await new Promise(resolve => setTimeout(resolve, 1200));
             } catch (e) { 
                 alert("GPT 解析失敗，請稍後再試"); 
@@ -1746,9 +1854,8 @@ ${outputTemplate}
                             <label for="imageInput" class="cursor-pointer bg-white border px-2 py-1.5 md:px-4 md:py-2 rounded shadow-sm text-[11px] md:text-sm font-bold hover:bg-gray-50 transition text-center w-full">選截圖</label>
                             <div id="imagePreviewContainer" class="flex flex-wrap gap-1 md:gap-2 w-full py-1 md:py-2 justify-center"></div>
                             <div id="aiActionButtons" class="hidden w-full mt-1 space-y-1">
-                                <button type="button" id="aiQuickBtn" onclick="analyzeMultipleImages('quick')" class="w-full bg-blue-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-blue-700 transition">⚡ 快速掃描</button>
-                                <button type="button" id="aiFullBtn" onclick="analyzeMultipleImages('full')" class="w-full bg-indigo-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-indigo-700 transition">🧠 完整掃描百神</button>
-                                <p class="px-1 text-[10px] text-gray-500 leading-relaxed">快速模式只掃數字與資源；完整模式只有命中「傳說的寶可夢,幻,究極異獸&amp;4*」時，才追加百神清單詳細辨識。</p>
+                                <button type="button" id="aiAutoBtn" onclick="analyzeMultipleImages()" class="w-full bg-indigo-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-indigo-700 transition">🤖 AI自動掃描</button>
+                                <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；只有命中「傳說的寶可夢,幻,究極異獸&amp;4*」的圖片才會辨識百神清單，其餘圖片只讀對應欄位，最後統一回填。</p>
                             </div>
                         </div>
                         
