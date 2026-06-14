@@ -455,6 +455,8 @@
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
         const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
         const SHINY_FILTER = '異色';
+        const OLD_POKEMON_FILTER = '年16-20';
+        const OLD_LEGENDARY_FILTER = `${OLD_POKEMON_FILTER}&${LEGENDARY_FILTER}`;
         const AI_BUTTON_LABEL = '🤖 AI 解析';
         const AI_SUCCESS_LABEL = '合併完成';
         const AI_IMAGE_TYPES = new Set([
@@ -463,17 +465,27 @@
             'search_hundo_legendary',
             'search_shiny_legendary',
             'search_shiny_total',
+            'search_old_pokemon',
+            'search_old_legendary',
+            'trainer_profile',
+            'resource_overview',
             'other'
         ]);
         const AI_IMAGE_TYPE_TO_QUERY = {
             search_legendary_total: LEGENDARY_FILTER,
             search_hundo_legendary: HUNDO_LEGENDARY_FILTER,
             search_shiny_legendary: SHINY_LEGENDARY_FILTER,
-            search_shiny_total: SHINY_FILTER
+            search_shiny_total: SHINY_FILTER,
+            search_old_pokemon: OLD_POKEMON_FILTER,
+            search_old_legendary: OLD_LEGENDARY_FILTER
         };
-        const AI_IMAGE_RESULT_FIELDS = [
-            'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'
+        const AI_NUMERIC_RESULT_FIELDS = [
+            'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
+            'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag', 'level'
         ];
+        const AI_TEXT_RESULT_FIELDS = ['team'];
+        const AI_WAN_RESULT_FIELDS = ['xp', 'stardust'];
+        const AI_IMAGE_RESULT_FIELDS = [...AI_NUMERIC_RESULT_FIELDS, ...AI_TEXT_RESULT_FIELDS, ...AI_WAN_RESULT_FIELDS];
         const AI_MERGED_RESULT_FIELDS = [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'];
         const AI_IMAGE_TYPE_ALLOWED_FIELDS = {
             category_overview: ['legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
@@ -481,6 +493,10 @@
             search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
             search_shiny_legendary: ['shiny_leg'],
             search_shiny_total: ['shiny'],
+            search_old_pokemon: ['old_poke'],
+            search_old_legendary: ['old_leg'],
+            trainer_profile: ['level', 'team', 'xp', 'stardust'],
+            resource_overview: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
             other: []
         };
         const AI_EXPECTED_FIELDS_BY_IMAGE_TYPE = {
@@ -489,12 +505,19 @@
             search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
             search_shiny_legendary: ['shiny_leg'],
             search_shiny_total: ['shiny'],
+            search_old_pokemon: ['old_poke'],
+            search_old_legendary: ['old_leg'],
+            trainer_profile: ['level', 'team', 'xp', 'stardust'],
+            resource_overview: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
             other: []
         };
         const AI_RETRY_REQUIRED_FIELDS_BY_IMAGE_TYPE = {
             category_overview: ['costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
             search_hundo_legendary: ['hundo_leg'],
-            search_shiny_legendary: ['shiny_leg']
+            search_shiny_legendary: ['shiny_leg'],
+            search_old_pokemon: ['old_poke'],
+            search_old_legendary: ['old_leg'],
+            trainer_profile: ['level', 'team']
         };
         const AI_FIELD_SOURCE_PRIORITY = {
             legendary: { category_overview: 1, search_legendary_total: 2 },
@@ -506,7 +529,19 @@
             bg_special: { category_overview: 1 },
             dyna: { category_overview: 1 },
             giga: { category_overview: 1 },
-            perfect: { category_overview: 1 }
+            perfect: { category_overview: 1 },
+            old_poke: { search_old_pokemon: 1 },
+            old_leg: { search_old_legendary: 1 },
+            masterball: { resource_overview: 1 },
+            greenpass: { resource_overview: 1 },
+            rarecandy: { resource_overview: 1 },
+            coin: { resource_overview: 1 },
+            poke_bag: { resource_overview: 1 },
+            item_bag: { resource_overview: 1 },
+            level: { trainer_profile: 1 },
+            team: { trainer_profile: 1 },
+            xp: { trainer_profile: 1 },
+            stardust: { trainer_profile: 1 }
         };
         const OPENAI_CLASSIFICATION_JSON_SCHEMA = {
             name: 'pokemon_go_image_classifier',
@@ -523,6 +558,10 @@
                             'search_hundo_legendary',
                             'search_shiny_legendary',
                             'search_shiny_total',
+                            'search_old_pokemon',
+                            'search_old_legendary',
+                            'trainer_profile',
+                            'resource_overview',
                             'other'
                         ]
                     },
@@ -548,11 +587,25 @@
                     dyna: { type: 'string' },
                     giga: { type: 'string' },
                     perfect: { type: 'string' },
+                    old_poke: { type: 'string' },
+                    old_leg: { type: 'string' },
+                    masterball: { type: 'string' },
+                    greenpass: { type: 'string' },
+                    rarecandy: { type: 'string' },
+                    coin: { type: 'string' },
+                    poke_bag: { type: 'string' },
+                    item_bag: { type: 'string' },
+                    level: { type: 'string' },
+                    team: { type: 'string' },
+                    xp: { type: 'string' },
+                    stardust: { type: 'string' },
                     pokemon_list: { type: 'string' }
                 },
                 required: [
                     'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume',
-                    'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'pokemon_list'
+                    'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
+                    'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin',
+                    'poke_bag', 'item_bag', 'level', 'team', 'xp', 'stardust', 'pokemon_list'
                 ]
             }
         };
@@ -577,7 +630,19 @@
         };
 
         const SCREEN_COUNT_FIELDS = ['legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'];
-        const ANALYSIS_RESULT_FIELD_TO_INPUT = {
+        const AI_AUTOFILL_FIELD_TO_INPUT = {
+            old_poke: 'st_old_poke',
+            old_leg: 'st_old_leg',
+            masterball: 'st_masterball',
+            greenpass: 'st_greenpass',
+            rarecandy: 'st_rarecandy',
+            coin: 'st_coin',
+            poke_bag: 'st_poke_bag',
+            item_bag: 'st_item_bag',
+            level: 'g_level',
+            team: 'g_team',
+            xp: 'g_xp',
+            stardust: 'g_stardust',
             legendary: 'st_legend',
             hundo_leg: 'st_hundo_leg',
             shiny: 'st_shiny',
@@ -589,6 +654,15 @@
             giga: 'st_giga',
             perfect: 'st_perfect'
         };
+        const AI_PROTECTED_INPUT_IDS = [
+            ...Array.from({ length: 11 }, (_, index) => `chk_sp_${index + 1}`),
+            'chk_kyurem', 'sel_kyurem',
+            'chk_zamazenta', 'sel_dogs',
+            'chk_necrozma', 'sel_necrozma',
+            'chk_lati', 'sel_lati',
+            'chk_hoenn', 'sel_hoenn',
+            'chk_dyna', 'chk_groudon', 'chk_kyogre', 'chk_rayquaza'
+        ];
 
         const extractSingleNumber = (value) => {
             if (value === undefined || value === null) return '';
@@ -613,6 +687,74 @@
             const slashMatch = raw.match(/(\d+)\s*[\/／]\s*(\d+)/);
             if (slashMatch) return side === 'right' ? slashMatch[2] : slashMatch[1];
             return extractSingleNumber(raw);
+        };
+
+        const normalizeTeamValue = (value) => {
+            const raw = String(value || '').trim().replace(/\s+/g, '').toLowerCase();
+            if (!raw) return '';
+            if (raw.includes('藍') || raw.includes('blue') || raw.includes('mystic')) return '藍隊';
+            if (raw.includes('紅') || raw.includes('red') || raw.includes('valor')) return '紅隊';
+            if (raw.includes('黃') || raw.includes('yellow') || raw.includes('instinct')) return '黃隊';
+            return '';
+        };
+
+        const formatWanValue = (value) => {
+            const rounded = Math.round(value * 100) / 100;
+            return String(rounded).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+        };
+
+        const normalizeWanValue = (value) => {
+            if (value === undefined || value === null) return '';
+            const raw = String(value).trim();
+            if (!raw) return '';
+            const compact = raw.replace(/,/g, '').replace(/\s+/g, '');
+            if (!compact) return '';
+
+            const explicitUnitMatch = compact.match(/(\d+(?:\.\d+)?)(億|万|萬)/);
+            let wanValue = NaN;
+
+            if (explicitUnitMatch) {
+                const amount = parseFloat(explicitUnitMatch[1]);
+                if (!Number.isFinite(amount)) return '';
+                wanValue = explicitUnitMatch[2] === '億' ? amount * 10000 : amount;
+            } else {
+                const numericMatches = compact.match(/\d+(?:\.\d+)?/g);
+                if (!numericMatches || numericMatches.length !== 1) return '';
+                const numericValue = parseFloat(numericMatches[0]);
+                if (!Number.isFinite(numericValue)) return '';
+                wanValue = numericValue >= 10000 ? numericValue / 10000 : numericValue;
+            }
+
+            if (!Number.isFinite(wanValue) || wanValue <= 0) return '';
+            return formatWanValue(wanValue);
+        };
+
+        const syncFusionMegaSelectVisibility = () => {
+            document.getElementById('sel_kyurem').classList.toggle('hidden', !document.getElementById('chk_kyurem').checked);
+            document.getElementById('sel_dogs').classList.toggle('hidden', !document.getElementById('chk_zamazenta').checked);
+            document.getElementById('sel_necrozma').classList.toggle('hidden', !document.getElementById('chk_necrozma').checked);
+            document.getElementById('sel_lati').classList.toggle('hidden', !document.getElementById('chk_lati').checked);
+            document.getElementById('sel_hoenn').classList.toggle('hidden', !document.getElementById('chk_hoenn').checked);
+        };
+
+        const captureProtectedAiState = () => {
+            const snapshot = {};
+            AI_PROTECTED_INPUT_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                snapshot[id] = el.type === 'checkbox' ? !!el.checked : String(el.value || '');
+            });
+            return snapshot;
+        };
+
+        const restoreProtectedAiState = (snapshot = {}) => {
+            Object.entries(snapshot).forEach(([id, value]) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (el.type === 'checkbox') el.checked = !!value;
+                else el.value = value;
+            });
+            syncFusionMegaSelectVisibility();
         };
 
         const normalizePokemonListEntry = (value) => {
@@ -667,6 +809,18 @@
             dyna: '',
             giga: '',
             perfect: '',
+            old_poke: '',
+            old_leg: '',
+            masterball: '',
+            greenpass: '',
+            rarecandy: '',
+            coin: '',
+            poke_bag: '',
+            item_bag: '',
+            level: '',
+            team: '',
+            xp: '',
+            stardust: '',
             pokemon_list: ''
         });
 
@@ -693,6 +847,18 @@
             dyna: '',
             giga: '',
             perfect: '',
+            old_poke: '',
+            old_leg: '',
+            masterball: '',
+            greenpass: '',
+            rarecandy: '',
+            coin: '',
+            poke_bag: '',
+            item_bag: '',
+            level: '',
+            team: '',
+            xp: '',
+            stardust: '',
             pokemon_list: ''
         });
 
@@ -719,9 +885,14 @@
             normalized.image_type = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'other';
             normalized.search_query = AI_IMAGE_TYPE_TO_QUERY[normalized.image_type] || String(classification?.search_query || '').trim();
 
-            AI_IMAGE_RESULT_FIELDS.forEach(field => {
-                normalized[field] = extractSingleNumber(result?.[field]);
+            AI_NUMERIC_RESULT_FIELDS.forEach(field => {
+                normalized[field] = ['poke_bag', 'item_bag'].includes(field)
+                    ? extractSlashSideNumber(result?.[field], 'right')
+                    : extractSingleNumber(result?.[field]);
             });
+            normalized.team = normalizeTeamValue(result?.team);
+            normalized.xp = normalizeWanValue(result?.xp);
+            normalized.stardust = normalizeWanValue(result?.stardust);
             normalized.pokemon_list = normalizePokemonList(result?.pokemon_list);
 
             const allowedFields = new Set(AI_IMAGE_TYPE_ALLOWED_FIELDS[normalized.image_type] || []);
@@ -788,16 +959,9 @@
             };
 
             results.forEach(result => {
-                assignPreferred('legendary', result.legendary, result.image_type);
-                assignPreferred('shiny', result.shiny, result.image_type);
-                assignPreferred('shiny_leg', result.shiny_leg, result.image_type);
-                assignPreferred('costume', result.costume, result.image_type);
-                assignPreferred('bg_comm', result.bg_comm, result.image_type);
-                assignPreferred('bg_special', result.bg_special, result.image_type);
-                assignPreferred('dyna', result.dyna, result.image_type);
-                assignPreferred('giga', result.giga, result.image_type);
-                assignPreferred('perfect', result.perfect, result.image_type);
-
+                Object.keys(AI_FIELD_SOURCE_PRIORITY).forEach(field => {
+                    assignPreferred(field, result[field], result.image_type);
+                });
                 if (result.image_type === 'search_hundo_legendary') {
                     assignPreferred('hundo_leg', result.hundo_leg, result.image_type);
                     if (result.pokemon_list) {
@@ -825,6 +989,10 @@ image_type 只能是：
 - search_hundo_legendary
 - search_shiny_legendary
 - search_shiny_total
+- search_old_pokemon
+- search_old_legendary
+- trainer_profile
+- resource_overview
 - other
 
 【分類規則】
@@ -844,11 +1012,27 @@ image_type 只能是：
    - image_type = search_shiny_total
    - search_query = "${SHINY_FILTER}"
 
-5. 若是分類總覽頁
+5. 若搜尋欄完全符合「${OLD_POKEMON_FILTER}」
+   - image_type = search_old_pokemon
+   - search_query = "${OLD_POKEMON_FILTER}"
+
+6. 若搜尋欄完全符合「${OLD_LEGENDARY_FILTER}」
+   - image_type = search_old_legendary
+   - search_query = "${OLD_LEGENDARY_FILTER}"
+
+7. 若是訓練家基本資料頁，並可看到等級、隊伍、經驗或星塵
+   - image_type = trainer_profile
+   - search_query = ""
+
+8. 若是資源／背包頁，並可看到大師球、綠票/卷、神奇糖果、寶可幣、寶可夢包或道具背包
+   - image_type = resource_overview
+   - search_query = ""
+
+9. 若是分類總覽頁
    - image_type = category_overview
    - search_query = ""
 
-6. 其他任何圖片
+10. 其他任何圖片
    - image_type = other
    - 若看得到搜尋欄文字，就把實際搜尋字串填入 search_query；若看不到則填 ""
 
@@ -869,6 +1053,18 @@ image_type 只能是：
   "dyna": "",
   "giga": "",
   "perfect": "",
+  "old_poke": "",
+  "old_leg": "",
+  "masterball": "",
+  "greenpass": "",
+  "rarecandy": "",
+  "coin": "",
+  "poke_bag": "",
+  "item_bag": "",
+  "level": "",
+  "team": "",
+  "xp": "",
+  "stardust": "",
   "pokemon_list": ""
 }`;
             const baseRules = `你是寶可夢 GO 截圖資料擷取器。這次只會收到 1 張圖片，而且第一階段已經判定：
@@ -888,7 +1084,8 @@ ${outputTemplate}
 4. 禁止補 0。
 5. 禁止從 pokemon_list 回推數量。
 6. 所有欄位都必須存在。
-7. 不要 Markdown、不要 code fence、不要額外說明。`;
+7. 特殊調查 checkbox、合體與 Mega checkbox 完全不在這次 AI 擷取範圍內，嚴禁輸出任何對應狀態或推論。
+8. 不要 Markdown、不要 code fence、不要額外說明。`;
 
             switch (image_type) {
                 case 'category_overview':
@@ -940,6 +1137,50 @@ ${outputTemplate}
 這是一張搜尋頁，搜尋欄完全符合「${SHINY_FILTER}」。
 你必須讀取頂部數字並填入 shiny。
 除了 shiny 之外，其餘欄位都必須留空字串。`;
+                case 'search_old_pokemon':
+                    return `${baseRules}
+
+這是一張搜尋頁，搜尋欄完全符合「${OLD_POKEMON_FILTER}」。
+你必須讀取頂部數字並填入 old_poke。
+除了 old_poke 之外，其餘欄位都必須留空字串。`;
+                case 'search_old_legendary':
+                    return `${baseRules}
+
+這是一張搜尋頁，搜尋欄完全符合「${OLD_LEGENDARY_FILTER}」。
+你必須讀取頂部數字並填入 old_leg。
+除了 old_leg 之外，其餘欄位都必須留空字串。`;
+                case 'trainer_profile':
+                    return `${baseRules}
+
+這是一張訓練家基本資料頁，只能填以下欄位：
+- 等級 -> level
+- 隊伍 -> team（只能輸出「藍隊」「紅隊」「黃隊」其中一種）
+- 經驗 -> xp
+- 星塵 -> stardust
+
+【xp / stardust 規則】
+1. 一律換算成「萬」單位輸出。
+2. 可保留到小數點後 2 位。
+3. 請直接輸出帶「萬」字的字串，例如「1234.56萬」。
+
+除了 level、team、xp、stardust 之外，其餘欄位都必須留空字串。`;
+                case 'resource_overview':
+                    return `${baseRules}
+
+這是一張資源／背包頁，只能填以下欄位：
+- 大師球 -> masterball
+- 綠票/卷 -> greenpass
+- 神奇糖果 -> rarecandy
+- 寶可幣 -> coin
+- 寶可夢包 -> poke_bag
+- 道具背包 -> item_bag
+
+【背包規則】
+1. 若畫面顯示為「目前/上限」，例如「4200/7800」，請取右邊上限數字。
+2. 若只看得到其中一種背包，就只填看得到的那一種。
+3. 若沒看到明確數字就留空字串。
+
+除了上述資源欄位之外，其餘欄位都必須留空字串。`;
                 default:
                     return `${baseRules}
 
@@ -1041,6 +1282,7 @@ ${outputTemplate}
                 ...buildEmptyAiResult(),
                 ...result
             };
+            const protectedState = captureProtectedAiState();
             const setInputValueIfPresent = (id, value) => {
                 const normalizedValue = String(value || '').trim();
                 if (!normalizedValue) return;
@@ -1053,9 +1295,10 @@ ${outputTemplate}
                 window.updateHundoCount();
             }
 
-            Object.entries(ANALYSIS_RESULT_FIELD_TO_INPUT).forEach(([field, inputId]) => {
+            Object.entries(AI_AUTOFILL_FIELD_TO_INPUT).forEach(([field, inputId]) => {
                 setInputValueIfPresent(inputId, res[field]);
             });
+            restoreProtectedAiState(protectedState);
         };
 
         window.analyzeMultipleImages = async function() {
