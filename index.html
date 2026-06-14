@@ -421,15 +421,15 @@
         }
 
         window.previewImages = function(event) {
-            const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; if(files.length === 0) return;
+            const files = event.target.files; const container = document.getElementById('imagePreviewContainer'); container.innerHTML = ''; toggleAiActionButtons(files.length > 0); if(files.length === 0) return;
             for(let i = 0; i < files.length; i++) {
                 const reader = new FileReader(); reader.onload = (e) => { const img = document.createElement('img'); img.src = e.target.result; img.className = 'rounded h-12 border object-cover w-12 shadow-sm'; container.appendChild(img); }
                 reader.readAsDataURL(files[i]);
             }
-            document.getElementById('aiBtn').classList.remove('hidden');
+            resetAiActionButtons();
         };
 
-        window.clearImage = function() { document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; document.getElementById('aiBtn').classList.add('hidden'); };
+        window.clearImage = function() { document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; toggleAiActionButtons(false); resetAiActionButtons(); };
 
         window.updateHundoCount = function() {
             const listInput = document.getElementById('g_hundos');
@@ -456,7 +456,22 @@
         const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
         const OLD_POKEMON_FILTER = '年16-20';
         const OLD_LEGENDARY_FILTER = `${OLD_POKEMON_FILTER}&${LEGENDARY_FILTER}`;
-        const AI_BUTTON_LABEL = '🤖 AI 解析';
+        const AI_SCAN_MODES = new Set(['quick', 'full']);
+        const AI_SCAN_MODE_LABELS = {
+            quick: '快速模式',
+            full: '完整模式'
+        };
+        const AI_SCAN_BUTTON_LABELS = {
+            quick: '⚡ 快速掃描',
+            full: '🧠 完整掃描百神'
+        };
+        const AI_ACTION_BUTTON_IDS = {
+            quick: 'aiQuickBtn',
+            full: 'aiFullBtn'
+        };
+        const AI_MAX_IMAGE_SIZE = 1000;
+        const AI_JPEG_QUALITY = 0.7;
+        const AI_IMAGE_DETAIL = 'auto';
         const AI_SUCCESS_LABEL = '合併完成';
         const AI_IMAGE_TYPES = new Set([
             'category_overview',
@@ -634,6 +649,35 @@
                     'poke_bag', 'item_bag', 'level', 'team', 'xp', 'stardust', 'pokemon_list'
                 ]
             }
+        };
+
+        const toggleAiActionButtons = (show) => {
+            const container = document.getElementById('aiActionButtons');
+            if (container) container.classList.toggle('hidden', !show);
+        };
+
+        const setAiActionButtonsDisabled = (disabled) => {
+            Object.values(AI_ACTION_BUTTON_IDS).forEach(id => {
+                const button = document.getElementById(id);
+                if (button) button.disabled = disabled;
+            });
+        };
+
+        const resetAiActionButtons = () => {
+            Object.entries(AI_ACTION_BUTTON_IDS).forEach(([mode, id]) => {
+                const button = document.getElementById(id);
+                if (!button) return;
+                button.disabled = false;
+                button.innerHTML = AI_SCAN_BUTTON_LABELS[mode];
+            });
+        };
+
+        const setActiveAiButtonStatus = (scanMode, statusHtml) => {
+            Object.entries(AI_ACTION_BUTTON_IDS).forEach(([mode, id]) => {
+                const button = document.getElementById(id);
+                if (!button) return;
+                button.innerHTML = mode === scanMode ? statusHtml : AI_SCAN_BUTTON_LABELS[mode];
+            });
         };
 
         const parseOpenAIMessageContent = (data) => {
@@ -910,7 +954,16 @@
             };
         };
 
-        const normalizeAiExtraction = (result = {}, classification = {}) => {
+        const getAiExtractionFields = (classification = {}, scanMode = 'quick') => {
+            const imageType = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'other';
+            const baseFields = [...(AI_IMAGE_TYPE_ALLOWED_FIELDS[imageType] || [])];
+            if (imageType === 'search_hundo_legendary' && scanMode !== 'full') {
+                return baseFields.filter(field => field !== 'pokemon_list');
+            }
+            return baseFields;
+        };
+
+        const normalizeAiExtraction = (result = {}, classification = {}, allowedFields = null) => {
             const normalized = buildEmptyAiResult();
             normalized.image_type = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'other';
             normalized.search_query = AI_IMAGE_TYPE_TO_QUERY[normalized.image_type] || String(classification?.search_query || '').trim();
@@ -925,34 +978,34 @@
             normalized.stardust = normalizeWanValue(result?.stardust);
             normalized.pokemon_list = normalizePokemonList(result?.pokemon_list);
 
-            const allowedFields = new Set(AI_IMAGE_TYPE_ALLOWED_FIELDS[normalized.image_type] || []);
+            const allowedFieldSet = new Set(Array.isArray(allowedFields) ? allowedFields : (AI_IMAGE_TYPE_ALLOWED_FIELDS[normalized.image_type] || []));
             [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'].forEach(field => {
-                if (!allowedFields.has(field)) normalized[field] = '';
+                if (!allowedFieldSet.has(field)) normalized[field] = '';
             });
 
             return normalized;
         };
 
-        const getExtractedFieldsForLog = (result = {}) => {
+        const getExtractedFieldsForLog = (result = {}, allowedFields = null) => {
             const extractedFields = {};
-            (AI_IMAGE_TYPE_ALLOWED_FIELDS[result.image_type] || []).forEach(field => {
+            (Array.isArray(allowedFields) ? allowedFields : (AI_IMAGE_TYPE_ALLOWED_FIELDS[result.image_type] || [])).forEach(field => {
                 extractedFields[field] = String(result[field] || '').trim();
             });
             return extractedFields;
         };
 
-        const getRetryableMissingFields = (result = {}) => {
-            return (AI_RETRY_REQUIRED_FIELDS_BY_IMAGE_TYPE[result.image_type] || []).filter(field => !String(result[field] || '').trim());
+        const getRetryableMissingFields = (result = {}, expectedFields = []) => {
+            return expectedFields.filter(field => !String(result[field] || '').trim());
         };
 
-        const mergeSingleImageAttempts = (firstAttempt = buildEmptyAiResult(), secondAttempt = buildEmptyAiResult()) => {
+        const mergeSingleImageAttempts = (firstAttempt = buildEmptyAiResult(), secondAttempt = buildEmptyAiResult(), allowedFields = null) => {
             const merged = {
                 ...firstAttempt,
                 image_type: firstAttempt.image_type || secondAttempt.image_type || 'other',
                 search_query: firstAttempt.search_query || secondAttempt.search_query || ''
             };
 
-            (AI_IMAGE_TYPE_ALLOWED_FIELDS[merged.image_type] || []).forEach(field => {
+            (Array.isArray(allowedFields) ? allowedFields : (AI_IMAGE_TYPE_ALLOWED_FIELDS[merged.image_type] || [])).forEach(field => {
                 if (field === 'pokemon_list') {
                     const combinedList = [firstAttempt.pokemon_list, secondAttempt.pokemon_list].filter(Boolean).join(',');
                     merged.pokemon_list = combinedList ? normalizePokemonList(combinedList) : '';
@@ -965,11 +1018,11 @@
         };
 
         const collectExpectedFields = (results = []) => {
-            const expectedFields = new Set();
+            const expectedFieldSet = new Set();
             results.forEach(result => {
-                (AI_EXPECTED_FIELDS_BY_IMAGE_TYPE[result.image_type] || []).forEach(field => expectedFields.add(field));
+                (result.expectedFields || []).forEach(field => expectedFieldSet.add(field));
             });
-            return [...expectedFields];
+            return [...expectedFieldSet];
         };
 
         const mergeAiResults = (results = []) => {
@@ -1073,7 +1126,7 @@ image_type 只能是：
 4. 只分類這一張圖，不要猜其他圖。
 5. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
 
-        const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [] }) => {
+        const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [], allow_pokemon_list = false }) => {
             const outputTemplate = `{
   "legendary": "",
   "hundo_leg": "",
@@ -1123,7 +1176,8 @@ ${outputTemplate}
 5. 禁止從 pokemon_list 回推數量。
 6. 所有欄位都必須存在。
 7. 特殊調查 checkbox、合體與 Mega checkbox 完全不在這次 AI 擷取範圍內，嚴禁輸出任何對應狀態或推論。
-8. 不要 Markdown、不要 code fence、不要額外說明。${retryRules}`;
+8. 若這次沒有明確要求 pokemon_list，嚴禁辨識、推測或輸出任何寶可夢名稱。
+9. 不要 Markdown、不要 code fence、不要額外說明。${retryRules}`;
 
             switch (image_type) {
                 case 'category_overview':
@@ -1147,6 +1201,14 @@ ${outputTemplate}
 你必須讀取頂部數字並填入 legendary。
 除了 legendary 之外，其餘欄位都必須留空字串。`;
                 case 'search_hundo_legendary':
+                    if (!allow_pokemon_list) {
+                        return `${baseRules}
+
+這是一張搜尋頁，搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」。
+你必須讀取頂部數字並填入 hundo_leg。
+這一輪是快速模式，只做數字辨識，pokemon_list 必須留空字串，禁止辨識任何寶可夢名稱。
+除了 hundo_leg 之外，其餘欄位都必須留空字串。`;
+                    }
                     return `${baseRules}
 
 這是一張搜尋頁，搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」。
@@ -1240,7 +1302,7 @@ ${outputTemplate}
             reader.onload = (e) => {
                 const img = new Image();
                 img.onload = () => {
-                    const maxSize = 1500;
+                    const maxSize = AI_MAX_IMAGE_SIZE;
                     let width = img.width;
                     let height = img.height;
                     if (width > height) {
@@ -1253,7 +1315,7 @@ ${outputTemplate}
                     canvas.width = width;
                     canvas.height = height;
                     canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', 0.8));
+                    resolve(canvas.toDataURL('image/jpeg', AI_JPEG_QUALITY));
                 };
                 img.src = e.target.result;
             };
@@ -1262,7 +1324,7 @@ ${outputTemplate}
 
         const buildAiRequestContent = (prompt, dataUrl) => ([
             { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
+            { type: 'image_url', image_url: { url: dataUrl, detail: AI_IMAGE_DETAIL } }
         ]);
 
         const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater) => {
@@ -1318,9 +1380,19 @@ ${outputTemplate}
             return normalizeAiClassification(rawResult);
         };
 
-        const requestSingleImageExtraction = async (apiKey, dataUrl, classification, statusUpdater, retryFields = []) => {
-            const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiExtractionPrompt({ ...classification, retry_fields: retryFields }), dataUrl, OPENAI_EXTRACTION_JSON_SCHEMA, statusUpdater);
-            return normalizeAiExtraction(rawResult, classification);
+        const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = []) => {
+            const rawResult = await requestOpenAiJsonSchema(
+                apiKey,
+                buildAiExtractionPrompt({
+                    ...classification,
+                    retry_fields: retryFields,
+                    allow_pokemon_list: extractionFields.includes('pokemon_list')
+                }),
+                dataUrl,
+                OPENAI_EXTRACTION_JSON_SCHEMA,
+                statusUpdater
+            );
+            return normalizeAiExtraction(rawResult, classification, extractionFields);
         };
 
         const applyAiResultToForm = (result = {}) => {
@@ -1347,55 +1419,93 @@ ${outputTemplate}
             restoreProtectedAiState(protectedState);
         };
 
-        window.analyzeMultipleImages = async function() {
+        const processSingleAiImage = async ({ apiKey, dataUrl, scanMode, imageIndex, totalFiles, updateStatus }) => {
+            const progressLabel = `${imageIndex + 1}/${totalFiles}`;
+            updateStatus(`GPT 第一階段分類中 ${progressLabel}`);
+            const classification = await requestSingleImageClassification(apiKey, dataUrl, (attempt, maxRetries) => {
+                updateStatus(`GPT 第一階段分類中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
+            });
+
+            const extractionFields = getAiExtractionFields(classification, scanMode);
+            const isDetailedScan = extractionFields.includes('pokemon_list');
+            const extractionPhaseLabel = isDetailedScan ? 'GPT 第二階段完整辨識中' : 'GPT 第二階段數字抽值中';
+            updateStatus(`${extractionPhaseLabel} ${progressLabel}`);
+            let imageResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
+                updateStatus(`${extractionPhaseLabel} ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
+            });
+
+            const retryableMissingFields = getRetryableMissingFields(imageResult, extractionFields);
+            if (retryableMissingFields.length > 0) {
+                const retryPhaseLabel = isDetailedScan ? 'GPT 第二階段完整補抓中' : 'GPT 第二階段補抓中';
+                updateStatus(`${retryPhaseLabel} ${progressLabel}`);
+                const retriedResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
+                    updateStatus(`${retryPhaseLabel} ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
+                }, retryableMissingFields);
+                imageResult = mergeSingleImageAttempts(imageResult, retriedResult, extractionFields);
+            }
+
+            console.log({
+                imageIndex: imageIndex + 1,
+                image_type: imageResult.image_type,
+                search_query: imageResult.search_query,
+                scan_mode: scanMode,
+                extracted_fields: getExtractedFieldsForLog(imageResult, extractionFields)
+            });
+
+            return { imageResult, expectedFields: extractionFields };
+        };
+
+        window.analyzeMultipleImages = async function(scanMode = 'quick') {
             const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files;
             if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
             if(files.length === 0) return;
+            const normalizedScanMode = AI_SCAN_MODES.has(scanMode) ? scanMode : 'quick';
             const totalFiles = files.length;
-            const aiBtn = document.getElementById('aiBtn');
-            aiBtn.disabled = true;
-            aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在準備圖片 0/${totalFiles}`;
+            setAiActionButtonsDisabled(true);
+            setActiveAiButtonStatus(normalizedScanMode, `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_MODE_LABELS[normalizedScanMode]} 準備圖片 0/${totalFiles}`);
             try {
-                const dataUrls = [];
-                for (let i = 0; i < totalFiles; i++) {
-                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在準備圖片 ${i + 1}/${totalFiles}`;
-                    dataUrls.push(await fileToResizedDataUrl(files[i]));
-                }
-                const imageResults = [];
-                for (let i = 0; i < dataUrls.length; i++) {
-                    const progressLabel = `${i + 1}/${totalFiles}`;
-                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第一階段分類中 ${progressLabel}`;
-                    const classification = await requestSingleImageClassification(apiKey, dataUrls[i], (attempt, maxRetries) => {
-                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第一階段分類中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`;
-                    });
+                let preparedCount = 0;
+                const dataUrls = await Promise.all(Array.from(files).map(file =>
+                    fileToResizedDataUrl(file).then(dataUrl => {
+                        preparedCount += 1;
+                        setActiveAiButtonStatus(normalizedScanMode, `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_MODE_LABELS[normalizedScanMode]} 準備圖片 ${preparedCount}/${totalFiles}`);
+                        return dataUrl;
+                    })
+                ));
 
-                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段抽值中 ${progressLabel}`;
-                    let imageResult = await requestSingleImageExtraction(apiKey, dataUrls[i], classification, (attempt, maxRetries) => {
-                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段抽值中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`;
-                    });
+                let completedCount = 0;
+                const updateStatus = (message) => {
+                    setActiveAiButtonStatus(
+                        normalizedScanMode,
+                        `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_MODE_LABELS[normalizedScanMode]} ${message}｜完成 ${completedCount}/${totalFiles}`
+                    );
+                };
 
-                    const retryableMissingFields = getRetryableMissingFields(imageResult);
-                    if (retryableMissingFields.length > 0) {
-                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段補抓中 ${progressLabel}`;
-                        const retriedResult = await requestSingleImageExtraction(apiKey, dataUrls[i], classification, (attempt, maxRetries) => {
-                            aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段補抓中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`;
-                        }, retryableMissingFields);
-                        imageResult = mergeSingleImageAttempts(imageResult, retriedResult);
-                    }
+                const taskResults = await Promise.all(dataUrls.map((dataUrl, index) =>
+                    processSingleAiImage({
+                        apiKey,
+                        dataUrl,
+                        scanMode: normalizedScanMode,
+                        imageIndex: index,
+                        totalFiles,
+                        updateStatus
+                    }).then(result => {
+                        completedCount += 1;
+                        setActiveAiButtonStatus(
+                            normalizedScanMode,
+                            `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_MODE_LABELS[normalizedScanMode]} 合併中｜完成 ${completedCount}/${totalFiles}`
+                        );
+                        return result;
+                    })
+                ));
 
-                    imageResults.push(imageResult);
-                    console.log({
-                        imageIndex: i + 1,
-                        image_type: imageResult.image_type,
-                        search_query: imageResult.search_query,
-                        extracted_fields: getExtractedFieldsForLog(imageResult)
-                    });
-                }
+                const imageResults = taskResults.map(result => result.imageResult);
                 const mergedResult = mergeAiResults(imageResults);
-                const missingButExpectedFields = collectExpectedFields(imageResults).filter(field => !String(mergedResult[field] || '').trim());
+                const missingButExpectedFields = collectExpectedFields(taskResults).filter(field => !String(mergedResult[field] || '').trim());
                 console.log({
                     finalResult: mergedResult,
-                    missingButExpectedFields
+                    missingButExpectedFields,
+                    scanMode: normalizedScanMode
                 });
                 applyAiResultToForm(mergedResult);
                 if (missingButExpectedFields.length > 0) {
@@ -1403,13 +1513,13 @@ ${outputTemplate}
                     console.warn('AI unresolved fields after retry:', unresolvedLabels);
                     alert(`以下欄位已有對應截圖且已自動重檢 1 次，但仍未成功讀取，請人工複查：\n${unresolvedLabels.join('、')}`);
                 }
-                aiBtn.innerHTML = AI_SUCCESS_LABEL;
+                setActiveAiButtonStatus(normalizedScanMode, AI_SUCCESS_LABEL);
                 await new Promise(resolve => setTimeout(resolve, 1200));
             } catch (e) { 
                 alert("GPT 解析失敗，請稍後再試"); 
                 console.error('OpenAI GPT parsing failed:', e); 
             }
-            aiBtn.disabled = false; aiBtn.innerHTML = AI_BUTTON_LABEL;
+            resetAiActionButtons();
         };
 
         window.togglePage = function(pageNumber) {
@@ -1438,11 +1548,7 @@ ${outputTemplate}
             document.querySelectorAll('.dynamic-select').forEach(el => el.classList.add('hidden')); 
             window.clearImage(); 
 
-            const aiBtn = document.getElementById('aiBtn');
-            if(aiBtn) {
-                aiBtn.disabled = false;
-                aiBtn.innerHTML = AI_BUTTON_LABEL;
-            }
+            resetAiActionButtons();
 
             currentEditUid = null; 
             const submitBtn = document.getElementById('submitBtn');
@@ -1639,7 +1745,11 @@ ${outputTemplate}
                             <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
                             <label for="imageInput" class="cursor-pointer bg-white border px-2 py-1.5 md:px-4 md:py-2 rounded shadow-sm text-[11px] md:text-sm font-bold hover:bg-gray-50 transition text-center w-full">選截圖</label>
                             <div id="imagePreviewContainer" class="flex flex-wrap gap-1 md:gap-2 w-full py-1 md:py-2 justify-center"></div>
-                            <button type="button" id="aiBtn" onclick="analyzeMultipleImages()" class="hidden w-full bg-blue-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-blue-700 transition mt-1">🤖 AI 解析</button>
+                            <div id="aiActionButtons" class="hidden w-full mt-1 space-y-1">
+                                <button type="button" id="aiQuickBtn" onclick="analyzeMultipleImages('quick')" class="w-full bg-blue-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-blue-700 transition">⚡ 快速掃描</button>
+                                <button type="button" id="aiFullBtn" onclick="analyzeMultipleImages('full')" class="w-full bg-indigo-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-indigo-700 transition">🧠 完整掃描百神</button>
+                                <p class="px-1 text-[10px] text-gray-500 leading-relaxed">快速模式只掃數字與資源；完整模式只有命中「傳說的寶可夢,幻,究極異獸&amp;4*」時，才追加百神清單詳細辨識。</p>
+                            </div>
                         </div>
                         
                         <div class="space-y-2 md:space-y-3">
