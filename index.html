@@ -451,7 +451,12 @@
 
         const OPENAI_MODEL = 'gpt-4.1-mini';
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
-        const HUNDO_LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸&4*';
+        const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
+        const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
+        const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
+        const SHINY_FILTER = '異色';
+        const COSTUME_FILTER = '活動';
+        const AI_BUTTON_LABEL = '🤖 AI 解析';
         const OPENAI_JSON_SCHEMA = {
             name: 'pokemon_go_inventory_parse',
             strict: true,
@@ -524,6 +529,20 @@
         };
 
         const SCREEN_COUNT_FIELDS = ['legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'old_poke', 'old_leg'];
+        const ANALYSIS_RESULT_FIELD_TO_INPUT = {
+            legendary: 'st_legend',
+            hundo_leg: 'st_hundo_leg',
+            shiny: 'st_shiny',
+            shiny_leg: 'st_shiny_leg',
+            costume: 'st_costume',
+            bg_comm: 'st_bg_comm',
+            bg_special: 'st_bg_special',
+            dyna: 'st_dyna',
+            giga: 'st_giga',
+            perfect: 'st_perfect',
+            old_poke: 'st_old_poke',
+            old_leg: 'st_old_leg'
+        };
 
         const extractSingleNumber = (value) => {
             if (value === undefined || value === null) return '';
@@ -700,11 +719,18 @@
             return normalizeAiResult(merged);
         };
 
-        const buildAiPrompt = () => `你是寶可夢 GO 截圖資料擷取器。只能根據這一張截圖中明確可見的文字、數字與圖示輸出 JSON；禁止自行推算、禁止加總、禁止猜測。不確定就留空字串。
+        const buildAiPrompt = () => `你是寶可夢 GO 截圖資料擷取器。這次會一次收到多張截圖。你必須先逐張判斷每張圖的頁面類型與可讀內容，再合併成最後唯一一份 JSON。只能根據圖片中明確可見的文字、數字與圖示輸出；禁止自行推算、禁止跨圖加總、禁止猜測。不確定就留空字串。
+
+【多圖合併最高原則】
+1. 先逐張判斷，再輸出最後唯一一份合併 JSON。
+2. 有值的欄位不可被其他沒有該欄位的圖片覆蓋成空字串。
+3. 數字欄位只有在某張圖中明確看見數字時才可填。
+4. pokemon_list / hundred_list / hundred_source_filter 只有合法百神來源圖可更新；其他圖片不可新增也不可清空。
+5. 最終只輸出一份合併後 JSON，不要輸出逐張 JSON，不要輸出陣列。
 
 【最高原則：統計數字】
 1. 只要畫面存在明確數字，永遠使用畫面數字。
-2. 統計欄位 legendary、hundo_leg、shiny、shiny_leg、costume、bg_comm、bg_special、dyna、giga、perfect、old_poke、old_leg 只能讀取這一張截圖中的畫面數字。
+2. 統計欄位 legendary、hundo_leg、shiny、shiny_leg、costume、bg_comm、bg_special、dyna、giga、perfect、old_poke、old_leg 只能讀取某一張截圖中的畫面數字。
 3. 禁止用 pokemon_list 推算任何統計欄位。
 4. 禁止自行加總、禁止輸出算式、禁止猜測。
 5. 數字來源優先級：
@@ -725,9 +751,9 @@
 5. 範例：色違固拉多、暗影蓋歐卡、色違暗影固拉多。
 
 【百神清單唯一合法來源】
-1. 只有當這一張截圖的搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可填 pokemon_list、hundred_list、hundo_leg、hundred_source_filter。
-2. 如果這一張截圖的搜尋欄不是「${HUNDO_LEGENDARY_FILTER}」，pokemon_list、hundred_list、hundo_leg、hundred_source_filter 一律留空字串。
-3. 只有當你真的看見搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可掃描這一張搜尋結果頁中的寶可夢來生成 pokemon_list / hundred_list，並讀取同一張搜尋結果頁頂部數字作為 hundo_leg。
+1. 只有當某一張截圖的搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可填 pokemon_list、hundred_list、hundo_leg、hundred_source_filter。
+2. 如果某一張截圖的搜尋欄不是「${HUNDO_LEGENDARY_FILTER}」，該張圖對 pokemon_list、hundred_list、hundo_leg、hundred_source_filter 的貢獻一律視為空字串。
+3. 只有當你真的看見搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，才可掃描該張搜尋結果頁中的寶可夢來生成 pokemon_list / hundred_list，並讀取同一張搜尋結果頁頂部數字作為 hundo_leg。
 4. 除了完全符合「${HUNDO_LEGENDARY_FILTER}」以外，以下情況都禁止產生百神清單：異色、暗影、淨化、分類總覽頁、一般傳說搜尋頁、以及任何其他不完全相同的搜尋條件。
 5. hundred_source_filter 只有在合法來源成立時，才填入完全相同的字串「${HUNDO_LEGENDARY_FILTER}」；其他任何情況都必須留空字串。
 
@@ -759,12 +785,19 @@
 9. 完美 → perfect
 10. 暗影、淨化不要填，因為沒有對應欄位。
 
+【搜尋結果頁】
+1. 搜尋欄完全等於「${LEGENDARY_FILTER}」時，讀取頂部數字填入 legendary。
+2. 搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，讀取頂部數字填入 hundo_leg；且只有這一種情況可以產生 pokemon_list / hundred_list / hundred_source_filter。
+3. 搜尋欄完全等於「${SHINY_LEGENDARY_FILTER}」時，讀取頂部數字填入 shiny_leg。這是「色違神」，只能填 shiny_leg，禁止填 shiny，禁止填 pokemon_list，禁止填 hundo_leg，禁止使用分類總覽頁的異色數字代替。
+4. 搜尋欄完全等於「${SHINY_FILTER}」時，讀取頂部數字填入 shiny。這是「色違總」，不是 shiny_leg。
+5. 搜尋欄完全等於「${COSTUME_FILTER}」時，讀取頂部數字填入 costume。
+
 【指定統計欄位】
-1. legendary：搜尋欄完全等於「傳說的寶可夢,幻,究極異獸」時，讀取頂部數字；若是分類總覽頁出現「傳說」，則讀取其下方數字。
-2. hundo_leg：只有搜尋欄完全等於「傳說的寶可夢,幻,究極異獸&4*」時，讀取頂部數字。
-3. shiny_leg：只有搜尋欄完全等於「傳說的寶可夢,幻,究極異獸&異色」時，讀取頂部數字。
-4. shiny：搜尋欄完全等於「異色」時，讀取頂部數字；若是分類總覽頁出現「異色」，則讀取其下方數字。
-5. costume：搜尋欄完全等於「活動」時，讀取頂部數字；若是分類總覽頁出現「活動」，則讀取其下方數字。
+1. legendary：搜尋欄完全等於「${LEGENDARY_FILTER}」時，讀取頂部數字；若是分類總覽頁出現「傳說」，則讀取其下方數字。
+2. hundo_leg：只有搜尋欄完全等於「${HUNDO_LEGENDARY_FILTER}」時，讀取頂部數字。
+3. shiny_leg：只有搜尋欄完全等於「${SHINY_LEGENDARY_FILTER}」時，讀取頂部數字。
+4. shiny：搜尋欄完全等於「${SHINY_FILTER}」時，讀取頂部數字；若是分類總覽頁出現「異色」，則讀取其下方數字。
+5. costume：搜尋欄完全等於「${COSTUME_FILTER}」時，讀取頂部數字；若是分類總覽頁出現「活動」，則讀取其下方數字。
 6. bg_comm：分類頁出現「紀念背卡」時，讀取其下方數字。
 7. bg_special：分類頁出現「特別背卡」時，讀取其下方數字。
 8. dyna：分類頁出現「極巨化」時，讀取其下方數字。
@@ -832,16 +865,18 @@ pokemon_bag = poke_bag
             reader.readAsDataURL(file);
         });
 
-        const requestSingleImageAnalysis = async (apiKey, dataUrl, statusUpdater) => {
+        const buildAiRequestContent = (dataUrls = []) => ([
+            { type: 'text', text: buildAiPrompt() },
+            ...dataUrls.map(url => ({ type: 'image_url', image_url: { url, detail: 'high' } }))
+        ]);
+
+        const requestMultiImageAnalysis = async (apiKey, dataUrls, statusUpdater) => {
             const payload = JSON.stringify({
                 model: OPENAI_MODEL,
                 temperature: 0.1,
                 messages: [{
                     role: 'user',
-                    content: [
-                        { type: 'text', text: buildAiPrompt() },
-                        { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
-                    ]
+                    content: buildAiRequestContent(dataUrls)
                 }],
                 response_format: {
                     type: 'json_schema',
@@ -865,7 +900,7 @@ pokemon_bag = poke_bag
                         if ((resp.status === 429 || resp.status >= 500) && attempt < maxRetries) {
                             const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
                             const delay = retryAfter > 0 ? retryAfter * 1000 : 3500;
-                            statusUpdater(`GPT 忙碌中，自動重試 (${attempt}/${maxRetries})...`);
+                            statusUpdater?.(`GPT 忙碌中，自動重試 (${attempt}/${maxRetries})...`);
                             await new Promise(resolve => setTimeout(resolve, delay));
                             continue;
                         }
@@ -883,85 +918,93 @@ pokemon_bag = poke_bag
             return normalizeAiResult({});
         };
 
+        const applyAiResultToForm = (result = {}) => {
+            const res = normalizeAiResult(result);
+            const setInputValueIfPresent = (id, value) => {
+                const normalizedValue = String(value || '').trim();
+                if (!normalizedValue) return;
+                document.getElementById(id).value = normalizedValue;
+            };
+
+            if (res.team && ['藍隊', '紅隊', '黃隊'].includes(res.team)) {
+                document.getElementById('g_team').value = res.team;
+                highlightInput('g_team');
+            }
+
+            if (res.rare_list) {
+                document.getElementById('g_rare_list').value = res.rare_list;
+            }
+
+            if (isExactHundredSource(res.hundred_source_filter)) {
+                setInputValueIfPresent('g_hundos', res.pokemon_list);
+                setInputValueIfPresent(ANALYSIS_RESULT_FIELD_TO_INPUT.hundo_leg, res.hundo_leg);
+            }
+
+            Object.entries(ANALYSIS_RESULT_FIELD_TO_INPUT).forEach(([field, inputId]) => {
+                if (field === 'hundo_leg') return;
+                setInputValueIfPresent(inputId, res[field]);
+            });
+
+            const masterball = extractSingleNumber(res.masterball);
+            if (masterball) document.getElementById('st_masterball').value = masterball;
+            const rc = extractSingleNumber(res.rarecandy);
+            if (rc && parseInt(rc, 10) >= 100) document.getElementById('st_rarecandy').value = rc;
+            const coin = extractSingleNumber(res.coin);
+            if (coin) document.getElementById('st_coin').value = coin;
+
+            // 綠票只接受畫面中明確單一數字，禁止把 AI 算式或自行加總結果灌進表單。
+            const pass = extractSingleNumber(res.greenpass);
+            if (pass) document.getElementById('st_greenpass').value = pass;
+
+            const pokeBag = extractSlashSideNumber(res.poke_bag, 'right');
+            const itemBag = extractSlashSideNumber(res.item_bag, 'right');
+            if (pokeBag) document.getElementById('st_poke_bag').value = pokeBag;
+            if (itemBag) document.getElementById('st_item_bag').value = itemBag;
+
+            const level = extractSingleNumber(res.level);
+            const stardust = extractSingleNumber(res.stardust);
+            const xp = extractSlashSideNumber(res.xp, 'left');
+
+            if (level) {
+                document.getElementById('g_level').value = level;
+                highlightInput('g_level');
+            }
+            if (stardust) {
+                document.getElementById('g_stardust').value = Math.floor(parseInt(stardust, 10) / 10000);
+                highlightInput('g_stardust');
+            }
+            if (xp) {
+                document.getElementById('g_xp').value = Math.floor(parseInt(xp, 10) / 10000);
+                highlightInput('g_xp');
+            }
+        };
+
         window.analyzeMultipleImages = async function() {
-            const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
+            const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files;
             if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GPT 解析中...';
+            const totalFiles = files.length;
+            const aiBtn = document.getElementById('aiBtn');
+            aiBtn.disabled = true;
+            aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在準備 ${totalFiles} 張圖片...`;
             try {
-                const results = [];
-                for (let i = 0; i < files.length; i++) {
-                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 解析中 (${i + 1}/${files.length})...`;
-                    const dataUrl = await fileToResizedDataUrl(files[i]);
-                    const result = await requestSingleImageAnalysis(apiKey, dataUrl, (statusText) => {
-                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${statusText}（第 ${i + 1}/${files.length} 張）`;
-                    });
-                    results.push(result);
-                }
-                const res = mergeAiResults(results);
-
-                if(res.team && ['藍隊', '紅隊', '黃隊'].includes(res.team)) {
-                    document.getElementById('g_team').value = res.team;
-                    highlightInput('g_team');
-                }
-
-                document.getElementById('g_rare_list').value = res.rare_list || '';
-                if (isExactHundredSource(res.hundred_source_filter)) {
-                    if (res.pokemon_list !== '') {
-                        document.getElementById('g_hundos').value = res.pokemon_list;
+                const dataUrls = [];
+                for (let i = 0; i < totalFiles; i++) {
+                    dataUrls.push(await fileToResizedDataUrl(files[i]));
+                    if (i < totalFiles - 1) {
+                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在準備 ${totalFiles} 張圖片...`;
                     }
-                    if (res.hundo_leg !== '') document.getElementById('st_hundo_leg').value = res.hundo_leg;
                 }
-                if(res.legendary !== '') document.getElementById('st_legend').value = res.legendary;
-                if(res.shiny_leg !== '') document.getElementById('st_shiny_leg').value = res.shiny_leg; 
-                if(res.shiny !== '') document.getElementById('st_shiny').value = res.shiny;
-                if(res.costume !== '') document.getElementById('st_costume').value = res.costume;
-                if(res.bg_comm !== '') document.getElementById('st_bg_comm').value = res.bg_comm;
-                if(res.bg_special !== '') document.getElementById('st_bg_special').value = res.bg_special;
-                if(res.dyna !== '') document.getElementById('st_dyna').value = res.dyna;
-                if(res.giga !== '') document.getElementById('st_giga').value = res.giga;
-                if(res.perfect !== '') document.getElementById('st_perfect').value = res.perfect;
-                
-                if(res.old_poke !== '') document.getElementById('st_old_poke').value = res.old_poke;
-                if(res.old_leg !== '') document.getElementById('st_old_leg').value = res.old_leg;
-
-                const masterball = extractSingleNumber(res.masterball);
-                if(masterball) document.getElementById('st_masterball').value = masterball;
-                const rc = extractSingleNumber(res.rarecandy);
-                if(rc && parseInt(rc, 10) >= 100) document.getElementById('st_rarecandy').value = rc;
-                const coin = extractSingleNumber(res.coin);
-                if(coin) document.getElementById('st_coin').value = coin;
-                
-                // 綠票只接受畫面中明確單一數字，禁止把 AI 算式或自行加總結果灌進表單。
-                const pass = extractSingleNumber(res.greenpass); 
-                if(pass) document.getElementById('st_greenpass').value = pass;
-                
-                const pokeBag = extractSlashSideNumber(res.poke_bag, 'right');
-                const itemBag = extractSlashSideNumber(res.item_bag, 'right');
-                if(pokeBag) document.getElementById('st_poke_bag').value = pokeBag;
-                if(itemBag) document.getElementById('st_item_bag').value = itemBag;
-
-                const level = extractSingleNumber(res.level);
-                const stardust = extractSingleNumber(res.stardust);
-                const xp = extractSlashSideNumber(res.xp, 'left');
-                
-                if (level) {
-                    document.getElementById('g_level').value = level; 
-                    highlightInput('g_level');
-                }
-                if (stardust) { 
-                    document.getElementById('g_stardust').value = Math.floor(parseInt(stardust, 10) / 10000); 
-                    highlightInput('g_stardust'); 
-                }
-                if (xp) { 
-                    document.getElementById('g_xp').value = Math.floor(parseInt(xp, 10) / 10000); 
-                    highlightInput('g_xp'); 
-                }
+                aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 正在解析 ${totalFiles} 張圖片...`;
+                const res = await requestMultiImageAnalysis(apiKey, dataUrls, (statusText) => {
+                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${statusText}`;
+                });
+                applyAiResultToForm(res);
             } catch (e) { 
                 alert("GPT 解析失敗，請稍後再試"); 
                 console.error('OpenAI GPT parsing failed:', e); 
             }
-            aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
+            aiBtn.disabled = false; aiBtn.innerHTML = AI_BUTTON_LABEL;
         };
 
         window.togglePage = function(pageNumber) {
@@ -993,7 +1036,7 @@ pokemon_bag = poke_bag
             const aiBtn = document.getElementById('aiBtn');
             if(aiBtn) {
                 aiBtn.disabled = false;
-                aiBtn.innerHTML = '🤖 AI 自動填數量';
+                aiBtn.innerHTML = AI_BUTTON_LABEL;
             }
 
             currentEditUid = null; 
