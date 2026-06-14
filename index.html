@@ -455,11 +455,61 @@
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
         const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
         const SHINY_FILTER = '異色';
-        const COSTUME_FILTER = '活動';
         const AI_BUTTON_LABEL = '🤖 AI 解析';
         const AI_SUCCESS_LABEL = '合併完成';
-        const OPENAI_JSON_SCHEMA = {
-            name: 'pokemon_go_precise_image_result',
+        const AI_IMAGE_TYPES = new Set([
+            'category_overview',
+            'search_legendary_total',
+            'search_hundo_legendary',
+            'search_shiny_legendary',
+            'search_shiny_total',
+            'other'
+        ]);
+        const AI_IMAGE_TYPE_TO_QUERY = {
+            search_legendary_total: LEGENDARY_FILTER,
+            search_hundo_legendary: HUNDO_LEGENDARY_FILTER,
+            search_shiny_legendary: SHINY_LEGENDARY_FILTER,
+            search_shiny_total: SHINY_FILTER
+        };
+        const AI_IMAGE_RESULT_FIELDS = [
+            'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'
+        ];
+        const AI_MERGED_RESULT_FIELDS = [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'];
+        const AI_IMAGE_TYPE_ALLOWED_FIELDS = {
+            category_overview: ['legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            search_legendary_total: ['legendary'],
+            search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
+            search_shiny_legendary: ['shiny_leg'],
+            search_shiny_total: ['shiny'],
+            other: []
+        };
+        const AI_EXPECTED_FIELDS_BY_IMAGE_TYPE = {
+            category_overview: ['legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            search_legendary_total: ['legendary'],
+            search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
+            search_shiny_legendary: ['shiny_leg'],
+            search_shiny_total: ['shiny'],
+            other: []
+        };
+        const AI_RETRY_REQUIRED_FIELDS_BY_IMAGE_TYPE = {
+            category_overview: ['costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            search_hundo_legendary: ['hundo_leg'],
+            search_shiny_legendary: ['shiny_leg']
+        };
+        const AI_FIELD_SOURCE_PRIORITY = {
+            legendary: { category_overview: 1, search_legendary_total: 2 },
+            shiny: { category_overview: 1, search_shiny_total: 2 },
+            hundo_leg: { search_hundo_legendary: 1 },
+            shiny_leg: { search_shiny_legendary: 1 },
+            costume: { category_overview: 1 },
+            bg_comm: { category_overview: 1 },
+            bg_special: { category_overview: 1 },
+            dyna: { category_overview: 1 },
+            giga: { category_overview: 1 },
+            perfect: { category_overview: 1 }
+        };
+        const OPENAI_CLASSIFICATION_JSON_SCHEMA = {
+            name: 'pokemon_go_image_classifier',
             strict: true,
             schema: {
                 type: 'object',
@@ -473,11 +523,21 @@
                             'search_hundo_legendary',
                             'search_shiny_legendary',
                             'search_shiny_total',
-                            'search_costume_total',
                             'other'
                         ]
                     },
-                    search_query: { type: 'string' },
+                    search_query: { type: 'string' }
+                },
+                required: ['image_type', 'search_query']
+            }
+        };
+        const OPENAI_EXTRACTION_JSON_SCHEMA = {
+            name: 'pokemon_go_forced_field_extractor',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
                     legendary: { type: 'string' },
                     hundo_leg: { type: 'string' },
                     shiny: { type: 'string' },
@@ -488,46 +548,13 @@
                     dyna: { type: 'string' },
                     giga: { type: 'string' },
                     perfect: { type: 'string' },
-                    pokemon_list: { type: 'string' },
+                    pokemon_list: { type: 'string' }
                 },
                 required: [
-                    'image_type', 'search_query', 'legendary', 'hundo_leg', 'shiny', 'shiny_leg',
-                    'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'pokemon_list'
+                    'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume',
+                    'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'pokemon_list'
                 ]
             }
-        };
-        const AI_IMAGE_TYPES = new Set([
-            'category_overview',
-            'search_legendary_total',
-            'search_hundo_legendary',
-            'search_shiny_legendary',
-            'search_shiny_total',
-            'search_costume_total',
-            'other'
-        ]);
-        const AI_IMAGE_RESULT_FIELDS = [
-            'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'
-        ];
-        const AI_IMAGE_TYPE_ALLOWED_FIELDS = {
-            category_overview: ['legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
-            search_legendary_total: ['legendary'],
-            search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
-            search_shiny_legendary: ['shiny_leg'],
-            search_shiny_total: ['shiny'],
-            search_costume_total: ['costume'],
-            other: []
-        };
-        const AI_FIELD_SOURCE_PRIORITY = {
-            legendary: { category_overview: 1, search_legendary_total: 2 },
-            shiny: { category_overview: 1, search_shiny_total: 2 },
-            hundo_leg: { search_hundo_legendary: 1 },
-            shiny_leg: { search_shiny_legendary: 1 },
-            costume: { category_overview: 1, search_costume_total: 2 },
-            bg_comm: { category_overview: 1 },
-            bg_special: { category_overview: 1 },
-            dyna: { category_overview: 1 },
-            giga: { category_overview: 1 },
-            perfect: { category_overview: 1 }
         };
 
         const parseOpenAIMessageContent = (data) => {
@@ -644,20 +671,7 @@
         });
 
         const inferImageTypeFromSearchQuery = (searchQuery) => {
-            switch (searchQuery) {
-                case LEGENDARY_FILTER:
-                    return 'search_legendary_total';
-                case HUNDO_LEGENDARY_FILTER:
-                    return 'search_hundo_legendary';
-                case SHINY_LEGENDARY_FILTER:
-                    return 'search_shiny_legendary';
-                case SHINY_FILTER:
-                    return 'search_shiny_total';
-                case COSTUME_FILTER:
-                    return 'search_costume_total';
-                default:
-                    return '';
-            }
+            return Object.entries(AI_IMAGE_TYPE_TO_QUERY).find(([, query]) => query === searchQuery)?.[0] || '';
         };
 
         const mergeUniqueTextValues = (currentValue, incomingValue, splitter, joiner) => {
@@ -668,16 +682,42 @@
             return [...new Set(values)].join(joiner);
         };
 
-        const normalizeAiResult = (result = {}) => {
-            const normalized = buildEmptyAiResult();
-            const rawImageType = AI_IMAGE_TYPES.has(String(result?.image_type || '').trim()) ? String(result.image_type).trim() : 'other';
-            normalized.search_query = normalizeSearchQuery(result?.search_query);
+        const buildEmptyMergedAiResult = () => ({
+            legendary: '',
+            hundo_leg: '',
+            shiny: '',
+            shiny_leg: '',
+            costume: '',
+            bg_comm: '',
+            bg_special: '',
+            dyna: '',
+            giga: '',
+            perfect: '',
+            pokemon_list: ''
+        });
 
-            const inferredType = inferImageTypeFromSearchQuery(normalized.search_query);
-            normalized.image_type = inferredType || rawImageType;
-            if (rawImageType.startsWith('search_') && !inferredType) {
-                normalized.image_type = 'other';
+        const normalizeAiClassification = (result = {}) => {
+            const rawImageType = AI_IMAGE_TYPES.has(String(result?.image_type || '').trim()) ? String(result.image_type).trim() : 'other';
+            const rawSearchQuery = normalizeSearchQuery(result?.search_query);
+            const inferredType = inferImageTypeFromSearchQuery(rawSearchQuery);
+
+            let imageType = rawImageType;
+            if (inferredType) {
+                imageType = inferredType;
+            } else if (rawImageType.startsWith('search_')) {
+                imageType = 'other';
             }
+
+            return {
+                image_type: imageType,
+                search_query: AI_IMAGE_TYPE_TO_QUERY[imageType] || (imageType === 'other' ? rawSearchQuery : '')
+            };
+        };
+
+        const normalizeAiExtraction = (result = {}, classification = {}) => {
+            const normalized = buildEmptyAiResult();
+            normalized.image_type = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'other';
+            normalized.search_query = AI_IMAGE_TYPE_TO_QUERY[normalized.image_type] || String(classification?.search_query || '').trim();
 
             AI_IMAGE_RESULT_FIELDS.forEach(field => {
                 normalized[field] = extractSingleNumber(result?.[field]);
@@ -692,8 +732,47 @@
             return normalized;
         };
 
+        const getExtractedFieldsForLog = (result = {}) => {
+            const extractedFields = {};
+            (AI_IMAGE_TYPE_ALLOWED_FIELDS[result.image_type] || []).forEach(field => {
+                extractedFields[field] = String(result[field] || '').trim();
+            });
+            return extractedFields;
+        };
+
+        const getRetryableMissingFields = (result = {}) => {
+            return (AI_RETRY_REQUIRED_FIELDS_BY_IMAGE_TYPE[result.image_type] || []).filter(field => !String(result[field] || '').trim());
+        };
+
+        const mergeSingleImageAttempts = (firstAttempt = buildEmptyAiResult(), secondAttempt = buildEmptyAiResult()) => {
+            const merged = {
+                ...firstAttempt,
+                image_type: firstAttempt.image_type || secondAttempt.image_type || 'other',
+                search_query: firstAttempt.search_query || secondAttempt.search_query || ''
+            };
+
+            (AI_IMAGE_TYPE_ALLOWED_FIELDS[merged.image_type] || []).forEach(field => {
+                if (field === 'pokemon_list') {
+                    const combinedList = [firstAttempt.pokemon_list, secondAttempt.pokemon_list].filter(Boolean).join(',');
+                    merged.pokemon_list = combinedList ? normalizePokemonList(combinedList) : '';
+                    return;
+                }
+                merged[field] = String(secondAttempt[field] || '').trim() || String(firstAttempt[field] || '').trim();
+            });
+
+            return merged;
+        };
+
+        const collectExpectedFields = (results = []) => {
+            const expectedFields = new Set();
+            results.forEach(result => {
+                (AI_EXPECTED_FIELDS_BY_IMAGE_TYPE[result.image_type] || []).forEach(field => expectedFields.add(field));
+            });
+            return [...expectedFields];
+        };
+
         const mergeAiResults = (results = []) => {
-            const merged = buildEmptyAiResult();
+            const merged = buildEmptyMergedAiResult();
             const fieldSources = {};
 
             const assignPreferred = (field, value, imageType) => {
@@ -708,9 +787,7 @@
                 }
             };
 
-            results.forEach(rawResult => {
-                const result = normalizeAiResult(rawResult);
-
+            results.forEach(result => {
                 assignPreferred('legendary', result.legendary, result.image_type);
                 assignPreferred('shiny', result.shiny, result.image_type);
                 assignPreferred('shiny_leg', result.shiny_leg, result.image_type);
@@ -733,13 +810,55 @@
             return merged;
         };
 
-        const buildAiPrompt = () => `你是寶可夢 GO 截圖資料擷取器。這次只會收到 1 張圖片，你只能判斷「這一張圖」，禁止假設其他圖片存在，禁止跨圖合併，禁止自行加總，禁止猜測。不確定就留空字串。
+        const buildAiClassificationPrompt = () => `你是寶可夢 GO 截圖分類器。這次只會收到 1 張圖片，你只能做第一階段分類，禁止抽取數字，禁止假設其他圖片存在，禁止跨圖合併。
 
 【輸出格式】
-只輸出 1 份 JSON，欄位固定為：
+只輸出 1 份 JSON：
 {
   "image_type": "",
-  "search_query": "",
+  "search_query": ""
+}
+
+image_type 只能是：
+- category_overview
+- search_legendary_total
+- search_hundo_legendary
+- search_shiny_legendary
+- search_shiny_total
+- other
+
+【分類規則】
+1. 若搜尋欄完全符合「${LEGENDARY_FILTER}」
+   - image_type = search_legendary_total
+   - search_query = "${LEGENDARY_FILTER}"
+
+2. 若搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」
+   - image_type = search_hundo_legendary
+   - search_query = "${HUNDO_LEGENDARY_FILTER}"
+
+3. 若搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」
+   - image_type = search_shiny_legendary
+   - search_query = "${SHINY_LEGENDARY_FILTER}"
+
+4. 若搜尋欄完全符合「${SHINY_FILTER}」
+   - image_type = search_shiny_total
+   - search_query = "${SHINY_FILTER}"
+
+5. 若是分類總覽頁
+   - image_type = category_overview
+   - search_query = ""
+
+6. 其他任何圖片
+   - image_type = other
+   - 若看得到搜尋欄文字，就把實際搜尋字串填入 search_query；若看不到則填 ""
+
+【重要】
+1. 只有「完全符合」上述搜尋字串才可判成 search_*。
+2. 只分類這一張圖，不要猜其他圖。
+3. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
+
+        const buildAiExtractionPrompt = ({ image_type, search_query }) => {
+            const outputTemplate = `{
   "legendary": "",
   "hundo_leg": "",
   "shiny": "",
@@ -751,79 +870,83 @@
   "giga": "",
   "perfect": "",
   "pokemon_list": ""
-}
+}`;
+            const baseRules = `你是寶可夢 GO 截圖資料擷取器。這次只會收到 1 張圖片，而且第一階段已經判定：
+- image_type = ${image_type}
+- search_query = ${search_query || '""'}
 
-image_type 只能是：
-- category_overview
-- search_legendary_total
-- search_hundo_legendary
-- search_shiny_legendary
-- search_shiny_total
-- search_costume_total
-- other
+你現在只能做第二階段抽值，禁止重新分類，禁止假設其他圖片存在，禁止跨圖合併，禁止自行加總，禁止猜測。
 
-【單張圖判斷規則】
-1. 搜尋欄完全符合「${LEGENDARY_FILTER}」
-   - image_type = search_legendary_total
-   - search_query = ${LEGENDARY_FILTER}
-   - legendary = 頂部數字
+【輸出格式】
+只輸出 1 份 JSON：
+${outputTemplate}
 
-2. 搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」
-   - image_type = search_hundo_legendary
-   - search_query = ${HUNDO_LEGENDARY_FILTER}
-   - hundo_leg = 頂部數字
-   - pokemon_list = 只列出這張圖畫面中實際看得到的寶可夢清單
+【通用規則】
+1. 只可使用這一張圖中明確可見的數字。
+2. 只要畫面中看得到指定圖示或頂部總數，就必須填入對應欄位，不能跳過。
+3. 沒看到或看不清楚才留空字串。
+4. 禁止補 0。
+5. 禁止從 pokemon_list 回推數量。
+6. 所有欄位都必須存在。
+7. 不要 Markdown、不要 code fence、不要額外說明。`;
 
-3. 搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」
-   - image_type = search_shiny_legendary
-   - search_query = ${SHINY_LEGENDARY_FILTER}
-   - shiny_leg = 頂部數字
+            switch (image_type) {
+                case 'category_overview':
+                    return `${baseRules}
 
-4. 搜尋欄完全符合「${SHINY_FILTER}」
-   - image_type = search_shiny_total
-   - search_query = ${SHINY_FILTER}
-   - shiny = 頂部數字
+這是一張分類總覽頁。請逐一檢查以下圖示，只要畫面上有圖示與數字，就必須填入：
+- 傳說 -> legendary
+- 異色 -> shiny
+- 活動 -> costume
+- 紀念背卡 -> bg_comm
+- 特別背卡 -> bg_special
+- 極巨化 -> dyna
+- 超極巨化 -> giga
+- 完美 -> perfect
 
-5. 搜尋欄完全符合「${COSTUME_FILTER}」
-   - image_type = search_costume_total
-   - search_query = ${COSTUME_FILTER}
-   - costume = 頂部數字
+不能因為你認為其他截圖會補資料就略過。
+除了上述 8 個欄位外，其餘欄位與 pokemon_list 必須留空字串。`;
+                case 'search_legendary_total':
+                    return `${baseRules}
 
-6. 分類總覽頁
-   - image_type = category_overview
-   - search_query = 空字串
-   - 讀取：
-     異色 → shiny
-     活動 → costume
-     紀念背卡 → bg_comm
-     特別背卡 → bg_special
-     極巨化 → dyna
-     超極巨化 → giga
-     完美 → perfect
-     傳說 → legendary
+這是一張搜尋頁，搜尋欄完全符合「${LEGENDARY_FILTER}」。
+你必須讀取頂部數字並填入 legendary。
+除了 legendary 之外，其餘欄位都必須留空字串。`;
+                case 'search_hundo_legendary':
+                    return `${baseRules}
 
-7. 其他任何圖片
-   - image_type = other
-   - 除了 search_query 之外，其餘欄位都留空字串
+這是一張搜尋頁，搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」。
+你必須讀取頂部數字並填入 hundo_leg。
+這也是唯一可以填 pokemon_list 的圖片類型。
 
 【pokemon_list 規則】
-1. pokemon_list 只能在 image_type = search_hundo_legendary 時填入，其餘情況必須留空字串。
-2. 只列這張圖中實際看得到的寶可夢，不可推測畫面外內容。
-3. 由上到下、由左到右讀取。
-4. 同名出現多次時，合併為「名稱*數量」。
-5. 單隻不可加「*1」。
-6. 只能用半形逗號分隔，例如「固拉多,蓋歐卡,鳳王*2」。
-7. 若寶可夢明確同時有異色與暗影，名稱可寫成「色違暗影名稱」；若只有暗影，寫成「暗影名稱」；絕對不可輸出「淨化」。
+1. 只列這張圖中實際看得到的寶可夢。
+2. 由上到下、由左到右讀取。
+3. 同名出現多次時，合併為「名稱*數量」。
+4. 單隻不可加「*1」。
+5. 只能用半形逗號分隔，例如「固拉多,蓋歐卡,鳳王*2」。
+6. 若明確同時有異色與暗影，可寫成「色違暗影名稱」；若只有暗影，寫成「暗影名稱」；不可輸出「淨化」。
 
-【數字規則】
-1. 只能使用這一張圖中明確可見的數字。
-2. 禁止自行計算、禁止輸出算式、禁止從 pokemon_list 回推數量。
-3. 沒看到就填空字串。
+除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
+                case 'search_shiny_legendary':
+                    return `${baseRules}
 
-【輸出要求】
-1. 只輸出乾淨 JSON。
-2. 所有欄位都必須存在。
-3. 不要 Markdown、不要 code fence、不要額外說明。`;
+這是一張搜尋頁，搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」。
+你必須讀取頂部數字並填入 shiny_leg。
+除了 shiny_leg 之外，其餘欄位都必須留空字串。`;
+                case 'search_shiny_total':
+                    return `${baseRules}
+
+這是一張搜尋頁，搜尋欄完全符合「${SHINY_FILTER}」。
+你必須讀取頂部數字並填入 shiny。
+除了 shiny 之外，其餘欄位都必須留空字串。`;
+                default:
+                    return `${baseRules}
+
+這張圖不屬於指定類型。
+所有欄位都必須留空字串。`;
+            }
+        };
 
         const fileToResizedDataUrl = (file) => new Promise(resolve => {
             const reader = new FileReader();
@@ -850,22 +973,22 @@ image_type 只能是：
             reader.readAsDataURL(file);
         });
 
-        const buildAiRequestContent = (dataUrl) => ([
-            { type: 'text', text: buildAiPrompt() },
+        const buildAiRequestContent = (prompt, dataUrl) => ([
+            { type: 'text', text: prompt },
             { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
         ]);
 
-        const requestSingleImageAnalysis = async (apiKey, dataUrl, statusUpdater) => {
+        const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater) => {
             const payload = JSON.stringify({
                 model: OPENAI_MODEL,
                 temperature: 0.1,
                 messages: [{
                     role: 'user',
-                    content: buildAiRequestContent(dataUrl)
+                    content: buildAiRequestContent(prompt, dataUrl)
                 }],
                 response_format: {
                     type: 'json_schema',
-                    json_schema: OPENAI_JSON_SCHEMA
+                    json_schema: jsonSchema
                 }
             });
 
@@ -894,13 +1017,23 @@ image_type 只能是：
                     }
 
                     const data = await resp.json();
-                    return normalizeAiResult(parseJsonText(parseOpenAIMessageContent(data)));
+                    return parseJsonText(parseOpenAIMessageContent(data));
                 } catch (error) {
                     if (attempt === maxRetries) throw error;
                 }
             }
 
-            return buildEmptyAiResult();
+            return {};
+        };
+
+        const requestSingleImageClassification = async (apiKey, dataUrl, statusUpdater) => {
+            const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiClassificationPrompt(), dataUrl, OPENAI_CLASSIFICATION_JSON_SCHEMA, statusUpdater);
+            return normalizeAiClassification(rawResult);
+        };
+
+        const requestSingleImageExtraction = async (apiKey, dataUrl, classification, statusUpdater) => {
+            const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiExtractionPrompt(classification), dataUrl, OPENAI_EXTRACTION_JSON_SCHEMA, statusUpdater);
+            return normalizeAiExtraction(rawResult, classification);
         };
 
         const applyAiResultToForm = (result = {}) => {
@@ -912,6 +1045,7 @@ image_type 只能是：
                 const normalizedValue = String(value || '').trim();
                 if (!normalizedValue) return;
                 document.getElementById(id).value = normalizedValue;
+                highlightInput(id);
             };
 
             if (res.pokemon_list) {
@@ -941,13 +1075,39 @@ image_type 只能是：
                 const imageResults = [];
                 for (let i = 0; i < dataUrls.length; i++) {
                     const progressLabel = `${i + 1}/${totalFiles}`;
-                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 精準解析中 ${progressLabel}`;
-                    const imageResult = await requestSingleImageAnalysis(apiKey, dataUrls[i], (attempt, maxRetries) => {
-                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 精準解析中 ${progressLabel}（重試 ${attempt}/${maxRetries}）`;
+                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第一階段分類中 ${progressLabel}`;
+                    const classification = await requestSingleImageClassification(apiKey, dataUrls[i], (attempt, maxRetries) => {
+                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第一階段分類中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`;
                     });
+
+                    aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段抽值中 ${progressLabel}`;
+                    let imageResult = await requestSingleImageExtraction(apiKey, dataUrls[i], classification, (attempt, maxRetries) => {
+                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段抽值中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`;
+                    });
+
+                    const retryableMissingFields = getRetryableMissingFields(imageResult);
+                    if (retryableMissingFields.length > 0) {
+                        aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段補抓中 ${progressLabel}`;
+                        const retriedResult = await requestSingleImageExtraction(apiKey, dataUrls[i], classification, (attempt, maxRetries) => {
+                            aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段補抓中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`;
+                        });
+                        imageResult = mergeSingleImageAttempts(imageResult, retriedResult);
+                    }
+
                     imageResults.push(imageResult);
+                    console.log({
+                        imageIndex: i + 1,
+                        image_type: imageResult.image_type,
+                        search_query: imageResult.search_query,
+                        extracted_fields: getExtractedFieldsForLog(imageResult)
+                    });
                 }
                 const mergedResult = mergeAiResults(imageResults);
+                const missingButExpectedFields = collectExpectedFields(imageResults).filter(field => !String(mergedResult[field] || '').trim());
+                console.log({
+                    finalResult: mergedResult,
+                    missingButExpectedFields
+                });
                 applyAiResultToForm(mergedResult);
                 aiBtn.innerHTML = AI_SUCCESS_LABEL;
                 await new Promise(resolve => setTimeout(resolve, 1200));
