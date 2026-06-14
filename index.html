@@ -26,6 +26,11 @@
         const db = getDatabase(app);
         const inventoryRef = ref(db, 'inventory');
         let inventoryData = [];
+        const SETTINGS_FIELDS = [
+            { elementId: 'googleSheetId', storageKey: 'googleSheetId' },
+            { elementId: 'gasUrl', storageKey: 'gasUrl' },
+            { elementId: 'openaiApiKey', storageKey: 'OPENAI_API_KEY', legacyStorageKeys: ['geminiApiKey'] }
+        ];
 
         const normalizeTimestamp = (value, fallback = 0) => {
             const parsed = Number(value);
@@ -55,15 +60,20 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
-                const savedValue = localStorage.getItem(id);
-                if (savedValue) document.getElementById(id).value = savedValue;
+            SETTINGS_FIELDS.forEach(({ elementId, storageKey, legacyStorageKeys = [] }) => {
+                const input = document.getElementById(elementId);
+                if (!input) return;
+                const savedValue = [storageKey, ...legacyStorageKeys].map(key => localStorage.getItem(key)).find(Boolean);
+                if (savedValue) input.value = savedValue;
             });
         });
 
         window.saveSettings = function() {
-            ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
-                localStorage.setItem(id, document.getElementById(id).value.trim());
+            SETTINGS_FIELDS.forEach(({ elementId, storageKey, legacyStorageKeys = [] }) => {
+                const input = document.getElementById(elementId);
+                if (!input) return;
+                localStorage.setItem(storageKey, input.value.trim());
+                legacyStorageKeys.forEach(key => localStorage.removeItem(key));
             });
             const btn = document.getElementById('saveBtn');
             btn.innerHTML = '✅ 已儲存';
@@ -445,13 +455,110 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
+        const OPENAI_MODEL = 'gpt-4.1-mini';
+        const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
+        const OPENAI_JSON_SCHEMA = {
+            name: 'pokemon_go_inventory_parse',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    team: { type: 'string' },
+                    god_total: { type: 'string' },
+                    perfect_god: { type: 'string' },
+                    shiny_god: { type: 'string' },
+                    year_16_20: { type: 'string' },
+                    year_16_20_god: { type: 'string' },
+                    master_ball: { type: 'string' },
+                    special_background: { type: 'string' },
+                    pokemon_bag: { type: 'string' },
+                    item_bag: { type: 'string' },
+                    hundred_list: { type: 'string' },
+                    rare_list: { type: 'string' },
+                    legendary: { type: 'string' },
+                    shiny: { type: 'string' },
+                    costume: { type: 'string' },
+                    bg_comm: { type: 'string' },
+                    bg_special: { type: 'string' },
+                    dyna: { type: 'string' },
+                    giga: { type: 'string' },
+                    perfect: { type: 'string' },
+                    old_poke: { type: 'string' },
+                    old_leg: { type: 'string' },
+                    hundo_leg: { type: 'string' },
+                    shiny_leg: { type: 'string' },
+                    pokemon_list: { type: 'string' },
+                    masterball: { type: 'string' },
+                    rarecandy: { type: 'string' },
+                    coin: { type: 'string' },
+                    greenpass: { type: 'string' },
+                    poke_bag: { type: 'string' },
+                    level: { type: 'string' },
+                    stardust: { type: 'string' },
+                    xp: { type: 'string' }
+                },
+                required: [
+                    'team', 'god_total', 'perfect_god', 'shiny_god', 'year_16_20', 'year_16_20_god',
+                    'master_ball', 'special_background', 'pokemon_bag', 'item_bag', 'hundred_list', 'rare_list',
+                    'legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
+                    'old_poke', 'old_leg', 'hundo_leg', 'shiny_leg', 'pokemon_list', 'masterball', 'rarecandy',
+                    'coin', 'greenpass', 'poke_bag', 'level', 'stardust', 'xp'
+                ]
+            }
+        };
+
+        const parseOpenAIMessageContent = (data) => {
+            const content = data?.choices?.[0]?.message?.content;
+            if (typeof content === 'string') return content;
+            if (Array.isArray(content)) {
+                return content.map(part => {
+                    if (typeof part === 'string') return part;
+                    if (typeof part?.text === 'string') return part.text;
+                    if (typeof part?.value === 'string') return part.value;
+                    return '';
+                }).join('').trim();
+            }
+            throw new Error('OpenAI 回傳格式異常');
+        };
+
+        const parseJsonText = (text) => {
+            const cleanText = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+            return JSON.parse(cleanText);
+        };
+
+        const normalizeAiResult = (result = {}) => {
+            const pick = (...keys) => {
+                for (const key of keys) {
+                    const value = result?.[key];
+                    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+                }
+                return '';
+            };
+
+            return {
+                ...result,
+                legendary: pick('legendary', 'god_total'),
+                hundo_leg: pick('hundo_leg', 'perfect_god'),
+                shiny_leg: pick('shiny_leg', 'shiny_god'),
+                old_poke: pick('old_poke', 'year_16_20'),
+                old_leg: pick('old_leg', 'year_16_20_god'),
+                masterball: pick('masterball', 'master_ball'),
+                bg_special: pick('bg_special', 'special_background'),
+                poke_bag: pick('poke_bag', 'pokemon_bag'),
+                item_bag: pick('item_bag'),
+                pokemon_list: pick('pokemon_list', 'hundred_list'),
+                rare_list: pick('rare_list')
+            };
+        };
+
         window.analyzeMultipleImages = async function() {
-            const apiKey = document.getElementById('geminiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
-            if(!apiKey) { alert("請先在頂部貼上你的 Gemini API Key 並按儲存設定！"); return; }
+            const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files; 
+            if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
             if(files.length === 0) return;
-            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gemini 解析中...';
+            const aiBtn = document.getElementById('aiBtn'); aiBtn.disabled = true; aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GPT 解析中...';
             try {
-                let content = [{ text: `你是一位非常精準的寶可夢GO數據分析官。
+                const prompt = `你是一位非常精準的寶可夢GO數據分析官。
 
 【🥇最高辨識優先策略 — 直接讀取圖上文字】（命名辨識最高優先權）：
 1. 若截圖是寶可夢清單畫面，且每隻寶可夢下方有顯示中文名稱文字，請「優先直接讀取該文字作為名稱」，這是第一判定來源。
@@ -533,11 +640,14 @@
     - 從格狀清單截圖中，請逐格辨識每一隻寶可夢，不論有幾隻都要完整列出，絕對不可遺漏。
     - 數量規則：同品種出現兩隻以上，在名字最後面打上\`*數量\`。例如：\`完全體基格爾德*2\` 或 \`色違奈克洛茲瑪月亮型態*3\`。
 2. 提取括號內的數字即為總數。
+3. rare_list 只有在截圖中能明確辨識出值得獨立標註的稀有寶可夢時才填入；不確定就留空。
+4. hundred_list 必須與 pokemon_list 相同內容。
+5. perfect_god 必須與 hundo_leg 相同內容；god_total 必須與 legendary 相同內容；shiny_god 必須與 shiny_leg 相同內容；year_16_20 必須與 old_poke 相同內容；year_16_20_god 必須與 old_leg 相同內容；master_ball 必須與 masterball 相同內容；special_background 必須與 bg_special 相同內容；pokemon_bag 必須與 poke_bag 相同內容。
+6. 只輸出乾淨 JSON，不要 Markdown，不要 code fence，不要額外說明。`;
 
-JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"","bg_special":"","dyna":"","giga":"","perfect":"","old_poke":"","old_leg":"","hundo_leg":"","shiny_leg":"","pokemon_list":"","masterball":"","rarecandy":"","coin":"","greenpass":"","poke_bag":"","item_bag":"","level":"","stardust":"","xp":""}` }];
-                
+                let content = [{ type: 'text', text: prompt }];
                 for(let i=0; i<files.length; i++){
-                    const base64 = await new Promise(r => {
+                    const dataUrl = await new Promise(r => {
                         const reader = new FileReader(); reader.onload = (e) => {
                             const img = new Image(); img.onload = () => {
                                 const maxSize = 1500; 
@@ -552,16 +662,21 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                                 canvas.width = width; 
                                 canvas.height = height;
                                 canvas.getContext('2d').drawImage(img, 0, 0, width, height); 
-                                r(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]); 
+                                r(canvas.toDataURL('image/jpeg', 0.8)); 
                             }; img.src = e.target.result;
                         }; reader.readAsDataURL(files[i]);
                     });
-                    content.push({ inline_data: { mime_type: "image/jpeg", data: base64 } });
+                    content.push({ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } });
                 }
                 
                 const payload = JSON.stringify({ 
-                    contents: [{ parts: content }],
-                    generationConfig: { responseMimeType: "application/json" }
+                    model: OPENAI_MODEL,
+                    temperature: 0.1,
+                    messages: [{ role: 'user', content }],
+                    response_format: {
+                        type: 'json_schema',
+                        json_schema: OPENAI_JSON_SCHEMA
+                    }
                 });
 
                 let res = null;
@@ -569,28 +684,29 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                 
                 for (let attempt = 1; attempt <= maxRetries; attempt++) {
                     try {
-                        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, { 
+                        const resp = await fetch(OPENAI_CHAT_COMPLETIONS_URL, { 
                             method: 'POST', 
-                            headers: { 'Content-Type': 'application/json' }, 
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${apiKey}`
+                            }, 
                             body: payload 
                         });
                         
                         if (!resp.ok) {
-                            if ((resp.status === 503 || resp.status === 429) && attempt < maxRetries) {
+                            if ((resp.status === 429 || resp.status >= 500) && attempt < maxRetries) {
                                 const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
                                 const delay = retryAfter > 0 ? retryAfter * 1000 : 3500;
-                                aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 伺服器忙碌，自動重試 (${attempt}/${maxRetries})...`;
+                                aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 忙碌中，自動重試 (${attempt}/${maxRetries})...`;
                                 await new Promise(resolve => setTimeout(resolve, delay)); 
                                 continue; 
                             }
                             const errData = await resp.text(); 
-                            throw new Error(`錯誤代碼 ${resp.status}\nGemini 官方原因：${errData}`);
+                            throw new Error(`錯誤代碼 ${resp.status}\nOpenAI 官方原因：${errData}`);
                         }
 
                         const data = await resp.json(); 
-                        let rawText = data.candidates[0].content.parts[0].text;
-                        let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim(); 
-                        res = JSON.parse(cleanText);
+                        res = normalizeAiResult(parseJsonText(parseOpenAIMessageContent(data)));
                         break; 
 
                     } catch (error) {
@@ -603,6 +719,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
                     highlightInput('g_team');
                 }
 
+                document.getElementById('g_rare_list').value = res.rare_list || '';
                 document.getElementById('g_hundos').value = res.pokemon_list || ''; 
                 if(res.hundo_leg) document.getElementById('st_hundo_leg').value = res.hundo_leg;
                 if(res.legendary) document.getElementById('st_legend').value = res.legendary;
@@ -648,8 +765,8 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 
                 window.updateHundoCount(); 
             } catch (e) { 
-                alert("🚨 AI 解析錯誤 🚨\n請點擊清除後重試一次。\n細節：" + e.message); 
-                console.error(e); 
+                alert("GPT 解析失敗，請稍後再試"); 
+                console.error('OpenAI GPT parsing failed:', e); 
             }
             aiBtn.disabled = false; aiBtn.innerHTML = '🤖 AI 自動填數量';
         };
@@ -669,7 +786,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
 
         window.resetForm = function() {
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
-                if(!['googleSheetId','gasUrl','geminiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
+                if(!['googleSheetId','gasUrl','openaiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
                     if(el.type === 'checkbox') el.checked = false; 
                     else if(el.tagName === 'SELECT') el.selectedIndex = 0; 
                     else el.value = ''; 
@@ -823,7 +940,7 @@ JSON格式輸出：{"team":"","legendary":"","shiny":"","costume":"","bg_comm":"
         <div class="flex gap-2 items-center flex-wrap">
             <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
             <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
-            <input type="password" id="geminiApiKey" placeholder="Gemini API Key" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 outline-none">
+            <input type="password" id="openaiApiKey" placeholder="OPENAI_API_KEY" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 outline-none">
             <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm">💾 儲存設定</button>
         </div>
     </header>
