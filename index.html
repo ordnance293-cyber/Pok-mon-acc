@@ -454,7 +454,6 @@
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
         const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
-        const SHINY_FILTER = '異色';
         const OLD_POKEMON_FILTER = '年16-20';
         const OLD_LEGENDARY_FILTER = `${OLD_POKEMON_FILTER}&${LEGENDARY_FILTER}`;
         const AI_BUTTON_LABEL = '🤖 AI 解析';
@@ -464,10 +463,10 @@
             'search_legendary_total',
             'search_hundo_legendary',
             'search_shiny_legendary',
-            'search_shiny_total',
             'search_old_pokemon',
             'search_old_legendary',
             'trainer_profile',
+            'pokemon_detail',
             'resource_overview',
             'other'
         ]);
@@ -475,7 +474,6 @@
             search_legendary_total: LEGENDARY_FILTER,
             search_hundo_legendary: HUNDO_LEGENDARY_FILTER,
             search_shiny_legendary: SHINY_LEGENDARY_FILTER,
-            search_shiny_total: SHINY_FILTER,
             search_old_pokemon: OLD_POKEMON_FILTER,
             search_old_legendary: OLD_LEGENDARY_FILTER
         };
@@ -488,40 +486,43 @@
         const AI_IMAGE_RESULT_FIELDS = [...AI_NUMERIC_RESULT_FIELDS, ...AI_TEXT_RESULT_FIELDS, ...AI_WAN_RESULT_FIELDS];
         const AI_MERGED_RESULT_FIELDS = [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'];
         const AI_IMAGE_TYPE_ALLOWED_FIELDS = {
-            category_overview: ['legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            category_overview: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
             search_legendary_total: ['legendary'],
             search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
             search_shiny_legendary: ['shiny_leg'],
-            search_shiny_total: ['shiny'],
             search_old_pokemon: ['old_poke'],
             search_old_legendary: ['old_leg'],
-            trainer_profile: ['level', 'team', 'xp', 'stardust'],
+            trainer_profile: ['level', 'team', 'xp'],
+            pokemon_detail: ['stardust'],
             resource_overview: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
             other: []
         };
         const AI_EXPECTED_FIELDS_BY_IMAGE_TYPE = {
-            category_overview: ['legendary', 'shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            category_overview: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
             search_legendary_total: ['legendary'],
             search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
             search_shiny_legendary: ['shiny_leg'],
-            search_shiny_total: ['shiny'],
             search_old_pokemon: ['old_poke'],
             search_old_legendary: ['old_leg'],
-            trainer_profile: ['level', 'team', 'xp', 'stardust'],
+            trainer_profile: ['level', 'team', 'xp'],
+            pokemon_detail: ['stardust'],
             resource_overview: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
             other: []
         };
         const AI_RETRY_REQUIRED_FIELDS_BY_IMAGE_TYPE = {
-            category_overview: ['costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
-            search_hundo_legendary: ['hundo_leg'],
+            category_overview: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            search_legendary_total: ['legendary'],
+            search_hundo_legendary: ['hundo_leg', 'pokemon_list'],
             search_shiny_legendary: ['shiny_leg'],
             search_old_pokemon: ['old_poke'],
             search_old_legendary: ['old_leg'],
-            trainer_profile: ['level', 'team']
+            trainer_profile: ['level', 'team', 'xp'],
+            pokemon_detail: ['stardust'],
+            resource_overview: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag']
         };
         const AI_FIELD_SOURCE_PRIORITY = {
-            legendary: { category_overview: 1, search_legendary_total: 2 },
-            shiny: { category_overview: 1, search_shiny_total: 2 },
+            legendary: { search_legendary_total: 1 },
+            shiny: { category_overview: 1 },
             hundo_leg: { search_hundo_legendary: 1 },
             shiny_leg: { search_shiny_legendary: 1 },
             costume: { category_overview: 1 },
@@ -541,7 +542,32 @@
             level: { trainer_profile: 1 },
             team: { trainer_profile: 1 },
             xp: { trainer_profile: 1 },
-            stardust: { trainer_profile: 1 }
+            stardust: { pokemon_detail: 1 }
+        };
+        const AI_FIELD_LABELS = {
+            legendary: '神獸總',
+            hundo_leg: '百神數',
+            shiny: '色違總',
+            shiny_leg: '色違神',
+            costume: '活動總',
+            bg_comm: '紀念卡',
+            bg_special: '特別卡',
+            dyna: '極巨化',
+            giga: '超極巨',
+            perfect: '完美數',
+            old_poke: '16-20怪',
+            old_leg: '16-20神',
+            masterball: '大師球',
+            greenpass: '綠票券',
+            rarecandy: '神奇糖果',
+            coin: '寶可幣',
+            poke_bag: '寶可夢包',
+            item_bag: '道具背包',
+            level: '等級',
+            team: '隊伍',
+            xp: '經驗',
+            stardust: '星塵',
+            pokemon_list: '百神清單'
         };
         const OPENAI_CLASSIFICATION_JSON_SCHEMA = {
             name: 'pokemon_go_image_classifier',
@@ -557,10 +583,10 @@
                             'search_legendary_total',
                             'search_hundo_legendary',
                             'search_shiny_legendary',
-                            'search_shiny_total',
                             'search_old_pokemon',
                             'search_old_legendary',
                             'trainer_profile',
+                            'pokemon_detail',
                             'resource_overview',
                             'other'
                         ]
@@ -726,7 +752,11 @@
             }
 
             if (!Number.isFinite(wanValue) || wanValue <= 0) return '';
-            return formatWanValue(wanValue);
+            if (wanValue < 100) return '';
+            if (wanValue >= 10000) {
+                return formatWanValue(Math.floor(wanValue * 10) / 10);
+            }
+            return String(Math.floor(wanValue));
         };
 
         const syncFusionMegaSelectVisibility = () => {
@@ -773,7 +803,7 @@
                 .replace(/\s+/g, '')
                 .trim();
             if (!text) return null;
-            const prefix = hasShiny && hasShadow ? '色違暗影' : hasShiny ? '色違' : hasShadow ? '暗影' : '';
+            const prefix = hasShiny ? '色違' : hasShadow ? '暗影' : '';
             return { name: `${prefix}${text}`, count };
         };
 
@@ -891,7 +921,7 @@
                     : extractSingleNumber(result?.[field]);
             });
             normalized.team = normalizeTeamValue(result?.team);
-            normalized.xp = normalizeWanValue(result?.xp);
+            normalized.xp = normalizeWanValue(extractSlashSideNumber(result?.xp, 'left'));
             normalized.stardust = normalizeWanValue(result?.stardust);
             normalized.pokemon_list = normalizePokemonList(result?.pokemon_list);
 
@@ -988,10 +1018,10 @@ image_type 只能是：
 - search_legendary_total
 - search_hundo_legendary
 - search_shiny_legendary
-- search_shiny_total
 - search_old_pokemon
 - search_old_legendary
 - trainer_profile
+- pokemon_detail
 - resource_overview
 - other
 
@@ -1008,20 +1038,20 @@ image_type 只能是：
    - image_type = search_shiny_legendary
    - search_query = "${SHINY_LEGENDARY_FILTER}"
 
-4. 若搜尋欄完全符合「${SHINY_FILTER}」
-   - image_type = search_shiny_total
-   - search_query = "${SHINY_FILTER}"
-
-5. 若搜尋欄完全符合「${OLD_POKEMON_FILTER}」
+4. 若搜尋欄完全符合「${OLD_POKEMON_FILTER}」
    - image_type = search_old_pokemon
    - search_query = "${OLD_POKEMON_FILTER}"
 
-6. 若搜尋欄完全符合「${OLD_LEGENDARY_FILTER}」
+5. 若搜尋欄完全符合「${OLD_LEGENDARY_FILTER}」
    - image_type = search_old_legendary
    - search_query = "${OLD_LEGENDARY_FILTER}"
 
-7. 若是訓練家基本資料頁，並可看到等級、隊伍、經驗或星塵
+6. 若是訓練家基本資料頁，且可看到左下角超大等級數字、下方有「等級」、以及訓練家背景／經驗條
    - image_type = trainer_profile
+   - search_query = ""
+
+7. 若是寶可夢詳細頁，且可看到「星星沙子」數字
+   - image_type = pokemon_detail
    - search_query = ""
 
 8. 若是資源／背包頁，並可看到大師球、綠票/卷、神奇糖果、寶可幣、寶可夢包或道具背包
@@ -1038,10 +1068,12 @@ image_type 只能是：
 
 【重要】
 1. 只有「完全符合」上述搜尋字串才可判成 search_*。
-2. 只分類這一張圖，不要猜其他圖。
-3. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
+2. 例如「年16-20&異色」「年16-20&4*」「${LEGENDARY_FILTER}&異色&4*」「異色」都不是上述允許的 search_* 類型，必須判成 other。
+3. 「神獸總」只能來自「${LEGENDARY_FILTER}」搜尋圖；「色違總」只能來自分類總覽頁；「星塵」只能來自寶可夢詳細頁。
+4. 只分類這一張圖，不要猜其他圖。
+5. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
 
-        const buildAiExtractionPrompt = ({ image_type, search_query }) => {
+        const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [] }) => {
             const outputTemplate = `{
   "legendary": "",
   "hundo_leg": "",
@@ -1067,6 +1099,12 @@ image_type 只能是：
   "stardust": "",
   "pokemon_list": ""
 }`;
+            const retryRules = retry_fields.length
+                ? `
+
+【補掃目標】
+上一次未成功讀到以下欄位，這次必須重新逐一檢查：${retry_fields.join('、')}。`
+                : '';
             const baseRules = `你是寶可夢 GO 截圖資料擷取器。這次只會收到 1 張圖片，而且第一階段已經判定：
 - image_type = ${image_type}
 - search_query = ${search_query || '""'}
@@ -1085,14 +1123,13 @@ ${outputTemplate}
 5. 禁止從 pokemon_list 回推數量。
 6. 所有欄位都必須存在。
 7. 特殊調查 checkbox、合體與 Mega checkbox 完全不在這次 AI 擷取範圍內，嚴禁輸出任何對應狀態或推論。
-8. 不要 Markdown、不要 code fence、不要額外說明。`;
+8. 不要 Markdown、不要 code fence、不要額外說明。${retryRules}`;
 
             switch (image_type) {
                 case 'category_overview':
                     return `${baseRules}
 
 這是一張分類總覽頁。請逐一檢查以下圖示，只要畫面上有圖示與數字，就必須填入：
-- 傳說 -> legendary
 - 異色 -> shiny
 - 活動 -> costume
 - 紀念背卡 -> bg_comm
@@ -1102,7 +1139,7 @@ ${outputTemplate}
 - 完美 -> perfect
 
 不能因為你認為其他截圖會補資料就略過。
-除了上述 8 個欄位外，其餘欄位與 pokemon_list 必須留空字串。`;
+除了上述 7 個欄位外，其餘欄位與 pokemon_list 必須留空字串。`;
                 case 'search_legendary_total':
                     return `${baseRules}
 
@@ -1119,10 +1156,13 @@ ${outputTemplate}
 【pokemon_list 規則】
 1. 只列這張圖中實際看得到的寶可夢。
 2. 由上到下、由左到右讀取。
-3. 同名出現多次時，合併為「名稱*數量」。
-4. 單隻不可加「*1」。
-5. 只能用半形逗號分隔，例如「固拉多,蓋歐卡,鳳王*2」。
-6. 若明確同時有異色與暗影，可寫成「色違暗影名稱」；若只有暗影，寫成「暗影名稱」；不可輸出「淨化」。
+3. 保持原本順序，禁止重新排序。
+4. 同名可直接重複列出，系統會在多圖合併後統一轉成「名稱*數量」；單隻不可加「*1」。
+5. 只能用半形逗號分隔，例如「固拉多,固拉多,鳳王,蒼響」。
+6. 寶可夢左上角有黑色四角星才算色違，輸出「色違名稱」。
+7. 寶可夢身上有紫色暗影火焰才算暗影，輸出「暗影名稱」。
+8. 若有藍色淨化圖示，視為普通寶可夢，不可輸出「淨化」。
+9. 命名前綴優先權固定為：色違 > 暗影 > 普通 > 淨化。若同時看到色違與暗影，輸出「色違名稱」。
 
 除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
                 case 'search_shiny_legendary':
@@ -1131,12 +1171,6 @@ ${outputTemplate}
 這是一張搜尋頁，搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」。
 你必須讀取頂部數字並填入 shiny_leg。
 除了 shiny_leg 之外，其餘欄位都必須留空字串。`;
-                case 'search_shiny_total':
-                    return `${baseRules}
-
-這是一張搜尋頁，搜尋欄完全符合「${SHINY_FILTER}」。
-你必須讀取頂部數字並填入 shiny。
-除了 shiny 之外，其餘欄位都必須留空字串。`;
                 case 'search_old_pokemon':
                     return `${baseRules}
 
@@ -1156,14 +1190,26 @@ ${outputTemplate}
 - 等級 -> level
 - 隊伍 -> team（只能輸出「藍隊」「紅隊」「黃隊」其中一種）
 - 經驗 -> xp
+
+【trainer_profile 規則】
+1. level 只能讀左下角超大數字，且下方必須看得到「等級」。
+2. team 只能依背景顏色 + 經驗條顏色判斷：紅色=紅隊、藍色=藍隊、黃色=黃隊。
+3. xp 只能讀進度條文字，例如「1,589,839 / 3,350,000」時，只能填左邊的「1589839」。
+4. 禁止從這張圖填入 stardust。
+
+除了 level、team、xp 之外，其餘欄位都必須留空字串。`;
+                case 'pokemon_detail':
+                    return `${baseRules}
+
+這是一張寶可夢詳細頁，只能填以下欄位：
 - 星塵 -> stardust
 
-【xp / stardust 規則】
-1. 一律換算成「萬」單位輸出。
-2. 可保留到小數點後 2 位。
-3. 請直接輸出帶「萬」字的字串，例如「1234.56萬」。
+【pokemon_detail 規則】
+1. 只能尋找「星星沙子」旁邊的數字。
+2. 直接填入畫面上的原始數字，例如「2683836」。
+3. 禁止從訓練家頁、分類頁、搜尋頁或資源頁推測 stardust。
 
-除了 level、team、xp、stardust 之外，其餘欄位都必須留空字串。`;
+除了 stardust 之外，其餘欄位都必須留空字串。`;
                 case 'resource_overview':
                     return `${baseRules}
 
@@ -1272,8 +1318,8 @@ ${outputTemplate}
             return normalizeAiClassification(rawResult);
         };
 
-        const requestSingleImageExtraction = async (apiKey, dataUrl, classification, statusUpdater) => {
-            const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiExtractionPrompt(classification), dataUrl, OPENAI_EXTRACTION_JSON_SCHEMA, statusUpdater);
+        const requestSingleImageExtraction = async (apiKey, dataUrl, classification, statusUpdater, retryFields = []) => {
+            const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiExtractionPrompt({ ...classification, retry_fields: retryFields }), dataUrl, OPENAI_EXTRACTION_JSON_SCHEMA, statusUpdater);
             return normalizeAiExtraction(rawResult, classification);
         };
 
@@ -1333,7 +1379,7 @@ ${outputTemplate}
                         aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段補抓中 ${progressLabel}`;
                         const retriedResult = await requestSingleImageExtraction(apiKey, dataUrls[i], classification, (attempt, maxRetries) => {
                             aiBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> GPT 第二階段補抓中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`;
-                        });
+                        }, retryableMissingFields);
                         imageResult = mergeSingleImageAttempts(imageResult, retriedResult);
                     }
 
@@ -1352,6 +1398,11 @@ ${outputTemplate}
                     missingButExpectedFields
                 });
                 applyAiResultToForm(mergedResult);
+                if (missingButExpectedFields.length > 0) {
+                    const unresolvedLabels = missingButExpectedFields.map(field => AI_FIELD_LABELS[field] || field);
+                    console.warn('AI unresolved fields after retry:', unresolvedLabels);
+                    alert(`以下欄位已有對應截圖且已自動重檢 1 次，但仍未成功讀取，請人工複查：\n${unresolvedLabels.join('、')}`);
+                }
                 aiBtn.innerHTML = AI_SUCCESS_LABEL;
                 await new Promise(resolve => setTimeout(resolve, 1200));
             } catch (e) { 
@@ -1404,6 +1455,16 @@ ${outputTemplate}
             if(cancelEditBtn) cancelEditBtn.classList.add('hidden');
 
             window.togglePage(1);
+        };
+
+        const formatWanFieldForDisplay = (value) => {
+            const numeric = parseFloat(String(value || '').trim());
+            if (!Number.isFinite(numeric) || numeric < 100) return '';
+            if (numeric >= 10000) {
+                const yiValue = Math.floor((numeric / 10000) * 10) / 10;
+                return `${formatWanValue(yiValue)}億`;
+            }
+            return `${Math.floor(numeric)}萬`;
         };
 
         window.generateText = function() {
@@ -1460,24 +1521,14 @@ ${outputTemplate}
             if(checked('chk_kyogre')) res.push(`蓋歐卡根源波動`);
             if(checked('chk_rayquaza')) res.push(`烈空坐畫龍點睛`);
             
-            if(!isBelow60 && valid(v('g_xp'))) {
-                const xpNum = parseFloat(v('g_xp'));
-                if (xpNum >= 10000) {
-                    const bNum = parseFloat((xpNum / 10000).toFixed(2));
-                    res.push(`經驗 ${bNum}億`);
-                } else if (xpNum >= 100) {
-                    res.push(`經驗 ${xpNum}萬`);
-                }
+            if(!isBelow60) {
+                const xpDisplay = formatWanFieldForDisplay(v('g_xp'));
+                if (xpDisplay) res.push(`經驗 ${xpDisplay}`);
             }
             
-            if(!isBelow60 && valid(v('g_stardust'))) {
-                const sdNum = parseFloat(v('g_stardust'));
-                if (sdNum >= 10000) {
-                    const bNum = parseFloat((sdNum / 10000).toFixed(2)); 
-                    res.push(`星塵 ${bNum}億`);
-                } else {
-                    res.push(`星塵 ${sdNum}萬`);
-                }
+            if(!isBelow60) {
+                const stardustDisplay = formatWanFieldForDisplay(v('g_stardust'));
+                if (stardustDisplay) res.push(`星塵 ${stardustDisplay}`);
             }
             
             if(valid(v('st_hundo_leg'))) { let listStr = v('g_hundos') ? ` ${v('g_hundos')}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
