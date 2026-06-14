@@ -27,6 +27,33 @@
         const inventoryRef = ref(db, 'inventory');
         let inventoryData = [];
 
+        const normalizeTimestamp = (value, fallback = 0) => {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        };
+
+        const getNewestSortValue = (item) => normalizeTimestamp(item?.timestamp);
+
+        const getSoldSortValue = (item) => {
+            const soldAt = normalizeTimestamp(item?.soldAt, NaN);
+            return Number.isFinite(soldAt) ? soldAt : getNewestSortValue(item);
+        };
+
+        function sortInventoryData(items, filterStatus, sortMode) {
+            return [...items].sort((a, b) => {
+                if (sortMode === 'priceDesc') {
+                    return (parseInt(b.price) || 0) - (parseInt(a.price) || 0) || getNewestSortValue(b) - getNewestSortValue(a);
+                }
+                if (sortMode === 'priceAsc') {
+                    return (parseInt(a.price) || Infinity) - (parseInt(b.price) || Infinity) || getNewestSortValue(b) - getNewestSortValue(a);
+                }
+                if (filterStatus === 'sold' && sortMode === 'newest') {
+                    return getSoldSortValue(b) - getSoldSortValue(a) || getNewestSortValue(b) - getNewestSortValue(a);
+                }
+                return getNewestSortValue(b) - getNewestSortValue(a);
+            });
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             ['googleSheetId', 'gasUrl', 'geminiApiKey'].forEach(id => {
                 const savedValue = localStorage.getItem(id);
@@ -65,12 +92,7 @@
                 if (searchQuery && !item.accountId.toLowerCase().includes(searchQuery)) return false;
                 return true;
             });
-
-            displayData.sort((a, b) => {
-                if (sortMode === 'priceDesc') return (parseInt(b.price)||0) - (parseInt(a.price)||0) || b.timestamp - a.timestamp;
-                else if (sortMode === 'priceAsc') return (parseInt(a.price)||Infinity) - (parseInt(b.price)||Infinity) || b.timestamp - a.timestamp;
-                else return b.timestamp - a.timestamp;
-            });
+            displayData = sortInventoryData(displayData, filterStatus, sortMode);
 
             if(displayData.length === 0) return;
             if(!confirm(`確定要鏡像重排覆蓋到試算表嗎？`)) return;
@@ -91,7 +113,9 @@
             const isAlreadySold = btn.innerText.includes('補塗');
             if(!isAlreadySold) {
                 if(!confirm(`確定標記為售出？`)) return;
-                update(ref(db, `inventory/${uid}`), { status: 'sold' });
+                const existingItem = inventoryData.find(item => item.uid === uid);
+                const soldAt = existingItem?.soldAt ?? Date.now();
+                await update(ref(db, `inventory/${uid}`), { status: 'sold', soldAt });
                 window.showCopyModal(accountId); // ✅ 首次售出時立刻跳出
             }
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
@@ -218,12 +242,15 @@
             if (currentEditUid) {
                 const existingItem = inventoryData.find(i => i.uid === currentEditUid);
                 newItem.timestamp = existingItem ? existingItem.timestamp : Date.now();
+                if (existingItem?.soldAt !== undefined) newItem.soldAt = existingItem.soldAt;
+                if (newItem.status === 'sold' && existingItem?.status !== 'sold') newItem.soldAt = Date.now();
                 update(ref(db, `inventory/${currentEditUid}`), newItem);
                 showMsg("✅ 帳號資料已更新！", "green");
                 
                 if(sheetId && scriptUrl) fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
             } else {
                 newItem.timestamp = Date.now(); 
+                if (newItem.status === 'sold') newItem.soldAt = newItem.timestamp;
                 push(inventoryRef, newItem); 
                 showMsg("✅ 帳號已新增！", "green");
                 
@@ -364,11 +391,7 @@
                 if (searchQuery && !item.accountId.toLowerCase().includes(searchQuery)) return false;
                 return true;
             });
-            displayData.sort((a, b) => {
-                if (sortMode === 'priceDesc') return (parseInt(b.price)||0) - (parseInt(a.price)||0) || b.timestamp - a.timestamp;
-                else if (sortMode === 'priceAsc') return (parseInt(a.price)||Infinity) - (parseInt(b.price)||Infinity) || b.timestamp - a.timestamp;
-                else return b.timestamp - a.timestamp;
-            });
+            displayData = sortInventoryData(displayData, filterStatus, sortMode);
             displayData.forEach(item => {
                 const isS = item.status === 'sold'; const rC = isS ? 'bg-amber-50 opacity-80' : 'hover:bg-blue-50 bg-white'; const nR = document.createElement('tr'); nR.className = `${rC} border-b border-gray-100 transition duration-300`;
                 let tC = item.team === '紅隊' ? 'text-red-500' : (item.team === '藍隊' ? 'text-blue-500' : 'text-yellow-500');
