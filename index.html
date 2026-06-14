@@ -864,6 +864,7 @@
             if (countMatch) text = text.slice(0, countMatch.index).trim();
             const hasShiny = text.includes('色違');
             const hasShadow = text.includes('暗影');
+            const hasPurified = text.includes('淨化');
             text = text
                 .replace(/淨化/g, '')
                 .replace(/色違/g, '')
@@ -871,7 +872,7 @@
                 .replace(/\s+/g, '')
                 .trim();
             if (!text) return null;
-            const prefix = hasShiny ? '色違' : hasShadow ? '暗影' : '';
+            const prefix = hasShiny ? '色違' : hasShadow ? '暗影' : hasPurified ? '淨化' : '';
             return { name: `${prefix}${text}`, count };
         };
 
@@ -1281,10 +1282,12 @@ ${outputTemplate}
 3. 保持原本順序，禁止重新排序。
 4. 同名可直接重複列出，系統會在多圖合併後統一轉成「名稱*數量」；單隻不可加「*1」。
 5. 只能用半形逗號分隔，例如「固拉多,固拉多,鳳王,蒼響」。
-6. 寶可夢左上角有黑色四角星才算色違，輸出「色違名稱」。
-7. 寶可夢身上有紫色暗影火焰才算暗影，輸出「暗影名稱」。
-8. 若有藍色淨化圖示，視為普通寶可夢，不可輸出「淨化」。
-9. 命名前綴優先權固定為：色違 > 暗影 > 普通 > 淨化。若同時看到色違與暗影，輸出「色違名稱」。
+6. 寶可夢右上角黃色收藏星星、名字左側灰色標籤圖示、名字下方或旁邊的任何活動徽章、夥伴徽章、背景徽章、自訂徽章都沒有統計意義，必須完全忽略。
+7. 色違只看 CP 下方左側是否有三顆黑色四角星；只有看到這個標記才可輸出「色違名稱」。
+8. 暗影只看寶可夢旁邊是否有紫色暗影火焰；只有看到這個標記才可輸出「暗影名稱」。
+9. 淨化只看寶可夢旁邊是否有藍白色淨化符號；只有看到這個標記才可輸出「淨化名稱」。
+10. 若沒看到上述三種有效標記，就輸出普通名稱；禁止依收藏星、標籤、任何徽章或其他 UI 圖示推測色違、暗影、淨化或特殊性。
+11. 命名前綴優先權固定為：色違 > 暗影 > 淨化 > 普通。若同時看到色違與暗影，輸出「色違名稱」；若同時看到色違與淨化，輸出「色違名稱」。
 
 除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
                 case 'SHINY_LEGENDARY_SCREEN':
