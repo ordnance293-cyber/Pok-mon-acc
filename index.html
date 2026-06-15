@@ -595,7 +595,7 @@
             old_poke: '16-20怪',
             old_leg: '16-20神',
             masterball: '大師球',
-            greenpass: '綠票券',
+            greenpass: '綠票卷',
             rarecandy: '神奇糖果',
             coin: '寶可幣',
             poke_bag: '寶可夢包',
@@ -606,6 +606,19 @@
             stardust: '星塵',
             pokemon_list: '百神清單'
         };
+        const AI_REQUIRED_VALIDATION_FIELDS = [
+            'hundo_leg', 'legendary', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
+            'old_poke', 'old_leg', 'coin', 'poke_bag', 'item_bag', 'rarecandy', 'greenpass', 'masterball',
+            'level', 'team', 'xp', 'stardust'
+        ];
+        const AI_REQUIRED_VALIDATION_PASSES = 2;
+        const AI_FIELD_TO_IMAGE_TYPES = Object.entries(AI_IMAGE_TYPE_ALLOWED_FIELDS).reduce((acc, [imageType, fields]) => {
+            fields.forEach(field => {
+                if (!acc[field]) acc[field] = [];
+                acc[field].push(imageType);
+            });
+            return acc;
+        }, {});
         const OPENAI_CLASSIFICATION_JSON_SCHEMA = {
             name: 'pokemon_go_image_classifier',
             strict: true,
@@ -856,6 +869,11 @@
             syncFusionMegaSelectVisibility();
         };
 
+        const FULLWIDTH_CHAR_MAP = {
+            '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
+            '５': '5', '６': '6', '７': '7', '８': '8', '９': '9',
+            '％': '%', '．': '.', '，': ',', '：': ':', '／': '/', '－': '-'
+        };
         const POKEMON_ALIAS_DICTIONARY = {
             '雷公': ['雷公', '雷公公', '雷公王', '雷公獸'],
             '拉帝歐斯': ['拉帝歐斯', '拉帝奧斯', '拉帝歐絲'],
@@ -869,10 +887,32 @@
             )
         );
         const POKEMON_ALIAS_SUFFIXES = [...POKEMON_ALIAS_LOOKUP.entries()].sort((a, b) => b[0].length - a[0].length);
-        const POKEMON_CANONICAL_STATE_ORDER = ['色違', '暗影', '淨化'];
+        const POKEMON_STATE_VARIANTS = [
+            { canonical: '色違', aliases: ['色違', '異色'] },
+            { canonical: '暗影', aliases: ['暗影'] },
+            { canonical: '淨化', aliases: ['淨化'] }
+        ];
+        const POKEMON_CANONICAL_OUTPUT_STATE_ORDER = ['色違', '暗影'];
+        const POKEMON_SPECIAL_FORM_MAP = new Map([
+            ['蒼響持劍', '蒼響劍王'],
+            ['蒼響劍之王', '蒼響劍王'],
+            ['蒼響劍王', '蒼響劍王'],
+            ['藏瑪然特持盾', '藏瑪然特盾王'],
+            ['藏瑪然特盾之王', '藏瑪然特盾王'],
+            ['藏瑪然特盾王', '藏瑪然特盾王'],
+            ['基格爾德50%', '基格爾德'],
+            ['基格爾德50', '基格爾德'],
+            ['基格爾德５０%', '基格爾德'],
+            ['基格爾德５０', '基格爾德']
+        ]);
+
+        const normalizePokemonToken = (value) => String(value || '')
+            .trim()
+            .replace(/[０-９％．，：／－]/g, char => FULLWIDTH_CHAR_MAP[char] || char)
+            .replace(/\s+/g, '');
 
         const applyPokemonAlias = (value) => {
-            let text = String(value || '').replace(/\s+/g, '').trim();
+            let text = normalizePokemonToken(value);
             if (!text) return '';
             if (POKEMON_ALIAS_LOOKUP.has(text)) return POKEMON_ALIAS_LOOKUP.get(text) || text;
             for (const [alias, canonical] of POKEMON_ALIAS_SUFFIXES) {
@@ -883,19 +923,27 @@
             return text;
         };
 
-        const canonical_name = (value) => {
-            let text = String(value || '').trim();
+        const normalizePokemonBaseName = (value) => {
+            let text = applyPokemonAlias(value);
             if (!text) return '';
-            text = text.replace(/\s+/g, '');
+            if (POKEMON_SPECIAL_FORM_MAP.has(text)) return POKEMON_SPECIAL_FORM_MAP.get(text) || text;
+            return text;
+        };
+
+        const canonical_name = (value) => {
+            let text = normalizePokemonToken(value);
+            if (!text) return '';
             const states = new Set();
-            POKEMON_CANONICAL_STATE_ORDER.forEach(state => {
-                if (text.includes(state)) states.add(state);
-                text = text.replaceAll(state, '');
+            POKEMON_STATE_VARIANTS.forEach(({ canonical, aliases }) => {
+                aliases.forEach(alias => {
+                    if (text.includes(alias)) states.add(canonical);
+                    text = text.replaceAll(alias, '');
+                });
             });
             text = text.replaceAll('普通', '');
-            text = applyPokemonAlias(text);
+            text = normalizePokemonBaseName(text);
             if (!text) return '';
-            const prefix = POKEMON_CANONICAL_STATE_ORDER.filter(state => states.has(state)).join('');
+            const prefix = POKEMON_CANONICAL_OUTPUT_STATE_ORDER.filter(state => states.has(state)).join('');
             return `${prefix}${text}`;
         };
 
@@ -1127,6 +1175,50 @@
             return merged;
         };
 
+        const isPopulatedAiValue = (value) => String(value || '').trim() !== '';
+        const getRequiredValidationFields = (classifications = []) => {
+            const requiredFields = [...AI_REQUIRED_VALIDATION_FIELDS];
+            if (getFullHundoScanTargetIndexes(classifications).length > 0) requiredFields.splice(1, 0, 'pokemon_list');
+            return requiredFields;
+        };
+        const getCandidateImageIndexesForField = (field, classifications = []) => {
+            if (field === 'pokemon_list') return getFullHundoScanTargetIndexes(classifications);
+            const candidateTypes = new Set(AI_FIELD_TO_IMAGE_TYPES[field] || []);
+            return classifications.reduce((indexes, classification, index) => {
+                if (candidateTypes.has(classification.image_type)) indexes.push(index);
+                return indexes;
+            }, []);
+        };
+        const evaluateRequiredFieldCoverage = (mergedResult = {}, classifications = []) => {
+            const missingWithScreens = [];
+            const missingWithoutScreens = [];
+            getRequiredValidationFields(classifications).forEach(field => {
+                if (isPopulatedAiValue(mergedResult[field])) return;
+                const candidateIndexes = getCandidateImageIndexesForField(field, classifications);
+                if (candidateIndexes.length > 0) {
+                    missingWithScreens.push({ field, candidateIndexes });
+                } else {
+                    missingWithoutScreens.push(field);
+                }
+            });
+            return { missingWithScreens, missingWithoutScreens };
+        };
+        const buildValidationTargets = (missingWithScreens = []) => {
+            const targets = new Map();
+            missingWithScreens.forEach(({ field, candidateIndexes }) => {
+                candidateIndexes.forEach(index => {
+                    const fieldSet = targets.get(index) || new Set();
+                    fieldSet.add(field);
+                    targets.set(index, fieldSet);
+                });
+            });
+            return [...targets.entries()].map(([index, fieldSet]) => ({
+                index,
+                fields: [...fieldSet]
+            }));
+        };
+        const mergeTaskResultsIntoAiResult = (taskResults = []) => mergeAiResults(taskResults.map(task => task.imageResult));
+
         const buildAiClassificationPrompt = () => `你是寶可夢 GO 截圖分類器。這次只會收到 1 張圖片，你只能做第一階段分類，禁止抽取數字，禁止假設其他圖片存在，禁止跨圖合併。
 
 【輸出格式】
@@ -1320,18 +1412,19 @@ ${outputTemplate}
 這也是唯一可以填 pokemon_list 的圖片類型。
 
 【pokemon_list 規則】
-1. 只列這張圖中實際看得到的寶可夢。
-2. 由上到下、由左到右讀取。
-3. 保持原本順序，禁止重新排序。
-4. 同名可直接重複列出，系統會在多圖合併後統一轉成「名稱*數量」；單隻不可加「*1」。
-5. 只能用半形逗號分隔，例如「固拉多,固拉多,鳳王,蒼響」。
-6. 寶可夢右上角黃色收藏星星、名字左側灰色標籤圖示、名字下方或旁邊的任何活動徽章、夥伴徽章、背景徽章、自訂徽章都沒有統計意義，必須完全忽略。
-7. 色違只看 CP 下方左側是否有三顆黑色四角星；只有看到這個標記才可輸出「色違名稱」。
-8. 暗影只看寶可夢旁邊是否有紫色暗影火焰；只有看到這個標記才可輸出「暗影名稱」。
-9. 淨化只看寶可夢旁邊是否有藍白色淨化符號；只有看到這個標記才可輸出「淨化名稱」。
-10. 若沒看到上述三種有效標記，就輸出普通名稱；禁止依收藏星、標籤、任何徽章或其他 UI 圖示推測色違、暗影、淨化或特殊性。
-11. 命名前綴順序固定為：色違 > 暗影 > 淨化 > 普通。若同時看到多個有效標記，必須全部保留並依序組合，例如「色違暗影雷公」、「色違淨化雷公」；只有完全相同名稱才可視為同類。
-12. 特殊型態、合體型態都必須保留完整名稱，例如「焰白酋雷姆」、「闇黑酋雷姆」、「黃昏之鬃奈克洛茲瑪」、「拂曉之翼奈克洛茲瑪」；禁止簡化成基底名稱。
+1. 必須掃描整張截圖中所有可見寶可夢卡片，禁止只掃前幾張。
+2. 每一隻都要先讀取畫面上直接可見的中文名稱；只有名稱模糊或信心不足時，才可用寶可夢本體外觀做輔助辨識，禁止每一隻都重新靠外觀猜名稱。
+3. 若名稱文字與外觀判斷衝突，優先相信畫面中的中文名稱。
+4. 由上到下、由左到右讀取，並保持原本順序，禁止重新排序。
+5. 同名可直接重複列出，系統會在多圖合併後統一轉成「名稱*數量」；單隻不可加「*1」。
+6. 只能用半形逗號分隔，例如「固拉多,固拉多,鳳王,蒼響」。
+7. 只可使用以下資訊：寶可夢名稱、左側閃光星星圖示、紫色火焰圖示、藍色雪花圖示、寶可夢本體外觀。
+8. 右上角收藏星星、名字左側標籤圖示、隊友圖示、特殊背景、CP 排序按鈕、搜尋列、進化按鈕、底部圓形按鈕，全部禁止參與辨識。
+9. 色違只看左側閃光星星圖示；暗影只看紫色火焰圖示；淨化只看藍色雪花圖示。
+10. canonical name 只允許「色違」與「暗影」兩種前綴，順序固定為「色違暗影名稱」；淨化永遠不要輸出。若只看到淨化就輸出普通名稱；若同時看到淨化與色違就輸出「色違名稱」。
+11. Alias Dictionary 修正：拉帝奧斯/拉帝歐絲 -> 拉帝歐斯；拉帝亞絲 -> 拉帝亞斯；奈克洛芝瑪/奈克洛茲馬 -> 奈克洛茲瑪；基格德/基格爾多 -> 基格爾德。
+12. 特殊型態不得合併：蒼響持劍 -> 蒼響劍王；藏瑪然特持盾 -> 藏瑪然特盾王；酋雷姆 / 焰白酋雷姆 / 闇黑酋雷姆 分開；基格爾德50% -> 基格爾德；基格爾德完全體分開；奈克洛茲瑪 / 黃昏之鬃奈克洛茲瑪 / 拂曉之翼奈克洛茲瑪 / 究極奈克洛茲瑪 全部分開。
+13. 只有完全相同的 canonical name 才算同類，例如「雷公」與「色違雷公」不能合併，「蒼響」與「蒼響劍王」不能合併。
 
 除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
                 case 'SHINY_LEGENDARY_SCREEN':
@@ -1604,8 +1697,10 @@ ${outputTemplate}
             };
         };
 
-        const extractSingleAiImage = async ({ apiKey, dataUrl, classification, scanMode = 'quick', imageIndex, progressIndex = imageIndex, totalFiles, updateStatus }) => {
-            const extractionFields = getAiExtractionFields(classification, scanMode);
+        const extractSingleAiImage = async ({ apiKey, dataUrl, classification, scanMode = 'quick', imageIndex, progressIndex = imageIndex, totalFiles, updateStatus, overrideFields = null }) => {
+            const extractionFields = Array.isArray(overrideFields) && overrideFields.length > 0
+                ? [...new Set(overrideFields)]
+                : getAiExtractionFields(classification, scanMode);
             if (extractionFields.length === 0) {
                 return {
                     imageResult: normalizeAiExtraction({}, classification, extractionFields),
@@ -1639,6 +1734,52 @@ ${outputTemplate}
             });
 
             return { imageResult, expectedFields: extractionFields };
+        };
+
+        const runRequiredFieldValidation = async ({ apiKey, dataUrls, classifications, taskResults = [] }) => {
+            let mergedResult = mergeTaskResultsIntoAiResult(taskResults);
+            let coverage = evaluateRequiredFieldCoverage(mergedResult, classifications);
+            const validationTaskResults = [];
+
+            for (let pass = 0; pass < AI_REQUIRED_VALIDATION_PASSES && coverage.missingWithScreens.length > 0; pass += 1) {
+                const validationTargets = buildValidationTargets(coverage.missingWithScreens);
+                if (validationTargets.length === 0) break;
+
+                let completedCount = 0;
+                const totalTargets = validationTargets.length;
+                const passResults = await Promise.all(validationTargets.map((target, progressIndex) =>
+                    extractSingleAiImage({
+                        apiKey,
+                        dataUrl: dataUrls[target.index],
+                        classification: classifications[target.index],
+                        imageIndex: target.index,
+                        progressIndex,
+                        totalFiles: totalTargets,
+                        updateStatus: (message) => {
+                            setAiActionButtonStatus(
+                                `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 欄位複檢 ${pass + 1}/${AI_REQUIRED_VALIDATION_PASSES} ${message}｜已完成 ${completedCount}/${totalTargets}`
+                            );
+                        },
+                        overrideFields: target.fields
+                    }).then(result => {
+                        completedCount += 1;
+                        setAiActionButtonStatus(
+                            `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 欄位複檢 ${pass + 1}/${AI_REQUIRED_VALIDATION_PASSES} 統整中｜已完成 ${completedCount}/${totalTargets}`
+                        );
+                        return result;
+                    })
+                ));
+
+                validationTaskResults.push(...passResults);
+                mergedResult = mergeTaskResultsIntoAiResult([...taskResults, ...validationTaskResults]);
+                coverage = evaluateRequiredFieldCoverage(mergedResult, classifications);
+            }
+
+            return {
+                mergedResult,
+                coverage,
+                validationTaskResults
+            };
         };
 
         const runAiExtractionBatch = async ({ apiKey, dataUrls, classifications, scanMode = 'quick', targetIndexes = [] }) => {
@@ -1739,8 +1880,11 @@ ${outputTemplate}
                     })
                 ));
 
-                const quickTaskResults = await quickScan({ apiKey, dataUrls, classifications });
-                const { taskResults: fullTaskResults, targetIndexes: fullHundoTargetIndexes } = await fullHundoScan({ apiKey, dataUrls, classifications });
+                const [quickTaskResults, fullHundoScanResult] = await Promise.all([
+                    quickScan({ apiKey, dataUrls, classifications }),
+                    fullHundoScan({ apiKey, dataUrls, classifications })
+                ]);
+                const { taskResults: fullTaskResults, targetIndexes: fullHundoTargetIndexes } = fullHundoScanResult;
 
                 if (fullHundoTargetIndexes.length === 0) {
                     setAiActionButtonStatus(`<i class="fas fa-check-circle text-green-600"></i> ${AI_SCAN_STATUS_LABEL} 未命中「${HUNDO_LEGENDARY_FILTER}」，略過百神清單辨識`);
@@ -1748,20 +1892,30 @@ ${outputTemplate}
                 }
 
                 const taskResults = [...quickTaskResults, ...fullTaskResults];
-                const imageResults = taskResults.map(result => result.imageResult);
-                const mergedResult = mergeAiResults(imageResults);
-                const missingButExpectedFields = collectExpectedFields(taskResults).filter(field => !String(mergedResult[field] || '').trim());
+                const { mergedResult, coverage, validationTaskResults } = await runRequiredFieldValidation({
+                    apiKey,
+                    dataUrls,
+                    classifications,
+                    taskResults
+                });
                 console.log({
                     finalResult: mergedResult,
-                    missingButExpectedFields,
+                    requiredFieldCoverage: coverage,
                     classifications,
-                    fullHundoTargetIndexes
+                    fullHundoTargetIndexes,
+                    validationTaskResults
                 });
                 applyAiResultToForm(mergedResult);
-                if (missingButExpectedFields.length > 0) {
-                    const unresolvedLabels = missingButExpectedFields.map(field => AI_FIELD_LABELS[field] || field);
-                    console.warn('AI unresolved fields after retry:', unresolvedLabels);
-                    alert(`以下欄位已有對應截圖且已自動重檢 1 次，但仍未成功讀取，請人工複查：\n${unresolvedLabels.join('、')}`);
+                const missingMessages = [];
+                if (coverage.missingWithoutScreens.length > 0) {
+                    missingMessages.push(`未提供對應截圖：${coverage.missingWithoutScreens.map(field => AI_FIELD_LABELS[field] || field).join('、')}`);
+                }
+                if (coverage.missingWithScreens.length > 0) {
+                    missingMessages.push(`已有對應截圖但重檢後仍無法確認：${coverage.missingWithScreens.map(({ field }) => AI_FIELD_LABELS[field] || field).join('、')}`);
+                }
+                if (missingMessages.length > 0) {
+                    console.warn('AI required field validation result:', coverage);
+                    alert(`以下欄位已逐一驗證，但本次仍未能自動填入：\n${missingMessages.join('\n')}`);
                 }
                 const aiButton = document.getElementById(AI_ACTION_BUTTON_ID);
                 if (aiButton) aiButton.innerHTML = AI_SCAN_BUTTON_LABEL;
