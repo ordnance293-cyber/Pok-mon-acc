@@ -876,10 +876,28 @@
         };
         const POKEMON_ALIAS_DICTIONARY = {
             '雷公': ['雷公', '雷公公', '雷公王', '雷公獸'],
-            '拉帝歐斯': ['拉帝歐斯', '拉帝奧斯', '拉帝歐絲'],
-            '拉帝亞斯': ['拉帝亞斯', '拉帝亞絲'],
+            '拉帝歐斯': ['拉帝歐斯', '拉帝奧斯', '拉帝歐絲', 'latios'],
+            '拉帝亞斯': ['拉帝亞斯', '拉帝亞絲', 'latias'],
             '基格爾德': ['基格爾德', '基格爾多', '基格德'],
-            '奈克洛茲瑪': ['奈克洛茲瑪', '奈克洛芝瑪', '奈克洛茲馬']
+            '帕路奇亞': ['帕路奇亞', 'palkia'],
+            '勾帕路翁': ['勾帕路翁', 'cobalion'],
+            '畢力吉翁': ['畢力吉翁', 'virizion'],
+            '奈克洛茲瑪': ['奈克洛茲瑪', '奈克洛芝瑪', '奈克洛茲馬', 'necrozma'],
+            '酋雷姆': ['酋雷姆', 'kyurem'],
+            '闇黑酋雷姆': ['闇黑酋雷姆', 'blackkyurem'],
+            '焰白酋雷姆': ['焰白酋雷姆', 'whitekyurem'],
+            '閃電鳥': ['閃電鳥', 'zapdos'],
+            '帝牙盧卡': ['帝牙盧卡', 'dialga'],
+            '騎拉帝納': ['騎拉帝納', 'giratina'],
+            '固拉多': ['固拉多', 'groudon'],
+            '蓋歐卡': ['蓋歐卡', 'kyogre'],
+            '烈空坐': ['烈空坐', 'rayquaza'],
+            '超夢': ['超夢', 'mewtwo'],
+            '洛奇亞': ['洛奇亞', 'lugia'],
+            '鳳王': ['鳳王', 'ho-oh', 'hooh'],
+            '蒼響': ['蒼響', 'zacian'],
+            '藏瑪然特': ['藏瑪然特', 'zamazenta'],
+            '無極汰那': ['無極汰那', 'eternatus']
         };
         const POKEMON_ALIAS_LOOKUP = new Map(
             Object.entries(POKEMON_ALIAS_DICTIONARY).flatMap(([canonical, aliases]) =>
@@ -893,6 +911,12 @@
             { canonical: '淨化', aliases: ['淨化'] }
         ];
         const POKEMON_CANONICAL_OUTPUT_STATE_ORDER = ['色違', '暗影'];
+        const POKEMON_BACKGROUND_PREFIX_ORDER = ['特別背卡', '紀念背卡'];
+        const POKEMON_BACKGROUND_PREFIX_VARIANTS = [
+            { canonical: '特別背卡', aliases: ['特別背卡', '特殊背卡', '特別背景卡', '雪花背卡', '藍色雪花', 'specialbackground', 'specialcard', 'specialbg', 'specialbackdrop'] },
+            { canonical: '紀念背卡', aliases: ['紀念背卡', '紀念卡', '全球背卡', '地球背卡', '地點背卡', 'commemorativebackground', 'locationbackground', 'globebackground', 'commemorativecard', 'locationcard', 'commemorativebg', 'locationbg'] }
+        ];
+        const POKEMON_BACKGROUND_DESCRIPTOR_PATTERN = /(with)?(special|commemorative|location|globe)(background|backdrop|card|bg)/g;
         const POKEMON_SPECIAL_FORM_MAP = new Map([
             ['蒼響持劍', '蒼響劍王'],
             ['蒼響劍之王', '蒼響劍王'],
@@ -909,6 +933,7 @@
         const normalizePokemonToken = (value) => String(value || '')
             .trim()
             .replace(/[０-９％．，：／－]/g, char => FULLWIDTH_CHAR_MAP[char] || char)
+            .replace(/[A-Za-z]+/g, text => text.toLowerCase())
             .replace(/\s+/g, '');
 
         const applyPokemonAlias = (value) => {
@@ -930,8 +955,27 @@
             return text;
         };
 
-        const canonical_name = (value) => {
+        const extractPokemonBackgroundPrefixes = (value) => {
             let text = normalizePokemonToken(value);
+            const prefixes = new Set();
+            POKEMON_BACKGROUND_PREFIX_VARIANTS.forEach(({ canonical, aliases }) => {
+                aliases.forEach(alias => {
+                    const normalizedAlias = normalizePokemonToken(alias);
+                    if (!normalizedAlias) return;
+                    if (text.includes(normalizedAlias)) prefixes.add(canonical);
+                    text = text.replaceAll(normalizedAlias, '');
+                });
+            });
+            text = text.replace(POKEMON_BACKGROUND_DESCRIPTOR_PATTERN, '').replaceAll('with', '');
+            return {
+                prefixes: POKEMON_BACKGROUND_PREFIX_ORDER.filter(prefix => prefixes.has(prefix)),
+                text
+            };
+        };
+
+        const canonical_name = (value) => {
+            const backgroundResult = extractPokemonBackgroundPrefixes(value);
+            let text = backgroundResult.text;
             if (!text) return '';
             const states = new Set();
             POKEMON_STATE_VARIANTS.forEach(({ canonical, aliases }) => {
@@ -943,8 +987,9 @@
             text = text.replaceAll('普通', '');
             text = normalizePokemonBaseName(text);
             if (!text) return '';
-            const prefix = POKEMON_CANONICAL_OUTPUT_STATE_ORDER.filter(state => states.has(state)).join('');
-            return `${prefix}${text}`;
+            const statePrefix = POKEMON_CANONICAL_OUTPUT_STATE_ORDER.filter(state => states.has(state)).join('');
+            const backgroundPrefix = backgroundResult.prefixes.join('');
+            return `${statePrefix}${backgroundPrefix}${text}`;
         };
 
         const normalizePokemonListEntry = (value) => {
@@ -1419,12 +1464,21 @@ ${outputTemplate}
 5. 同名可直接重複列出，系統會在多圖合併後統一轉成「名稱*數量」；單隻不可加「*1」。
 6. 只能用半形逗號分隔，例如「固拉多,固拉多,鳳王,蒼響」。
 7. 只可使用以下資訊：寶可夢名稱、左側閃光星星圖示、紫色火焰圖示、藍色雪花圖示、寶可夢本體外觀。
-8. 右上角收藏星星、名字左側標籤圖示、隊友圖示、特殊背景、CP 排序按鈕、搜尋列、進化按鈕、底部圓形按鈕，全部禁止參與辨識。
+8. 右上角收藏星星、名字左側標籤圖示、隊友圖示、CP 排序按鈕、搜尋列、進化按鈕、底部圓形按鈕，全部禁止參與辨識；但每一格寶可夢圖片右下角的背卡小圖示必須獨立檢查。
 9. 色違只看左側閃光星星圖示；暗影只看紫色火焰圖示；淨化只看藍色雪花圖示。
-10. canonical name 只允許「色違」與「暗影」兩種前綴，順序固定為「色違暗影名稱」；淨化永遠不要輸出。若只看到淨化就輸出普通名稱；若同時看到淨化與色違就輸出「色違名稱」。
-11. Alias Dictionary 修正：拉帝奧斯/拉帝歐絲 -> 拉帝歐斯；拉帝亞絲 -> 拉帝亞斯；奈克洛芝瑪/奈克洛茲馬 -> 奈克洛茲瑪；基格德/基格爾多 -> 基格爾德。
-12. 特殊型態不得合併：蒼響持劍 -> 蒼響劍王；藏瑪然特持盾 -> 藏瑪然特盾王；酋雷姆 / 焰白酋雷姆 / 闇黑酋雷姆 分開；基格爾德50% -> 基格爾德；基格爾德完全體分開；奈克洛茲瑪 / 黃昏之鬃奈克洛茲瑪 / 拂曉之翼奈克洛茲瑪 / 究極奈克洛茲瑪 全部分開。
-13. 只有完全相同的 canonical name 才算同類，例如「雷公」與「色違雷公」不能合併，「蒼響」與「蒼響劍王」不能合併。
+10. 背卡判斷是加法邏輯，不可取代原本名稱辨識：先照原本規則辨識寶可夢名稱，再檢查該格右下角小圖示。
+11. 若右下角有藍色雪花 / 藍色花瓣 / 藍色放射狀圖示，該寶可夢名稱前加「特別背卡」。
+12. 若右下角有藍色地球 / globe / 經緯線圓球圖示，該寶可夢名稱前加「紀念背卡」。
+13. 如果沒有背卡圖示，名稱維持原本結果；不要只看上方搜尋標籤，不要只用總數推測名稱，每一格寶可夢都要獨立判斷。
+14. canonical name 允許「色違」「暗影」狀態前綴與「特別背卡」「紀念背卡」背卡前綴，順序固定為「狀態 + 背卡 + 型態 + 寶可夢名稱」；淨化永遠不要輸出。若只看到淨化就輸出普通名稱；若同時看到淨化與色違就輸出「色違名稱」。
+15. Alias Dictionary 修正：拉帝奧斯/拉帝歐絲 -> 拉帝歐斯；拉帝亞絲 -> 拉帝亞斯；奈克洛芝瑪/奈克洛茲馬 -> 奈克洛茲瑪；基格德/基格爾多 -> 基格爾德；Kyurem -> 酋雷姆；Black Kyurem -> 闇黑酋雷姆；White Kyurem -> 焰白酋雷姆；Zapdos -> 閃電鳥。
+16. 特殊型態不得合併：蒼響持劍 -> 蒼響劍王；藏瑪然特持盾 -> 藏瑪然特盾王；酋雷姆 / 焰白酋雷姆 / 闇黑酋雷姆 分開；基格爾德50% -> 基格爾德；基格爾德完全體分開；奈克洛茲瑪 / 黃昏之鬃奈克洛茲瑪 / 拂曉之翼奈克洛茲瑪 / 究極奈克洛茲瑪 全部分開。
+17. 只有完全相同的 canonical name 才算同類，例如「雷公」與「色違雷公」不能合併，「酋雷姆」「特別背卡酋雷姆」「紀念背卡酋雷姆」「色違特別背卡酋雷姆」都不能互相合併。
+
+【pokemon_list 範例】
+- 酋雷姆右下角有藍色雪花圖示 -> 特別背卡酋雷姆
+- 閃電鳥右下角有藍色地球圖示 -> 紀念背卡閃電鳥
+- 普通酋雷姆沒有背卡圖示 -> 酋雷姆
 
 除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
                 case 'SHINY_LEGENDARY_SCREEN':
