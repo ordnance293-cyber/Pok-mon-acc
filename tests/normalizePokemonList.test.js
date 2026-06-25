@@ -13,6 +13,37 @@ new Function('module', 'exports', moduleSource)(mod, mod.exports);
 const { normalizePokemonList } = mod.exports;
 
 const cases = [
+
+  {
+    name: 'Shiny should not be confused with lucky',
+    input: 'shiny Kyurem, lucky Kyurem',
+    expected: '色違酋雷姆,酋雷姆'
+  },
+  {
+    name: 'Purified should not become special background',
+    input: 'Lugia with purified sparkle, Registeel with blue/cyan purified sparkle',
+    expected: '洛奇亞,雷吉斯奇魯'
+  },
+  {
+    name: 'Special background should remain special background',
+    input: 'Palkia with blue snowflake marker at lower-right, Dialga with blue flower marker at lower-right',
+    expected: '特別背卡帕路奇亞,特別背卡帝牙盧卡'
+  },
+  {
+    name: 'Global background should remain commemorative background',
+    input: 'Rayquaza with globe background, Necrozma with location background',
+    expected: '紀念背卡烈空坐,紀念背卡奈克洛茲瑪'
+  },
+  {
+    name: 'Shadow should remain shadow',
+    input: 'Kyogre with purple flame at lower-left, shadow Lugia',
+    expected: '暗影蓋歐卡,暗影洛奇亞'
+  },
+  {
+    name: 'Different preserved states should not merge',
+    input: 'Kyurem, shiny Kyurem, shadow Kyurem, special background Kyurem, Kyurem with globe background, purified Kyurem',
+    expected: '酋雷姆*2,色違酋雷姆,暗影酋雷姆,特別背卡酋雷姆,紀念背卡酋雷姆'
+  },
   {
     name: 'Shiny',
     input: ['色違酋雷姆', '異色酋雷姆', 'shiny Kyurem'].join('\n'),
