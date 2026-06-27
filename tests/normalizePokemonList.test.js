@@ -7,10 +7,10 @@ const end = html.indexOf('        const normalizeSearchQuery', start);
 if (start === -1 || end === -1) throw new Error('Unable to locate normalizePokemonList source block');
 
 const source = html.slice(start, end).replace(/^        /gm, '');
-const moduleSource = `${source}\nmodule.exports = { normalizePokemonList };`;
+const moduleSource = `${source}\nmodule.exports = { normalizePokemonList, derivePokemonListFromCardEvidence, deriveHundoPokemonNameFromEvidence, normalizePokemonCardEvidence };`;
 const mod = { exports: {} };
 new Function('module', 'exports', moduleSource)(mod, mod.exports);
-const { normalizePokemonList } = mod.exports;
+const { normalizePokemonList, derivePokemonListFromCardEvidence, deriveHundoPokemonNameFromEvidence } = mod.exports;
 
 const cases = [
 
@@ -94,6 +94,101 @@ const cases = [
 let failures = 0;
 for (const testCase of cases) {
   const actual = normalizePokemonList(testCase.input);
+  if (actual !== testCase.expected) {
+    failures += 1;
+    console.error(`FAIL ${testCase.name}\nexpected: ${testCase.expected}\nactual:   ${actual}`);
+  } else {
+    console.log(`PASS ${testCase.name}: ${actual}`);
+  }
+}
+
+
+const emptyIcon = () => ({ present: false, position: '', color: '', shape: '' });
+const card = (raw_name_label, visual_evidence = {}, guessed_sprite_name = '') => ({
+  raw_name_label,
+  canonical_name: '',
+  guessed_sprite_name,
+  final_output_name: '',
+  visual_evidence: {
+    shiny: emptyIcon(),
+    shadow: emptyIcon(),
+    purified: emptyIcon(),
+    special_background: emptyIcon(),
+    commemorative_background: emptyIcon(),
+    ignored_icons: [],
+    ...visual_evidence
+  }
+});
+
+const evidenceCases = [
+  {
+    name: 'Evidence real hundo failure case',
+    actual: () => derivePokemonListFromCardEvidence([
+      { raw_name_label: '基格爾德', ignored_icons: ['white buddy icon', 'yellow favorite star'], shiny: false, shadow: false, purified: false, special_background: false, commemorative_background: false },
+      { raw_name_label: '帝牙盧卡', shiny: false, shadow: false, purified: false, special_background: false, commemorative_background: false },
+      { raw_name_label: '眷戀雲', shiny: false, shadow: false, purified: false, special_background: false, commemorative_background: false },
+      { raw_name_label: '酋雷姆', ignored_icons: ['yellow lucky sparkles'], shiny: false, shadow: false, purified: false, special_background: false, commemorative_background: false },
+      { raw_name_label: '帕路奇亞', ignored_icons: ['yellow favorite star'], shiny: false, shadow: false, purified: false, special_background: false, commemorative_background: false },
+      { raw_name_label: '卡璞・鳴鳴', ignored_icons: ['yellow favorite star'], shiny: false, shadow: false, purified: false, special_background: false, commemorative_background: false },
+      { raw_name_label: '席多藍恩', ignored_icons: ['yellow favorite star'], shiny: false, shadow: false, purified: false, special_background: false, commemorative_background: false },
+      { raw_name_label: '克雷色利亞', purified: { present: true, position: 'lower-left', color: 'blue/cyan', shape: 'single purified sparkle' }, shiny: false, shadow: false, special_background: false, commemorative_background: false },
+      { raw_name_label: '雷吉斯奇魯', purified: { present: true, position: 'lower-left', color: 'blue/cyan', shape: 'single purified sparkle' }, shiny: false, shadow: false, special_background: false, commemorative_background: false }
+    ]),
+    expected: '基格爾德,帝牙盧卡,眷戀雲,酋雷姆,帕路奇亞,卡璞・鳴鳴,席多藍恩,克雷色利亞,雷吉斯奇魯'
+  },
+  {
+    name: 'Evidence lower-left blue/cyan purified is not special background',
+    actual: () => deriveHundoPokemonNameFromEvidence(card('Lugia', { purified: { present: true, position: 'lower-left', color: 'blue/cyan', shape: 'single sparkle' } })),
+    expected: '洛奇亞'
+  },
+  {
+    name: 'Evidence lower-right blue snowflake is special background',
+    actual: () => deriveHundoPokemonNameFromEvidence(card('Palkia', { special_background: { present: true, position: 'lower-right', color: 'blue', shape: 'snowflake flower radial marker' } })),
+    expected: '特別背卡帕路奇亞'
+  },
+  {
+    name: 'Evidence top-left dark blue double sparkle is shiny',
+    actual: () => deriveHundoPokemonNameFromEvidence(card('Kyurem', { shiny: { present: true, position: 'top-left', color: 'dark blue', shape: 'double four-point diamond sparkle' } })),
+    expected: '色違酋雷姆'
+  },
+  {
+    name: 'Evidence yellow favorite star is ignored',
+    actual: () => deriveHundoPokemonNameFromEvidence(card('Tapu Koko', { ignored_icons: ['yellow favorite star'] })),
+    expected: '卡璞・鳴鳴'
+  },
+  {
+    name: 'Evidence yellow lucky sparkles are ignored',
+    actual: () => deriveHundoPokemonNameFromEvidence(card('Kyurem', { ignored_icons: ['yellow lucky sparkles'] })),
+    expected: '酋雷姆'
+  },
+  {
+    name: 'Evidence white buddy icon is ignored',
+    actual: () => deriveHundoPokemonNameFromEvidence(card('Zygarde', { ignored_icons: ['white buddy icon'] })),
+    expected: '基格爾德'
+  },
+  {
+    name: 'Evidence final output label from AI is not trusted over deterministic evidence',
+    actual: () => deriveHundoPokemonNameFromEvidence({
+      raw_name_label: '克雷色利亞',
+      canonical_name: '克雷色利亞',
+      final_output_name: '特別背卡克雷色利亞',
+      purified: { present: true, position: 'lower-left', color: 'blue/cyan', shape: 'single purified sparkle' },
+      shiny: false,
+      shadow: false,
+      special_background: false,
+      commemorative_background: false
+    }),
+    expected: '克雷色利亞'
+  },
+  {
+    name: 'Evidence visible name label wins over sprite guess',
+    actual: () => deriveHundoPokemonNameFromEvidence(card('眷戀雲', {}, '蒼響')),
+    expected: '眷戀雲'
+  }
+];
+
+for (const testCase of evidenceCases) {
+  const actual = testCase.actual();
   if (actual !== testCase.expected) {
     failures += 1;
     console.error(`FAIL ${testCase.name}\nexpected: ${testCase.expected}\nactual:   ${actual}`);
