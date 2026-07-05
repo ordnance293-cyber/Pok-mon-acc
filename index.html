@@ -681,40 +681,13 @@
                     team: { type: 'string' },
                     xp: { type: 'string' },
                     stardust: { type: 'string' },
-                    pokemon_list: { type: 'string' },
-                    pokemon_cards: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            additionalProperties: false,
-                            properties: {
-                                raw_name_label: { type: 'string' },
-                                canonical_name: { type: 'string' },
-                                guessed_sprite_name: { type: 'string' },
-                                final_output_name: { type: 'string' },
-                                visual_evidence: {
-                                    type: 'object',
-                                    additionalProperties: false,
-                                    properties: {
-                                        shiny: { type: 'object', additionalProperties: false, properties: { present: { type: 'boolean' }, position: { type: 'string' }, color: { type: 'string' }, shape: { type: 'string' } }, required: ['present', 'position', 'color', 'shape'] },
-                                        shadow: { type: 'object', additionalProperties: false, properties: { present: { type: 'boolean' }, position: { type: 'string' }, color: { type: 'string' }, shape: { type: 'string' } }, required: ['present', 'position', 'color', 'shape'] },
-                                        purified: { type: 'object', additionalProperties: false, properties: { present: { type: 'boolean' }, position: { type: 'string' }, color: { type: 'string' }, shape: { type: 'string' } }, required: ['present', 'position', 'color', 'shape'] },
-                                        special_background: { type: 'object', additionalProperties: false, properties: { present: { type: 'boolean' }, position: { type: 'string' }, color: { type: 'string' }, shape: { type: 'string' } }, required: ['present', 'position', 'color', 'shape'] },
-                                        commemorative_background: { type: 'object', additionalProperties: false, properties: { present: { type: 'boolean' }, position: { type: 'string' }, color: { type: 'string' }, shape: { type: 'string' } }, required: ['present', 'position', 'color', 'shape'] },
-                                        ignored_icons: { type: 'array', items: { type: 'string' } }
-                                    },
-                                    required: ['shiny', 'shadow', 'purified', 'special_background', 'commemorative_background', 'ignored_icons']
-                                }
-                            },
-                            required: ['raw_name_label', 'canonical_name', 'guessed_sprite_name', 'visual_evidence', 'final_output_name']
-                        }
-                    }
+                    pokemon_list: { type: 'string' }
                 },
                 required: [
                     'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume',
                     'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
                     'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin',
-                    'poke_bag', 'item_bag', 'level', 'team', 'xp', 'stardust', 'pokemon_list', 'pokemon_cards'
+                    'poke_bag', 'item_bag', 'level', 'team', 'xp', 'stardust', 'pokemon_list'
                 ]
             }
         };
@@ -903,34 +876,10 @@
         };
         const POKEMON_ALIAS_DICTIONARY = {
             '雷公': ['雷公', '雷公公', '雷公王', '雷公獸'],
-            '拉帝歐斯': ['拉帝歐斯', '拉帝奧斯', '拉帝歐絲', 'latios'],
-            '拉帝亞斯': ['拉帝亞斯', '拉帝亞絲', 'latias'],
-            '基格爾德': ['基格爾德', '基格爾多', '基格德', 'zygarde'],
-            '帕路奇亞': ['帕路奇亞', 'palkia'],
-            '勾帕路翁': ['勾帕路翁', 'cobalion'],
-            '畢力吉翁': ['畢力吉翁', 'virizion'],
-            '奈克洛茲瑪': ['奈克洛茲瑪', '奈克洛芝瑪', '奈克洛茲馬', 'necrozma'],
-            '酋雷姆': ['酋雷姆', 'kyurem'],
-            '闇黑酋雷姆': ['闇黑酋雷姆', 'blackkyurem'],
-            '焰白酋雷姆': ['焰白酋雷姆', 'whitekyurem'],
-            '閃電鳥': ['閃電鳥', 'zapdos'],
-            '帝牙盧卡': ['帝牙盧卡', 'dialga'],
-            '騎拉帝納': ['騎拉帝納', 'giratina'],
-            '雷吉斯奇魯': ['雷吉斯奇魯', 'registeel'],
-            '固拉多': ['固拉多', 'groudon'],
-            '蓋歐卡': ['蓋歐卡', 'kyogre'],
-            '皮卡丘': ['皮卡丘', 'pikachu'],
-            '烈空坐': ['烈空坐', 'rayquaza'],
-            '超夢': ['超夢', 'mewtwo'],
-            '洛奇亞': ['洛奇亞', 'lugia'],
-            '鳳王': ['鳳王', 'ho-oh', 'hooh'],
-            '眷戀雲': ['眷戀雲', 'enamorus'],
-            '卡璞・鳴鳴': ['卡璞・鳴鳴', '卡璞鳴鳴', 'tapu koko', 'tapukoko'],
-            '席多藍恩': ['席多藍恩', 'heatran'],
-            '克雷色利亞': ['克雷色利亞', 'cresselia'],
-            '蒼響': ['蒼響', 'zacian'],
-            '藏瑪然特': ['藏瑪然特', 'zamazenta'],
-            '無極汰那': ['無極汰那', 'eternatus']
+            '拉帝歐斯': ['拉帝歐斯', '拉帝奧斯', '拉帝歐絲'],
+            '拉帝亞斯': ['拉帝亞斯', '拉帝亞絲'],
+            '基格爾德': ['基格爾德', '基格爾多', '基格德'],
+            '奈克洛茲瑪': ['奈克洛茲瑪', '奈克洛芝瑪', '奈克洛茲馬']
         };
         const POKEMON_ALIAS_LOOKUP = new Map(
             Object.entries(POKEMON_ALIAS_DICTIONARY).flatMap(([canonical, aliases]) =>
@@ -939,18 +888,11 @@
         );
         const POKEMON_ALIAS_SUFFIXES = [...POKEMON_ALIAS_LOOKUP.entries()].sort((a, b) => b[0].length - a[0].length);
         const POKEMON_STATE_VARIANTS = [
-            { canonical: '色違', aliases: ['色違', '異色', 'shiny'] },
-            { canonical: '暗影', aliases: ['暗影', 'shadow', 'purpleflame', 'purplesmoke', 'shadowaura'] },
-            { canonical: '淨化', aliases: ['淨化', 'purified', 'purifiedsparkle', 'purifiedicon', 'purifiedaura', 'bluecyanpurifiedsparkle', 'bluewhitepurifiedaura'] }
+            { canonical: '色違', aliases: ['色違', '異色'] },
+            { canonical: '暗影', aliases: ['暗影'] },
+            { canonical: '淨化', aliases: ['淨化'] }
         ];
         const POKEMON_CANONICAL_OUTPUT_STATE_ORDER = ['色違', '暗影'];
-        const POKEMON_IGNORED_DESCRIPTORS = ['幸運', '亮晶晶', 'lucky', '收藏', 'favorite', 'favourite', 'with', 'at', 'lowerleft', 'bottomleft', 'lowerside', 'lowerright', 'bottomright', 'marker', 'icon', 'sparkle', 'aura'];
-        const POKEMON_BACKGROUND_PREFIX_ORDER = ['特別背卡', '紀念背卡'];
-        const POKEMON_BACKGROUND_PREFIX_VARIANTS = [
-            { canonical: '特別背卡', aliases: ['特別背卡', '特殊背卡', '特別背景卡', '雪花背卡', '藍色雪花', 'specialbackground', 'specialcard', 'specialbg', 'specialbackdrop', 'bluesnowflake', 'blueflowermarker', 'blueflower', 'blueradialmarker', 'bluerosette', 'specialbackgroundmarker'] },
-            { canonical: '紀念背卡', aliases: ['紀念背卡', '紀念卡', '全球背卡', '地球背卡', '地點背卡', 'commemorativebackground', 'locationbackground', 'globebackground', 'commemorativecard', 'locationcard', 'commemorativebg', 'locationbg', 'globalbackground', 'globebackground', 'blueglobe', 'latitudelongitudesphere'] }
-        ];
-        const POKEMON_BACKGROUND_DESCRIPTOR_PATTERN = /(with)?(special|commemorative|location|globe)(background|backdrop|card|bg)/g;
         const POKEMON_SPECIAL_FORM_MAP = new Map([
             ['蒼響持劍', '蒼響劍王'],
             ['蒼響劍之王', '蒼響劍王'],
@@ -967,8 +909,7 @@
         const normalizePokemonToken = (value) => String(value || '')
             .trim()
             .replace(/[０-９％．，：／－]/g, char => FULLWIDTH_CHAR_MAP[char] || char)
-            .replace(/[A-Za-z]+/g, text => text.toLowerCase())
-            .replace(/[\s\/-]+/g, '');
+            .replace(/\s+/g, '');
 
         const applyPokemonAlias = (value) => {
             let text = normalizePokemonToken(value);
@@ -989,46 +930,21 @@
             return text;
         };
 
-        const extractPokemonBackgroundPrefixes = (value) => {
-            let text = normalizePokemonToken(value);
-            const prefixes = new Set();
-            POKEMON_BACKGROUND_PREFIX_VARIANTS.forEach(({ canonical, aliases }) => {
-                aliases.forEach(alias => {
-                    const normalizedAlias = normalizePokemonToken(alias);
-                    if (!normalizedAlias) return;
-                    if (text.includes(normalizedAlias)) prefixes.add(canonical);
-                    text = text.replaceAll(normalizedAlias, '');
-                });
-            });
-            text = text.replace(POKEMON_BACKGROUND_DESCRIPTOR_PATTERN, '').replaceAll('with', '');
-            return {
-                prefixes: POKEMON_BACKGROUND_PREFIX_ORDER.filter(prefix => prefixes.has(prefix)),
-                text
-            };
-        };
-
         const canonical_name = (value) => {
-            const backgroundResult = extractPokemonBackgroundPrefixes(value);
-            let text = backgroundResult.text;
+            let text = normalizePokemonToken(value);
             if (!text) return '';
             const states = new Set();
             POKEMON_STATE_VARIANTS.forEach(({ canonical, aliases }) => {
-                [...aliases].sort((a, b) => normalizePokemonToken(b).length - normalizePokemonToken(a).length).forEach(alias => {
-                    const normalizedAlias = normalizePokemonToken(alias);
-                    if (!normalizedAlias) return;
-                    if (text.includes(normalizedAlias)) states.add(canonical);
-                    text = text.replaceAll(normalizedAlias, '');
+                aliases.forEach(alias => {
+                    if (text.includes(alias)) states.add(canonical);
+                    text = text.replaceAll(alias, '');
                 });
             });
             text = text.replaceAll('普通', '');
-            POKEMON_IGNORED_DESCRIPTORS.forEach(descriptor => {
-                text = text.replaceAll(normalizePokemonToken(descriptor), '');
-            });
             text = normalizePokemonBaseName(text);
             if (!text) return '';
-            const statePrefix = POKEMON_CANONICAL_OUTPUT_STATE_ORDER.filter(state => states.has(state)).join('');
-            const backgroundPrefix = backgroundResult.prefixes.join('');
-            return `${statePrefix}${backgroundPrefix}${text}`;
+            const prefix = POKEMON_CANONICAL_OUTPUT_STATE_ORDER.filter(state => states.has(state)).join('');
+            return `${prefix}${text}`;
         };
 
         const normalizePokemonListEntry = (value) => {
@@ -1068,95 +984,6 @@
             return normalized;
         };
 
-        // Root-cause note: the old hundo scan boundary accepted AI-produced final pokemon_list labels
-        // and only normalized those strings afterward. Text normalization cannot recover visual evidence
-        // such as icon position/color/shape, so a lower-left purified sparkle misread as a lower-right
-        // special-background label survived into g_hundos. Hundo extraction is therefore evidence-first:
-        // derive final labels from per-card raw visible names and validated visual evidence, while keeping
-        // the legacy pokemon_list string as a fallback for older responses.
-        const normalizePokemonCardEvidence = (card = {}) => {
-            const safeCard = card && typeof card === 'object' ? card : {};
-            // Accept both the nested AI schema shape and compact/root-level evidence used by tests
-            // or future callers. Final labels are derived from evidence; AI-provided final_output_name
-            // is diagnostic only and is intentionally not trusted.
-            const visual = safeCard.visual_evidence && typeof safeCard.visual_evidence === 'object'
-                ? safeCard.visual_evidence
-                : safeCard;
-            const normalizeIcon = (value = {}) => {
-                if (value === false || value == null) {
-                    return { present: false, position: '', color: '', shape: '' };
-                }
-                if (value === true) {
-                    return { present: true, position: '', color: '', shape: '' };
-                }
-                return {
-                    present: value?.present === true,
-                    position: String(value?.position || '').toLowerCase().replace(/[\s_/]+/g, '-'),
-                    color: String(value?.color || '').toLowerCase(),
-                    shape: String(value?.shape || '').toLowerCase()
-                };
-            };
-            return {
-                raw_name_label: String(safeCard.raw_name_label || '').trim(),
-                canonical_name: String(safeCard.canonical_name || '').trim(),
-                guessed_sprite_name: String(safeCard.guessed_sprite_name || '').trim(),
-                final_output_name: String(safeCard.final_output_name || '').trim(),
-                visual_evidence: {
-                    shiny: normalizeIcon(visual.shiny),
-                    shadow: normalizeIcon(visual.shadow),
-                    purified: normalizeIcon(visual.purified),
-                    special_background: normalizeIcon(visual.special_background),
-                    commemorative_background: normalizeIcon(visual.commemorative_background),
-                    ignored_icons: Array.isArray(visual.ignored_icons) ? visual.ignored_icons.map(icon => String(icon || '').trim()).filter(Boolean) : []
-                }
-            };
-        };
-
-        const hasAnyToken = (value, tokens) => tokens.some(token => String(value || '').includes(token));
-        const hasPositionToken = (position, tokens) => hasAnyToken(String(position || '').replace(/\s+/g, '-'), tokens);
-        const isValidShinyEvidence = ({ present, position, color, shape } = {}) => present === true
-            && hasPositionToken(position, ['top-left', 'upper-left', '上左', '左上'])
-            && hasAnyToken(color, ['dark blue', 'blue-black', 'teal-blue', 'blue black', 'blue/black', '深藍', '藍黑', '藍綠'])
-            && hasAnyToken(shape, ['double', 'two', 'diamond', 'four-point', 'sparkle', '雙', '菱形', '四角']);
-        const isValidShadowEvidence = ({ present, position, color, shape } = {}) => present === true
-            && hasPositionToken(position, ['lower-left', 'bottom-left', '下左', '左下'])
-            && hasAnyToken(color, ['purple', '紫'])
-            && hasAnyToken(shape, ['flame', 'smoke', 'shadow', 'aura', '火', '煙', '暗影']);
-        const isValidPurifiedEvidence = ({ present, position, color, shape } = {}) => present === true
-            && hasPositionToken(position, ['lower-left', 'bottom-left', 'lower-side', '下左', '左下', '下側'])
-            && hasAnyToken(color, ['blue/cyan', 'cyan', 'light blue', 'blue-white', 'blue white', '藍', '青'])
-            && hasAnyToken(shape, ['single', 'sparkle', 'starburst', 'purified', 'aura', 'icon', '單', '星芒', '淨化']);
-        const isValidSpecialBackgroundEvidence = ({ present, position, color, shape } = {}) => present === true
-            && hasPositionToken(position, ['lower-right', 'bottom-right', '下右', '右下'])
-            && hasAnyToken(color, ['blue', 'light blue', '藍'])
-            && hasAnyToken(shape, ['snowflake', 'flower', 'radial', 'rosette', 'special background', 'marker', '雪花', '花', '放射', '特別']);
-        const isValidCommemorativeBackgroundEvidence = ({ present, position, color, shape } = {}) => present === true
-            && hasPositionToken(position, ['lower-right', 'bottom-right', '下右', '右下'])
-            && hasAnyToken(color, ['blue', '藍'])
-            && hasAnyToken(shape, ['globe', 'latitude', 'longitude', 'sphere', 'location', 'global', '地球', '經緯', '球', '地點']);
-
-        const deriveHundoPokemonNameFromEvidence = (card = {}) => {
-            const normalizedCard = normalizePokemonCardEvidence(card);
-            const visibleName = normalizedCard.raw_name_label || normalizedCard.canonical_name || normalizedCard.guessed_sprite_name;
-            const baseName = canonical_name(visibleName);
-            if (!baseName) return '';
-            const evidence = normalizedCard.visual_evidence;
-            const prefixes = [];
-            if (isValidShinyEvidence(evidence.shiny)) prefixes.push('色違');
-            if (isValidShadowEvidence(evidence.shadow)) prefixes.push('暗影');
-            // Purified is intentionally validated only to prevent misclassifying lower-left blue/cyan
-            // sparkle as a special background; it never emits a prefix.
-            isValidPurifiedEvidence(evidence.purified);
-            if (isValidSpecialBackgroundEvidence(evidence.special_background)) prefixes.push('特別背卡');
-            if (isValidCommemorativeBackgroundEvidence(evidence.commemorative_background)) prefixes.push('紀念背卡');
-            return normalizePokemonListEntry(`${prefixes.join('')}${baseName}`)?.name || '';
-        };
-
-        const derivePokemonListFromCardEvidence = (cards = []) => {
-            if (!Array.isArray(cards) || cards.length === 0) return '';
-            return normalizePokemonList(cards.map(card => deriveHundoPokemonNameFromEvidence(card)).filter(Boolean).join(','));
-        };
-
         const normalizeSearchQuery = (value) => String(value || '').trim().replace(/\s+/g, '');
 
         const buildEmptyAiResult = () => ({
@@ -1184,8 +1011,7 @@
             team: '',
             xp: '',
             stardust: '',
-            pokemon_list: '',
-            pokemon_cards: []
+            pokemon_list: ''
         });
 
         const inferImageTypeFromSearchQuery = (searchQuery) => {
@@ -1224,8 +1050,7 @@
             team: '',
             xp: '',
             stardust: '',
-            pokemon_list: '',
-            pokemon_cards: []
+            pokemon_list: ''
         });
 
         const normalizeAiClassification = (result = {}) => {
@@ -1269,15 +1094,12 @@
             normalized.team = normalizeTeamValue(result?.team);
             normalized.xp = normalizeWanValue(extractSlashSideNumber(result?.xp, 'left'));
             normalized.stardust = normalizeWanValue(result?.stardust);
-            const derivedPokemonList = derivePokemonListFromCardEvidence(result?.pokemon_cards);
-            normalized.pokemon_cards = Array.isArray(result?.pokemon_cards) ? result.pokemon_cards : [];
-            normalized.pokemon_list = derivedPokemonList || normalizePokemonList(result?.pokemon_list);
+            normalized.pokemon_list = normalizePokemonList(result?.pokemon_list);
 
             const allowedFieldSet = new Set(Array.isArray(allowedFields) ? allowedFields : (AI_IMAGE_TYPE_ALLOWED_FIELDS[normalized.image_type] || []));
             [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'].forEach(field => {
                 if (!allowedFieldSet.has(field)) normalized[field] = '';
             });
-            if (!allowedFieldSet.has('pokemon_list')) normalized.pokemon_cards = [];
 
             return normalized;
         };
@@ -1524,8 +1346,7 @@ image_type 只能是：
   "team": "",
   "xp": "",
   "stardust": "",
-  "pokemon_list": "",
-  "pokemon_cards": []
+  "pokemon_list": ""
 }`;
             const retryRules = retry_fields.length
                 ? `
@@ -1549,7 +1370,7 @@ ${outputTemplate}
 3. 沒看到或看不清楚才留空字串。
 4. 禁止補 0。
 5. 禁止從 pokemon_list 回推數量。
-6. 所有欄位都必須存在；非百神清單詳掃時 pokemon_cards 必須是空陣列 []。
+6. 所有欄位都必須存在。
 7. 特殊調查 checkbox、合體與 Mega checkbox 完全不在這次 AI 擷取範圍內，嚴禁輸出任何對應狀態或推論。
 8. 若這次沒有明確要求 pokemon_list，嚴禁辨識、推測或輸出任何寶可夢名稱。
 9. 不要 Markdown、不要 code fence、不要額外說明。${retryRules}`;
@@ -1597,34 +1418,13 @@ ${outputTemplate}
 4. 由上到下、由左到右讀取，並保持原本順序，禁止重新排序。
 5. 同名可直接重複列出，系統會在多圖合併後統一轉成「名稱*數量」；單隻不可加「*1」。
 6. 只能用半形逗號分隔，例如「固拉多,固拉多,鳳王,蒼響」。
-7. 只可使用屬於該寶可夢卡片本身的資訊：寶可夢名稱、寶可夢圖片左上 / 左下 / 右下的狀態或背卡圖示、寶可夢本體外觀；搜尋列只能作為背景確認頁面，絕不能用搜尋列文字替每一隻寶可夢套用狀態。
-8. 每一格寶可夢卡片都必須獨立判斷位置 + 圖示 + 是否屬於該卡片；不可因搜尋列出現「異色」「暗影」「特別背卡」「紀念背卡」就把所有寶可夢標成該狀態。
-9. 狀態 / 背卡判斷必須依序使用「位置 -> 顏色 -> 形狀」，不可只靠顏色單獨分類；尤其所有藍色圖示都必須再看位置與形狀。
-10. 色違：唯一位置是該寶可夢卡片 / 圖片左上或上左；視覺是深藍 / 藍黑 / 藍綠色的雙閃光，通常是兩個以上四角菱形星星，常見一大一小，像深藍 ✦ ✦；輸出前綴「色違」。不可與黃色幸運 sparkles、黃色收藏星星、左下藍 / 青色淨化閃光、右下藍色背卡圖示或搜尋列文字混淆。短規則：左上深藍雙閃光 = 色違 -> output 色違。
-11. 暗影：唯一位置是該寶可夢卡片 / 圖片左下或下左；視覺是紫色火焰、紫色煙霧、紫色暗影 aura 或小型紫色火焰狀圖示；輸出前綴「暗影」。不可與藍 / 青色淨化閃光、右下特別背卡圖示、黃色幸運 sparkles 或搜尋列文字混淆。短規則：左下紫色火焰 = 暗影 -> output 暗影。
-12. 淨化：唯一位置是該寶可夢卡片 / 圖片左下 / 下方偏左或下側，通常在左側或左下，不是右下；視覺是藍 / 青色單一閃光、淡藍 / 青色星芒、藍白淨化 aura、單一淨化 sparkle 或雪花狀 sparkle。必須辨識但永遠不要輸出「淨化」，一律正規化成普通寶可夢名稱；例如 purified Lugia、Lugia with purified sparkle 都輸出「洛奇亞」。不可與右下藍色雪花 / 花朵 / 放射狀特別背卡、右下藍色 globe 紀念背卡、左上深藍色違雙閃光、左下紫色暗影火焰混淆。短規則：左下藍 / 青色單一閃光 = 淨化 -> remove status, output regular name only。
-13. 背卡判斷是加法邏輯，不可取代原本名稱辨識：先照原本規則辨識寶可夢名稱，再檢查該格右下角小圖示。
-14. 特別背卡：唯一位置是該寶可夢卡片 / 圖片右下或下右，通常在寶可夢 sprite 右側或右下；視覺是藍色雪花、藍色花朵、藍色放射狀 marker、藍色 rosette / special background marker；輸出前綴「特別背卡」。不可與左下藍 / 青色淨化閃光、左上深藍色違雙閃光、左下紫色暗影火焰或右下藍色 globe 混淆。短規則：右下藍色雪花 / 花朵 / 放射狀 marker = 特別背卡 -> output 特別背卡。
-15. 紀念背卡：唯一位置是該寶可夢卡片 / 圖片右下或下右；視覺是藍色 globe、經緯線地球、帶 meridian / parallel lines 的藍色球體、location / global background marker；輸出前綴一律正規化為「紀念背卡」。全球背卡、地點背卡、地球背卡、globe background、location background、commemorative background 都視為「紀念背卡」。不可與右下藍色雪花 / 花朵 / 放射狀特別背卡、左下藍 / 青色淨化閃光、左上深藍色違雙閃光、左下紫色暗影火焰混淆。短規則：右下藍色 globe / 經緯線圓球 = 紀念 / global background -> output 紀念背卡。
-16. 藍色圖示重要區分：左下藍 / 青色單一閃光 = 淨化；右下藍色雪花 / 花朵 / 放射狀 marker = 特別背卡；右下藍色 globe / 經緯線球體 = 紀念背卡；左上深藍雙閃光 = 色違。不要只用「藍色圖示」分類。
-17. Compact visual rules：Top-left dark blue double sparkle = shiny -> output 色違；Lower-left purple flame = shadow -> output 暗影；Lower-left blue/cyan single sparkle = purified -> do not output 淨化, output regular Pokémon name only；Lower-right blue snowflake / blue flower / blue radial marker = special background -> output 特別背卡；Lower-right blue globe / latitude-longitude sphere = commemorative/global background -> output 紀念背卡；Yellow lucky sparkles = ignore；Yellow favorite star = ignore；CP numbers = ignore；Search bar = screen type / count context only, never individual Pokémon status。
-18. 必須忽略且不可輸出成前綴或名稱：右上角黃色收藏星星、黃色幸運 / 亮晶晶背景、CP 數字、搜尋列文字、頁面按鈕、排序按鈕、任何不屬於該寶可夢卡片的 UI 圖示。搜尋列只能用於 screen type detection 與 total-count field context，不能用於把 shiny / shadow / purified / special background / commemorative-global background 指派給每一隻寶可夢。
-19. 如果沒有屬於該卡片的狀態或背卡圖示，名稱維持原本結果；不要只看上方搜尋標籤，不要只用總數推測名稱，每一格寶可夢都要獨立判斷。
-20. canonical name 允許「色違」「暗影」狀態前綴與「特別背卡」「紀念背卡」背卡前綴，順序固定為「狀態 + 背卡 + 型態 + 寶可夢名稱」；淨化永遠不要輸出。若只看到淨化就輸出普通名稱；若同時看到淨化與色違就輸出「色違名稱」。
-21. Alias Dictionary 修正：拉帝奧斯/拉帝歐絲 -> 拉帝歐斯；拉帝亞絲 -> 拉帝亞斯；奈克洛芝瑪/奈克洛茲馬 -> 奈克洛茲瑪；基格德/基格爾多 -> 基格爾德；Kyurem -> 酋雷姆；Black Kyurem -> 闇黑酋雷姆；White Kyurem -> 焰白酋雷姆；Zapdos -> 閃電鳥。
-22. 特殊型態不得合併：蒼響持劍 -> 蒼響劍王；藏瑪然特持盾 -> 藏瑪然特盾王；酋雷姆 / 焰白酋雷姆 / 闇黑酋雷姆 分開；基格爾德50% -> 基格爾德；基格爾德完全體分開；奈克洛茲瑪 / 黃昏之鬃奈克洛茲瑪 / 拂曉之翼奈克洛茲瑪 / 究極奈克洛茲瑪 全部分開。
-23. 只有完全相同的 canonical name 才算同類，例如「雷公」與「色違雷公」不能合併，「酋雷姆」「特別背卡酋雷姆」「紀念背卡酋雷姆」「色違特別背卡酋雷姆」都不能互相合併。
-
-【pokemon_cards evidence-first 規則】
-1. 百神詳掃時必須同時輸出 pokemon_cards；每張卡一個物件，raw_name_label 填畫面可見名稱，canonical_name 填正規寶可夢名稱，guessed_sprite_name 只在名稱不清楚時輔助，final_output_name 填你依證據推導的結果（系統仍會重新驗證）。
-2. 每個 visual_evidence 物件都必須描述 shiny / shadow / purified / special_background / commemorative_background 的 present、position、color、shape；沒有就 present=false 且其他字串留空。
-3. ignored_icons 必須列出已看見但應忽略的 UI，例如 yellow favorite star、yellow lucky sparkles、white buddy icon、CP number、search bar text。
-4. 最終 pokemon_list 必須和 pokemon_cards 證據一致；系統會優先用 pokemon_cards 重新推導 pokemon_list，舊 pokemon_list 只當 fallback。
-
-【pokemon_list 範例】
-- 酋雷姆右下角有藍色雪花圖示 -> 特別背卡酋雷姆
-- 閃電鳥右下角有藍色地球圖示 -> 紀念背卡閃電鳥
-- 普通酋雷姆沒有背卡圖示 -> 酋雷姆
+7. 只可使用以下資訊：寶可夢名稱、左側閃光星星圖示、紫色火焰圖示、藍色雪花圖示、寶可夢本體外觀。
+8. 右上角收藏星星、名字左側標籤圖示、隊友圖示、特殊背景、CP 排序按鈕、搜尋列、進化按鈕、底部圓形按鈕，全部禁止參與辨識。
+9. 色違只看左側閃光星星圖示；暗影只看紫色火焰圖示；淨化只看藍色雪花圖示。
+10. canonical name 只允許「色違」與「暗影」兩種前綴，順序固定為「色違暗影名稱」；淨化永遠不要輸出。若只看到淨化就輸出普通名稱；若同時看到淨化與色違就輸出「色違名稱」。
+11. Alias Dictionary 修正：拉帝奧斯/拉帝歐絲 -> 拉帝歐斯；拉帝亞絲 -> 拉帝亞斯；奈克洛芝瑪/奈克洛茲馬 -> 奈克洛茲瑪；基格德/基格爾多 -> 基格爾德。
+12. 特殊型態不得合併：蒼響持劍 -> 蒼響劍王；藏瑪然特持盾 -> 藏瑪然特盾王；酋雷姆 / 焰白酋雷姆 / 闇黑酋雷姆 分開；基格爾德50% -> 基格爾德；基格爾德完全體分開；奈克洛茲瑪 / 黃昏之鬃奈克洛茲瑪 / 拂曉之翼奈克洛茲瑪 / 究極奈克洛茲瑪 全部分開。
+13. 只有完全相同的 canonical name 才算同類，例如「雷公」與「色違雷公」不能合併，「蒼響」與「蒼響劍王」不能合併。
 
 除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
                 case 'SHINY_LEGENDARY_SCREEN':
