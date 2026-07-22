@@ -586,6 +586,13 @@
         document.body.dataset.testStatus = 'fail';
       }
 
+      const passedCount = results.filter(result => result.startsWith('PASS ')).length;
+      const failedCount = results.filter(result => result.startsWith('FAIL ')).length;
+      document.body.dataset.testPassed = String(passedCount);
+      document.body.dataset.testFailed = String(failedCount);
+      if (failedCount > 0 || document.body.dataset.testStatus !== 'pass') {
+        document.body.dataset.testStatus = 'fail';
+      }
       document.getElementById('results').textContent = results.join('\n');
     })();
   </script>
