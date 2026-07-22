@@ -1598,6 +1598,8 @@ ${outputTemplate}
 【B. 物種辨識】
 以卡片的寶可夢外觀、剪影、配色、姿勢與型態作為物種判斷的第一依據。official_name 必須使用官方繁體中文名稱；visible_label 只能作為次要佐證，不能取代視覺辨識。無法可靠辨識時 official_name 留空，recognition_status 填 uncertain，並保守降低 species_confidence。
 
+recognition_status 的使用規則：recognized：僅在實際物種與型態可可靠辨識時使用。partial：僅在卡片或證據只部分可見且辨識未完成時使用；除非物種本身仍可可靠辨識，否則 official_name 留空。uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用。
+
 【C. 狀態判定】
 對 shiny、purified、shadow 三種狀態分別獨立判斷，不能互相推論。每一種都必須填 yes、no 或 uncertain，並給自己的 confidence。色違必須有色違的可見證據；淨化與暗影也必須各自有可見的遊戲 UI 或卡片證據。證據不足時填 uncertain。
 

@@ -146,6 +146,17 @@
           equal(unknownSpecies.uncertain_count, 1);
         });
 
+        test('preserves partial recognition while excluding it from the usable list', () => {
+          const normalized = normalizeSmartHundoResult({
+            cards: [card({ recognition_status: 'partial', official_name: '超夢' })]
+          }, normalizeNumber, normalizeName);
+          equal(normalized.cards[0].recognition_status, 'partial');
+          const conversion = smartHundoCardsToPokemonList(normalized.cards, normalizeName, normalizeList);
+          equal(conversion.pokemon_list, '');
+          equal(conversion.recognized_count, 0);
+          equal(conversion.uncertain_count, 1);
+        });
+
         test('merges multiple results and reports hundo leg conflicts', () => {
           const merged = mergeSmartHundoScanResults([
             { hundo_leg: '8', detected_card_count: 2, cards: [card({ official_name: '超夢' })] },
@@ -271,6 +282,12 @@
           'shiny、purified、shadow', '分別獨立判斷', 'uncertain', '搜尋欄', '非寶可夢卡片', '不可見卡片', '重複卡片',
           'JSON Schema', '不得輸出 Markdown', '額外欄位'
         ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt protects ${fragment}`));
+        [
+          'recognized：僅在實際物種與型態可可靠辨識時使用',
+          'partial：僅在卡片或證據只部分可見且辨識未完成時使用',
+          '除非物種本身仍可可靠辨識，否則 official_name 留空',
+          'uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用'
+        ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt defines ${fragment}`));
         for (const type of ['image/jpeg', 'image/gif', 'image/webp']) {
           const dataUrl = `data:${type};base64,ORIGINAL_${type}`;
           equal(await fileToOriginalDataUrl({ type, dataUrl }), dataUrl, `accepts ${type}`);

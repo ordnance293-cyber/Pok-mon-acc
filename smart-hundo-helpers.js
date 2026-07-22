@@ -4,7 +4,7 @@
     const HUNDO_LEGENDARY_QUERY = '傳說的寶可夢,幻,究極異獸&4*';
     const SMART_IMAGE_TYPE = 'HUNDO_LEGENDARY_SCREEN';
     const STATE_VALUES = new Set(['yes', 'no', 'uncertain']);
-    const RECOGNITION_VALUES = new Set(['recognized', 'uncertain']);
+    const RECOGNITION_VALUES = new Set(['recognized', 'partial', 'uncertain']);
 
     const stringValue = (value) => value === undefined || value === null ? '' : String(value).trim();
 
