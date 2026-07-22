@@ -25,6 +25,10 @@
         callback();
         results.push(`PASS ${name}`);
       };
+      const asyncTest = async (name, callback) => {
+        await callback();
+        results.push(`PASS ${name}`);
+      };
       const card = (overrides = {}) => ({
         order: 1,
         row: 1,
@@ -182,12 +186,15 @@
         let canvasCalls = 0;
         let lastPayload = null;
         let smartRequestCount = 0;
+        const fileReadCounts = new Map();
+        const resizedByOriginal = new Map();
         const originalDataUrl = 'data:image/png;base64,SMART_ORIGINAL_DO_NOT_EXPOSE';
         const resizedUrl = 'data:image/jpeg;base64,RESIZED';
         const pngFile = { type: 'image/png', dataUrl: originalDataUrl };
 
         class MockFileReader {
           readAsDataURL(file) {
+            if (file.id) fileReadCounts.set(file.id, (fileReadCounts.get(file.id) || 0) + 1);
             if (file.readerError) {
               this.onerror?.(new Event('error'));
               return;
@@ -198,6 +205,7 @@
 
         class MockImage {
           set src(value) {
+            this.source = value;
             if (String(value).includes('IMAGE_ERROR')) {
               this.onerror?.(new Event('error'));
               return;
@@ -213,9 +221,10 @@
         document.createElement = (tagName, ...args) => {
           if (String(tagName).toLowerCase() !== 'canvas') return nativeCreateElement(tagName, ...args);
           canvasCalls += 1;
+          let drawnImage = null;
           return {
-            getContext: () => ({ drawImage: () => {} }),
-            toDataURL: () => resizedUrl
+            getContext: () => ({ drawImage: (image) => { drawnImage = image; } }),
+            toDataURL: () => resizedByOriginal.get(drawnImage?.source) || resizedUrl
           };
         };
         globalThis.initializeApp = () => ({});
@@ -296,6 +305,175 @@
         await assertRejects(fileToOriginalDataUrl({ type: 'image/png', dataUrl: originalDataUrl, readerError: true }), '讀取圖片失敗', originalDataUrl);
         await assertRejects(fileToResizedDataUrl({ type: 'image/png', dataUrl: originalDataUrl, readerError: true }), '讀取圖片失敗', originalDataUrl);
         await assertRejects(fileToResizedDataUrl({ type: 'image/png', dataUrl: 'data:image/png;base64,IMAGE_ERROR' }), '載入圖片失敗', 'IMAGE_ERROR');
+
+        const fixtureIds = [
+          'openaiApiKey', 'imageInput', 'aiAutoBtn', 'aiAutoStatus', 'g_hundos',
+          'g_level', 'g_team', 'g_xp', 'g_stardust',
+          'st_hundo_leg', 'st_shiny', 'st_coin', 'st_poke_bag', 'st_item_bag',
+          'st_rarecandy', 'st_greenpass', 'st_masterball',
+          ...Array.from({ length: 11 }, (_, index) => `chk_sp_${index + 1}`),
+          'chk_kyurem', 'sel_kyurem', 'chk_zamazenta', 'sel_dogs',
+          'chk_necrozma', 'sel_necrozma', 'chk_lati', 'sel_lati',
+          'chk_hoenn', 'sel_hoenn', 'chk_dyna', 'chk_groudon', 'chk_kyogre', 'chk_rayquaza'
+        ];
+        fixtureIds.forEach(id => {
+          if (document.getElementById(id)) return;
+          const isStatus = id === 'aiAutoStatus';
+          const isButton = id === 'aiAutoBtn';
+          const isCheckbox = id.startsWith('chk_');
+          const element = nativeCreateElement(isStatus ? 'p' : isButton ? 'button' : id === 'g_hundos' ? 'textarea' : 'input');
+          element.id = id;
+          if (isCheckbox) element.type = 'checkbox';
+          document.body.appendChild(element);
+        });
+        document.getElementById('openaiApiKey').value = 'test-key';
+
+        const makeFile = (id) => ({
+          id,
+          type: 'image/png',
+          dataUrl: `data:image/png;base64,ORIGINAL_${id}`
+        });
+        const setScanFiles = (ids) => {
+          const files = ids.map(makeFile);
+          files.forEach(file => resizedByOriginal.set(file.dataUrl, `data:image/jpeg;base64,RESIZED_${file.id}`));
+          Object.defineProperty(document.getElementById('imageInput'), 'files', {
+            configurable: true,
+            value: files
+          });
+          return files;
+        };
+        const openAiResponse = (content) => ({
+          ok: true,
+          json: async () => ({ choices: [{ message: { content: JSON.stringify(content) } }] })
+        });
+        const classificationByImage = {
+          PROFILE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          HUNDO: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          SHINY: { image_type: 'SHINY_CATEGORY_SCREEN', search_query: '' },
+          RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' }
+        };
+        const extractionForPrompt = (prompt) => {
+          if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) return { level: '50', team: '紅隊', xp: '3500000' };
+          if (prompt.includes('image_type = SHINY_CATEGORY_SCREEN')) return { shiny: '77' };
+          if (prompt.includes('image_type = RESOURCE_SCREEN')) {
+            return { coin: '123', poke_bag: '7800', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' };
+          }
+          fail(`unexpected ordinary extraction prompt: ${prompt.slice(0, 120)}`);
+        };
+        const smartResult = {
+          hundo_leg: '8',
+          hundo_leg_confidence: 0.93,
+          detected_card_count: 3,
+          cards: [
+            card({ official_name: '超夢' }),
+            card({ order: 2, row: 1, column: 2, official_name: '夢幻', shiny_state: 'yes' }),
+            card({ order: 3, row: 2, column: 1, official_name: '', recognition_status: 'uncertain', species_confidence: 0.2 })
+          ]
+        };
+        let routedRequests = [];
+        let failSmartRequests = false;
+        const loggedValues = [];
+        const nativeConsoleLog = console.log;
+        const nativeConsoleWarn = console.warn;
+        const nativeConsoleError = console.error;
+        console.log = (...args) => { loggedValues.push(args); };
+        console.warn = (...args) => { loggedValues.push(args); };
+        console.error = (...args) => { loggedValues.push(args); };
+        globalThis.alert = () => {};
+        globalThis.setTimeout = (callback) => { callback(); return 0; };
+        globalThis.fetch = async (_url, options = {}) => {
+          const payload = JSON.parse(options.body);
+          const schemaName = payload.response_format.json_schema.name;
+          const prompt = payload.messages[0].content[0].text;
+          const imageUrl = payload.messages[0].content[1].image_url.url;
+          const detail = payload.messages[0].content[1].image_url.detail;
+          routedRequests.push({ schemaName, prompt, imageUrl, detail });
+          if (schemaName === 'pokemon_go_image_classifier') {
+            const identity = imageUrl.match(/RESIZED_(PROFILE|HUNDO|SHINY|RESOURCE)$/)?.[1];
+            return openAiResponse(classificationByImage[identity]);
+          }
+          if (schemaName === 'pokemon_go_hundo_smart_extractor') {
+            if (failSmartRequests) throw new Error('mock smart network failure');
+            return openAiResponse(smartResult);
+          }
+          if (schemaName === 'pokemon_go_forced_field_extractor') return openAiResponse(extractionForPrompt(prompt));
+          fail(`unexpected schema ${schemaName}`);
+        };
+
+        await asyncTest('routes arbitrary-order jobs after classification and merges smart cards safely', async () => {
+          fileReadCounts.clear();
+          routedRequests = [];
+          failSmartRequests = false;
+          setScanFiles(['PROFILE', 'HUNDO', 'SHINY', 'RESOURCE']);
+          document.getElementById('g_hundos').value = '使用者舊值';
+
+          await autoScan();
+
+          const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
+          const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
+          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
+          equal(classifierRequests.length, 4, 'classifies every stable job first');
+          equal(ordinaryRequests.length, 3, 'only normal jobs use ordinary extraction');
+          equal(smartRequests.length, 1, 'one logical smart job request');
+          equal(smartRequests[0].imageUrl, 'data:image/png;base64,ORIGINAL_HUNDO', 'smart extraction uses its original');
+          equal(smartRequests[0].detail, 'high', 'smart extraction requests high detail');
+          equal(ordinaryRequests.every(request => request.imageUrl.startsWith('data:image/jpeg;base64,RESIZED_')), true, 'normal jobs use resized data');
+          equal(ordinaryRequests.some(request => request.imageUrl.includes('HUNDO')), false, 'smart image cannot enter ordinary extraction or validation');
+          equal(ordinaryRequests.some(request => request.prompt.includes('allow_pokemon_list')), false, 'ordinary prompts do not expose the smart routing flag');
+          equal(fileReadCounts.get('PROFILE'), 1, 'profile is read only for resizing');
+          equal(fileReadCounts.get('HUNDO'), 2, 'hundo is read once for resizing and once as original');
+          equal(fileReadCounts.get('SHINY'), 1, 'shiny is read only for resizing');
+          equal(fileReadCounts.get('RESOURCE'), 1, 'resource is read only for resizing');
+          equal(document.getElementById('g_level').value, '50');
+          equal(document.getElementById('g_team').value, '紅隊');
+          equal(document.getElementById('g_xp').value, '350');
+          equal(document.getElementById('st_shiny').value, '77');
+          equal(document.getElementById('st_coin').value, '123');
+          equal(document.getElementById('g_hundos').value, '超夢,色違夢幻', 'pokemon list comes only from normalized smart cards');
+          equal(document.getElementById('st_hundo_leg').value, '8');
+          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [1]);
+          deepEqual(window.lastSmartHundoScanResult.failedIndexes, []);
+          equal(window.lastSmartHundoScanResult.detectedCardCount, 3);
+          equal(window.lastSmartHundoScanResult.recognizedCount, 2);
+          equal(window.lastSmartHundoScanResult.uncertainCount, 1);
+          equal(window.lastSmartHundoScanResult.cards[2].recognition_status, 'uncertain');
+          equal(window.lastSmartHundoScanResult.screenshots[0].index, 1, 'audit keeps cards associated with their screenshot');
+          equal(window.lastSmartHundoScanResult.screenshots[0].cards.length, 3);
+          equal(window.lastSmartHundoScanResult.hundoLegConflict, false);
+          equal(document.getElementById('aiAutoStatus').textContent.includes('1'), true, 'status shows manual-review count');
+          equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
+        });
+
+        await asyncTest('preserves ordinary output and edited hundo list when smart retries fail', async () => {
+          fileReadCounts.clear();
+          routedRequests = [];
+          failSmartRequests = true;
+          setScanFiles(['PROFILE', 'HUNDO']);
+          document.getElementById('g_hundos').value = '手動編輯百神';
+          document.getElementById('g_level').value = '';
+          document.getElementById('aiAutoStatus').textContent = '';
+
+          await autoScan();
+
+          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
+          equal(smartRequests.length, 3, 'shared wrapper performs its bounded smart retries');
+          equal(document.getElementById('g_level').value, '50', 'completed ordinary fields remain applied');
+          equal(document.getElementById('g_hundos').value, '手動編輯百神', 'failed smart work preserves edited list');
+          equal(document.getElementById('aiAutoBtn').disabled, false, 'failure restores button');
+          equal(document.getElementById('aiAutoStatus').textContent.includes('智慧百神辨識失敗'), true, 'failure status is explicit');
+          equal(document.getElementById('aiAutoStatus').textContent.includes('合併完成'), false, 'failure status is not success');
+          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [1]);
+          deepEqual(window.lastSmartHundoScanResult.failedIndexes, [1]);
+          equal(window.lastSmartHundoScanResult.cards.length, 0);
+          equal(window.lastSmartHundoScanResult.screenshots.length, 0);
+        });
+
+        const serializedLogs = JSON.stringify(loggedValues);
+        equal(serializedLogs.includes('test-key'), false, 'logs omit the API key');
+        equal(serializedLogs.includes('data:image/'), false, 'logs omit image data URLs');
+        console.log = nativeConsoleLog;
+        console.warn = nativeConsoleWarn;
+        console.error = nativeConsoleError;
 
         document.body.dataset.testStatus = 'pass';
       } catch (error) {
