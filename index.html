@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <script src="smart-hundo-helpers.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -466,6 +467,7 @@
         const AI_MAX_IMAGE_SIZE = 1000;
         const AI_JPEG_QUALITY = 0.7;
         const AI_IMAGE_DETAIL = 'auto';
+        const HUNDO_SMART_IMAGE_DETAIL = 'high';
         const AI_SUCCESS_LABEL = '合併完成';
         const AI_IMAGE_TYPES = new Set([
             'CATEGORY_OVERVIEW_SCREEN',
@@ -689,6 +691,47 @@
                     'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin',
                     'poke_bag', 'item_bag', 'level', 'team', 'xp', 'stardust', 'pokemon_list'
                 ]
+            }
+        };
+
+        const HUNDO_SMART_SCHEMA = {
+            name: 'pokemon_go_hundo_smart_extractor',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    hundo_leg: { type: 'string' },
+                    hundo_leg_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                    detected_card_count: { type: 'integer', minimum: 0 },
+                    cards: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            properties: {
+                                order: { type: 'integer', minimum: 0 },
+                                row: { type: 'integer', minimum: 0 },
+                                column: { type: 'integer', minimum: 0 },
+                                visible_label: { type: 'string' },
+                                official_name: { type: 'string' },
+                                recognition_status: { type: 'string', enum: ['recognized', 'uncertain'] },
+                                species_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                shiny_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                shiny_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                purified_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                purified_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                shadow_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                shadow_confidence: { type: 'number', minimum: 0, maximum: 1 }
+                            },
+                            required: [
+                                'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
+                                'shiny_state', 'shiny_confidence', 'purified_state', 'purified_confidence', 'shadow_state', 'shadow_confidence'
+                            ]
+                        }
+                    }
+                },
+                required: ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']
             }
         };
 
@@ -1545,10 +1588,46 @@ ${outputTemplate}
             }
         };
 
-        const fileToResizedDataUrl = (file) => new Promise(resolve => {
+        const buildSmartHundoPrompt = () => `你是寶可夢 GO 百分百傳說、幻與究極異獸清單的嚴格視覺抽取器。
+
+這張圖片已經在前一階段確認為 HUNDO_LEGENDARY_SCREEN，搜尋條件已確認為「${HUNDO_LEGENDARY_FILTER}」。禁止重新分類、禁止更改搜尋條件，也不要推論其他圖片。
+
+【A. 清單範圍】
+逐一列出畫面中所有可見的寶可夢卡片；完整卡片、邊緣被裁切或只部分可見的卡片都要各自輸出。依由上到下、由左到右填入 order、row、column。detected_card_count 必須是本圖可見或部分可見的卡片總數。
+
+【B. 物種辨識】
+以卡片的寶可夢外觀、剪影、配色、姿勢與型態作為物種判斷的第一依據。official_name 必須使用官方繁體中文名稱；visible_label 只能作為次要佐證，不能取代視覺辨識。無法可靠辨識時 official_name 留空，recognition_status 填 uncertain，並保守降低 species_confidence。
+
+【C. 狀態判定】
+對 shiny、purified、shadow 三種狀態分別獨立判斷，不能互相推論。每一種都必須填 yes、no 或 uncertain，並給自己的 confidence。色違必須有色違的可見證據；淨化與暗影也必須各自有可見的遊戲 UI 或卡片證據。證據不足時填 uncertain。
+
+【D. 百分百傳說數量】
+hundo_leg 只讀取本圖可見的傳說、幻與究極異獸 4* 清單總數或計數；無法讀取時留空並保守填 hundo_leg_confidence。
+
+【E. 排除項目】
+搜尋欄、篩選/排序按鈕、頁籤、數字徽章、捲動條、玩家頭像、背景裝飾、卡片以外的圖示與任何非寶可夢卡片都不可當作卡片輸出。不要發明不可見卡片或未顯示的狀態。
+
+【F. 輸出】
+只輸出符合提供 JSON Schema 的 JSON。不得輸出 Markdown、程式碼框、說明文字或額外欄位。`;
+
+        const fileToOriginalDataUrl = (file) => new Promise((resolve, reject) => {
+            const supportedTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+            if (!supportedTypes.has(String(file?.type || '').toLowerCase())) {
+                reject(new Error('不支援的圖片格式，請選擇 PNG、JPEG、GIF 或 WebP 圖片。'));
+                return;
+            }
             const reader = new FileReader();
+            reader.onerror = () => reject(new Error('讀取圖片失敗，請重新選擇圖片。'));
+            reader.onload = (event) => resolve(event?.target?.result);
+            reader.readAsDataURL(file);
+        });
+
+        const fileToResizedDataUrl = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('讀取圖片失敗，請重新選擇圖片。'));
             reader.onload = (e) => {
                 const img = new Image();
+                img.onerror = () => reject(new Error('載入圖片失敗，請重新選擇圖片。'));
                 img.onload = () => {
                     const maxSize = AI_MAX_IMAGE_SIZE;
                     let width = img.width;
@@ -1570,18 +1649,18 @@ ${outputTemplate}
             reader.readAsDataURL(file);
         });
 
-        const buildAiRequestContent = (prompt, dataUrl) => ([
+        const buildAiRequestContent = (prompt, dataUrl, imageDetail = AI_IMAGE_DETAIL) => ([
             { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: dataUrl, detail: AI_IMAGE_DETAIL } }
+            { type: 'image_url', image_url: { url: dataUrl, detail: imageDetail } }
         ]);
 
-        const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater) => {
+        const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater, options = {}) => {
             const payload = JSON.stringify({
                 model: OPENAI_MODEL,
                 temperature: 0.1,
                 messages: [{
                     role: 'user',
-                    content: buildAiRequestContent(prompt, dataUrl)
+                    content: buildAiRequestContent(prompt, dataUrl, options.imageDetail || AI_IMAGE_DETAIL)
                 }],
                 response_format: {
                     type: 'json_schema',
@@ -1621,6 +1700,24 @@ ${outputTemplate}
             }
 
             return {};
+        };
+
+        const requestSmartHundoExtraction = async (apiKey, originalDataUrl, statusUpdater) => requestOpenAiJsonSchema(
+            apiKey,
+            buildSmartHundoPrompt(),
+            originalDataUrl,
+            HUNDO_SMART_SCHEMA,
+            statusUpdater,
+            { imageDetail: HUNDO_SMART_IMAGE_DETAIL }
+        );
+
+        const smartHundoScan = async ({ apiKey, originalDataUrl, imageIndex, statusUpdater } = {}) => {
+            const helpers = globalThis.SmartHundoHelpers;
+            if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
+            const rawResult = await requestSmartHundoExtraction(apiKey, originalDataUrl, statusUpdater);
+            const normalized = helpers.normalizeSmartHundoResult(rawResult, extractSingleNumber, normalizePokemonBaseName);
+            const conversion = helpers.smartHundoCardsToPokemonList(normalized.cards, normalizePokemonBaseName, normalizePokemonList);
+            return { ...normalized, ...conversion, imageIndex };
         };
 
         const requestSingleImageClassification = async (apiKey, dataUrl, statusUpdater) => {

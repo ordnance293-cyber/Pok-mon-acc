@@ -8,7 +8,7 @@
 <body data-test-status="running">
   <pre id="results"></pre>
   <script>
-    (() => {
+    (async () => {
       'use strict';
 
       const results = [];
@@ -47,6 +47,16 @@
       };
       const normalizeName = (value) => String(value ?? '').trim().replace(/^官方:/, '');
       const normalizeList = (value) => [...new Set(String(value ?? '').split(',').filter(Boolean))].join(',');
+      const assertRejects = async (promise, expectedMessage, forbiddenValue) => {
+        try {
+          await promise;
+          fail('expected promise to reject');
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          if (!message.includes(expectedMessage)) fail(`expected error containing ${JSON.stringify(expectedMessage)}, got ${JSON.stringify(message)}`);
+          if (forbiddenValue && message.includes(forbiddenValue)) fail('error message exposed the data URL');
+        }
+      };
 
       try {
         const helpers = globalThis.SmartHundoHelpers;
@@ -148,6 +158,101 @@
           equal(merged.uncertain_count, 0);
           equal(merged.pokemon_list, '超夢,色違夢幻');
         });
+
+        const indexRequest = new XMLHttpRequest();
+        indexRequest.open('GET', '../index.html', false);
+        indexRequest.send();
+        const indexHtml = indexRequest.responseText;
+        const moduleMatch = indexHtml.match(/<script type="module">([\s\S]*?)<\/script>/);
+        if (!moduleMatch) fail('index module script is missing');
+        equal(indexHtml.includes('<script src="smart-hundo-helpers.js"><' + '/script>'), true);
+
+        const nativeCreateElement = document.createElement.bind(document);
+        let canvasCalls = 0;
+        let lastPayload = null;
+        let smartRequestCount = 0;
+        const originalDataUrl = 'data:image/png;base64,SMART_ORIGINAL_DO_NOT_EXPOSE';
+        const resizedUrl = 'data:image/jpeg;base64,RESIZED';
+        const pngFile = { type: 'image/png', dataUrl: originalDataUrl };
+
+        class MockFileReader {
+          readAsDataURL(file) {
+            if (file.readerError) {
+              this.onerror?.(new Event('error'));
+              return;
+            }
+            this.onload?.({ target: { result: file.dataUrl } });
+          }
+        }
+
+        class MockImage {
+          set src(value) {
+            if (String(value).includes('IMAGE_ERROR')) {
+              this.onerror?.(new Event('error'));
+              return;
+            }
+            this.width = 1600;
+            this.height = 900;
+            this.onload?.();
+          }
+        }
+
+        globalThis.FileReader = MockFileReader;
+        globalThis.Image = MockImage;
+        document.createElement = (tagName, ...args) => {
+          if (String(tagName).toLowerCase() !== 'canvas') return nativeCreateElement(tagName, ...args);
+          canvasCalls += 1;
+          return {
+            getContext: () => ({ drawImage: () => {} }),
+            toDataURL: () => resizedUrl
+          };
+        };
+        globalThis.initializeApp = () => ({});
+        globalThis.getDatabase = () => ({});
+        globalThis.ref = () => ({});
+        globalThis.set = async () => {};
+        globalThis.push = () => ({});
+        globalThis.onValue = () => {};
+        globalThis.remove = async () => {};
+        globalThis.update = async () => {};
+        globalThis.fetch = async (_url, options = {}) => {
+          lastPayload = JSON.parse(options.body);
+          if (lastPayload.messages[0].content[1].image_url.detail === 'high') smartRequestCount += 1;
+          return {
+            ok: true,
+            json: async () => ({
+              choices: [{ message: { content: JSON.stringify({
+                hundo_leg: '8',
+                hundo_leg_confidence: 0.9,
+                detected_card_count: 0,
+                cards: []
+              }) } }]
+            })
+          };
+        };
+
+        const pageModule = moduleMatch[1]
+          .replace(/^\s*import\s+[^;]+;\s*$/gm, '')
+          + '\nObject.assign(globalThis, { HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA, buildSmartHundoPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestSmartHundoExtraction, smartHundoScan });';
+        (0, eval)(pageModule);
+
+        equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
+        equal(canvasCalls, 0);
+        await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA, null);
+        equal(lastPayload.messages[0].content[1].image_url.detail, 'auto');
+        await smartHundoScan({ apiKey: 'test-key', originalDataUrl, imageIndex: 2 });
+        equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
+        equal(smartRequestCount, 1);
+        equal(JSON.stringify(lastPayload).includes('test-key'), false);
+        equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
+        equal(HUNDO_SMART_SCHEMA.strict, true);
+        equal(HUNDO_SMART_SCHEMA.schema.additionalProperties, false);
+        equal(HUNDO_SMART_SCHEMA.schema.properties.cards.items.additionalProperties, false);
+        equal(buildSmartHundoPrompt().includes('禁止重新分類'), true);
+        await assertRejects(fileToOriginalDataUrl({ type: 'text/plain', dataUrl: originalDataUrl }), '支援的圖片格式', originalDataUrl);
+        await assertRejects(fileToOriginalDataUrl({ type: 'image/png', dataUrl: originalDataUrl, readerError: true }), '讀取圖片失敗', originalDataUrl);
+        await assertRejects(fileToResizedDataUrl({ type: 'image/png', dataUrl: originalDataUrl, readerError: true }), '讀取圖片失敗', originalDataUrl);
+        await assertRejects(fileToResizedDataUrl({ type: 'image/png', dataUrl: 'data:image/png;base64,IMAGE_ERROR' }), '載入圖片失敗', 'IMAGE_ERROR');
 
         document.body.dataset.testStatus = 'pass';
       } catch (error) {
