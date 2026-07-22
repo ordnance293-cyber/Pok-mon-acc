@@ -1026,7 +1026,7 @@
             return normalized;
         };
 
-        const normalizeSearchQuery = (value) => String(value || '').trim().replace(/\s+/g, '');
+        const normalizeSearchQuery = (value) => globalThis.SmartHundoHelpers.normalizeSearchQuery(value);
 
         const buildEmptyAiResult = () => ({
             image_type: 'OTHER',
@@ -2018,12 +2018,15 @@ hundo_leg 只讀取本圖可見的傳說、幻與究極異獸 4* 清單總數或
                     setAiActionButtonStatus(
                         `<i class="fas fa-exclamation-triangle text-red-600"></i> 智慧百神辨識失敗（${failedIndexes.length} 張），一般欄位已套用，百神清單保留原值`
                     );
-                } else if (smartMergedResult.uncertain_count > 0) {
-                    setAiActionButtonStatus(`${AI_SUCCESS_LABEL}；${smartMergedResult.uncertain_count} 張卡片需人工確認`);
-                } else if (smartMergedResult.hundo_leg_conflict) {
-                    setAiActionButtonStatus(`${AI_SUCCESS_LABEL}；百神數有衝突，請人工確認`);
                 } else {
-                    setAiActionButtonStatus(AI_SUCCESS_LABEL);
+                    const completionNotices = [];
+                    if (smartMergedResult.hundo_leg_conflict) completionNotices.push('百神數有衝突，請人工確認');
+                    if (smartMergedResult.uncertain_count > 0) {
+                        completionNotices.push(`${smartMergedResult.uncertain_count} 張卡片需人工確認`);
+                    }
+                    setAiActionButtonStatus(
+                        completionNotices.length > 0 ? `${AI_SUCCESS_LABEL}；${completionNotices.join('；')}` : AI_SUCCESS_LABEL
+                    );
                 }
             } catch (e) { 
                 alert("GPT 解析失敗，請稍後再試"); 
