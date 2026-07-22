@@ -242,13 +242,39 @@
         equal(lastPayload.messages[0].content[1].image_url.detail, 'auto');
         await smartHundoScan({ apiKey: 'test-key', originalDataUrl, imageIndex: 2 });
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
+        equal(lastPayload.messages[0].content[1].image_url.url, originalDataUrl);
         equal(smartRequestCount, 1);
         equal(JSON.stringify(lastPayload).includes('test-key'), false);
         equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
         equal(HUNDO_SMART_SCHEMA.strict, true);
         equal(HUNDO_SMART_SCHEMA.schema.additionalProperties, false);
         equal(HUNDO_SMART_SCHEMA.schema.properties.cards.items.additionalProperties, false);
-        equal(buildSmartHundoPrompt().includes('禁止重新分類'), true);
+        deepEqual(Object.keys(HUNDO_SMART_SCHEMA.schema.properties), ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']);
+        deepEqual(HUNDO_SMART_SCHEMA.schema.required, ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']);
+        const smartCardSchema = HUNDO_SMART_SCHEMA.schema.properties.cards.items;
+        deepEqual(Object.keys(smartCardSchema.properties), [
+          'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
+          'shiny_state', 'shiny_confidence', 'purified_state', 'purified_confidence', 'shadow_state', 'shadow_confidence'
+        ]);
+        deepEqual(smartCardSchema.required, [
+          'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
+          'shiny_state', 'shiny_confidence', 'purified_state', 'purified_confidence', 'shadow_state', 'shadow_confidence'
+        ]);
+        deepEqual(smartCardSchema.properties.recognition_status.enum, ['recognized', 'partial', 'uncertain']);
+        ['shiny_state', 'purified_state', 'shadow_state'].forEach(field => {
+          deepEqual(smartCardSchema.properties[field].enum, ['yes', 'no', 'uncertain'], field);
+        });
+        const smartPrompt = buildSmartHundoPrompt();
+        [
+          'HUNDO_LEGENDARY_SCREEN', '傳說的寶可夢,幻,究極異獸&4*', '禁止重新分類', '所有可見的寶可夢卡片',
+          '部分可見', '由上到下、由左到右', '官方繁體中文名稱', 'visible_label', '次要佐證', '不能取代視覺辨識',
+          'shiny、purified、shadow', '分別獨立判斷', 'uncertain', '搜尋欄', '非寶可夢卡片', '不可見卡片', '重複卡片',
+          'JSON Schema', '不得輸出 Markdown', '額外欄位'
+        ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt protects ${fragment}`));
+        for (const type of ['image/jpeg', 'image/gif', 'image/webp']) {
+          const dataUrl = `data:${type};base64,ORIGINAL_${type}`;
+          equal(await fileToOriginalDataUrl({ type, dataUrl }), dataUrl, `accepts ${type}`);
+        }
         await assertRejects(fileToOriginalDataUrl({ type: 'text/plain', dataUrl: originalDataUrl }), '支援的圖片格式', originalDataUrl);
         await assertRejects(fileToOriginalDataUrl({ type: 'image/png', dataUrl: originalDataUrl, readerError: true }), '讀取圖片失敗', originalDataUrl);
         await assertRejects(fileToResizedDataUrl({ type: 'image/png', dataUrl: originalDataUrl, readerError: true }), '讀取圖片失敗', originalDataUrl);

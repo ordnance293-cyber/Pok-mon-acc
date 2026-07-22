@@ -715,7 +715,7 @@
                                 column: { type: 'integer', minimum: 0 },
                                 visible_label: { type: 'string' },
                                 official_name: { type: 'string' },
-                                recognition_status: { type: 'string', enum: ['recognized', 'uncertain'] },
+                                recognition_status: { type: 'string', enum: ['recognized', 'partial', 'uncertain'] },
                                 species_confidence: { type: 'number', minimum: 0, maximum: 1 },
                                 shiny_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
                                 shiny_confidence: { type: 'number', minimum: 0, maximum: 1 },
@@ -1605,7 +1605,7 @@ ${outputTemplate}
 hundo_leg 只讀取本圖可見的傳說、幻與究極異獸 4* 清單總數或計數；無法讀取時留空並保守填 hundo_leg_confidence。
 
 【E. 排除項目】
-搜尋欄、篩選/排序按鈕、頁籤、數字徽章、捲動條、玩家頭像、背景裝飾、卡片以外的圖示與任何非寶可夢卡片都不可當作卡片輸出。不要發明不可見卡片或未顯示的狀態。
+搜尋欄、篩選/排序按鈕、頁籤、數字徽章、捲動條、玩家頭像、背景裝飾、卡片以外的圖示與任何非寶可夢卡片都不可當作卡片輸出。不要發明不可見卡片或未顯示的狀態；每張可見卡片只輸出一次，不要重複卡片。
 
 【F. 輸出】
 只輸出符合提供 JSON Schema 的 JSON。不得輸出 Markdown、程式碼框、說明文字或額外欄位。`;
