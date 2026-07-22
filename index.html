@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <script src="smart-hundo-helpers.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -457,7 +458,6 @@
         const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
         const OLD_POKEMON_FILTER = '年16-20';
         const OLD_LEGENDARY_FILTER = `${OLD_POKEMON_FILTER}&${LEGENDARY_FILTER}`;
-        const AI_SCAN_MODES = new Set(['quick', 'full']);
         const AI_SCAN_BUTTON_LABEL = '🤖 AI自動掃描';
         const AI_SCAN_RUNNING_LABEL = '🤖 AI自動掃描中...';
         const AI_SCAN_STATUS_LABEL = 'AI自動掃描';
@@ -466,6 +466,7 @@
         const AI_MAX_IMAGE_SIZE = 1000;
         const AI_JPEG_QUALITY = 0.7;
         const AI_IMAGE_DETAIL = 'auto';
+        const HUNDO_SMART_IMAGE_DETAIL = 'high';
         const AI_SUCCESS_LABEL = '合併完成';
         const AI_IMAGE_TYPES = new Set([
             'CATEGORY_OVERVIEW_SCREEN',
@@ -689,6 +690,47 @@
                     'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin',
                     'poke_bag', 'item_bag', 'level', 'team', 'xp', 'stardust', 'pokemon_list'
                 ]
+            }
+        };
+
+        const HUNDO_SMART_SCHEMA = {
+            name: 'pokemon_go_hundo_smart_extractor',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    hundo_leg: { type: 'string' },
+                    hundo_leg_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                    detected_card_count: { type: 'integer', minimum: 0 },
+                    cards: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            properties: {
+                                order: { type: 'integer', minimum: 0 },
+                                row: { type: 'integer', minimum: 0 },
+                                column: { type: 'integer', minimum: 0 },
+                                visible_label: { type: 'string' },
+                                official_name: { type: 'string' },
+                                recognition_status: { type: 'string', enum: ['recognized', 'partial', 'uncertain'] },
+                                species_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                shiny_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                shiny_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                purified_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                purified_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                shadow_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                shadow_confidence: { type: 'number', minimum: 0, maximum: 1 }
+                            },
+                            required: [
+                                'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
+                                'shiny_state', 'shiny_confidence', 'purified_state', 'purified_confidence', 'shadow_state', 'shadow_confidence'
+                            ]
+                        }
+                    }
+                },
+                required: ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']
             }
         };
 
@@ -984,7 +1026,7 @@
             return normalized;
         };
 
-        const normalizeSearchQuery = (value) => String(value || '').trim().replace(/\s+/g, '');
+        const normalizeSearchQuery = (value) => globalThis.SmartHundoHelpers.normalizeSearchQuery(value);
 
         const buildEmptyAiResult = () => ({
             image_type: 'OTHER',
@@ -1059,7 +1101,9 @@
             const inferredType = inferImageTypeFromSearchQuery(rawSearchQuery);
 
             let imageType = rawImageType;
-            if (inferredType) {
+            if (inferredType === 'HUNDO_LEGENDARY_SCREEN' && rawImageType !== 'HUNDO_LEGENDARY_SCREEN') {
+                imageType = 'OTHER';
+            } else if (inferredType) {
                 imageType = inferredType;
             } else if (AI_SEARCH_IMAGE_TYPES.has(rawImageType)) {
                 imageType = 'OTHER';
@@ -1071,13 +1115,10 @@
             };
         };
 
-        const getAiExtractionFields = (classification = {}, scanMode = 'quick') => {
+        const getAiExtractionFields = (classification = {}) => {
             const imageType = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'OTHER';
-            const normalizedScanMode = AI_SCAN_MODES.has(scanMode) ? scanMode : 'quick';
             const baseFields = [...(AI_IMAGE_TYPE_ALLOWED_FIELDS[imageType] || [])];
-            if (imageType === 'HUNDO_LEGENDARY_SCREEN' && normalizedScanMode !== 'full') {
-                return baseFields.filter(field => field !== 'pokemon_list');
-            }
+            if (imageType === 'HUNDO_LEGENDARY_SCREEN') return baseFields.filter(field => field !== 'pokemon_list');
             return baseFields;
         };
 
@@ -1176,13 +1217,8 @@
         };
 
         const isPopulatedAiValue = (value) => String(value || '').trim() !== '';
-        const getRequiredValidationFields = (classifications = []) => {
-            const requiredFields = [...AI_REQUIRED_VALIDATION_FIELDS];
-            if (getFullHundoScanTargetIndexes(classifications).length > 0) requiredFields.splice(1, 0, 'pokemon_list');
-            return requiredFields;
-        };
+        const getRequiredValidationFields = () => [...AI_REQUIRED_VALIDATION_FIELDS];
         const getCandidateImageIndexesForField = (field, classifications = []) => {
-            if (field === 'pokemon_list') return getFullHundoScanTargetIndexes(classifications);
             const candidateTypes = new Set(AI_FIELD_TO_IMAGE_TYPES[field] || []);
             return classifications.reduce((indexes, classification, index) => {
                 if (candidateTypes.has(classification.image_type)) indexes.push(index);
@@ -1322,7 +1358,7 @@ image_type 只能是：
 6. 只分類這一張圖，不要猜其他圖。
 7. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
 
-        const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [], allow_pokemon_list = false }) => {
+        const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [] }) => {
             const outputTemplate = `{
   "legendary": "",
   "hundo_leg": "",
@@ -1397,36 +1433,12 @@ ${outputTemplate}
 你必須讀取頂部數字並填入 legendary。
 除了 legendary 之外，其餘欄位都必須留空字串。`;
                 case 'HUNDO_LEGENDARY_SCREEN':
-                    if (!allow_pokemon_list) {
-                        return `${baseRules}
+                    return `${baseRules}
 
 這是一張搜尋頁，搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」。
 你必須讀取頂部數字並填入 hundo_leg。
 這一輪是快速掃描，只做 hundo_leg 數字辨識；不得辨識 pokemon_list。
 除了 hundo_leg 之外，其餘欄位都必須留空字串。`;
-                    }
-                    return `${baseRules}
-
-這是一張搜尋頁，搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」。
-你必須讀取頂部數字並填入 hundo_leg。
-這也是唯一可以填 pokemon_list 的圖片類型。
-
-【pokemon_list 規則】
-1. 必須掃描整張截圖中所有可見寶可夢卡片，禁止只掃前幾張。
-2. 每一隻都要先讀取畫面上直接可見的中文名稱；只有名稱模糊或信心不足時，才可用寶可夢本體外觀做輔助辨識，禁止每一隻都重新靠外觀猜名稱。
-3. 若名稱文字與外觀判斷衝突，優先相信畫面中的中文名稱。
-4. 由上到下、由左到右讀取，並保持原本順序，禁止重新排序。
-5. 同名可直接重複列出，系統會在多圖合併後統一轉成「名稱*數量」；單隻不可加「*1」。
-6. 只能用半形逗號分隔，例如「固拉多,固拉多,鳳王,蒼響」。
-7. 只可使用以下資訊：寶可夢名稱、左側閃光星星圖示、紫色火焰圖示、藍色雪花圖示、寶可夢本體外觀。
-8. 右上角收藏星星、名字左側標籤圖示、隊友圖示、特殊背景、CP 排序按鈕、搜尋列、進化按鈕、底部圓形按鈕，全部禁止參與辨識。
-9. 色違只看左側閃光星星圖示；暗影只看紫色火焰圖示；淨化只看藍色雪花圖示。
-10. canonical name 只允許「色違」與「暗影」兩種前綴，順序固定為「色違暗影名稱」；淨化永遠不要輸出。若只看到淨化就輸出普通名稱；若同時看到淨化與色違就輸出「色違名稱」。
-11. Alias Dictionary 修正：拉帝奧斯/拉帝歐絲 -> 拉帝歐斯；拉帝亞絲 -> 拉帝亞斯；奈克洛芝瑪/奈克洛茲馬 -> 奈克洛茲瑪；基格德/基格爾多 -> 基格爾德。
-12. 特殊型態不得合併：蒼響持劍 -> 蒼響劍王；藏瑪然特持盾 -> 藏瑪然特盾王；酋雷姆 / 焰白酋雷姆 / 闇黑酋雷姆 分開；基格爾德50% -> 基格爾德；基格爾德完全體分開；奈克洛茲瑪 / 黃昏之鬃奈克洛茲瑪 / 拂曉之翼奈克洛茲瑪 / 究極奈克洛茲瑪 全部分開。
-13. 只有完全相同的 canonical name 才算同類，例如「雷公」與「色違雷公」不能合併，「蒼響」與「蒼響劍王」不能合併。
-
-除了 hundo_leg 與 pokemon_list 之外，其餘欄位都必須留空字串。`;
                 case 'SHINY_LEGENDARY_SCREEN':
                     return `${baseRules}
 
@@ -1545,10 +1557,55 @@ ${outputTemplate}
             }
         };
 
-        const fileToResizedDataUrl = (file) => new Promise(resolve => {
+        const buildSmartHundoPrompt = () => `你是寶可夢 GO 百分百傳說、幻與究極異獸清單的嚴格視覺抽取器。
+
+這張圖片已經在前一階段確認為 HUNDO_LEGENDARY_SCREEN，搜尋條件已確認為「${HUNDO_LEGENDARY_FILTER}」。禁止重新分類、禁止更改搜尋條件，也不要推論其他圖片。
+
+【A. 卡片列舉與位置】
+逐一列出畫面中所有可見的寶可夢卡片；完整可見或部分可見（包含邊緣被裁切）的卡片都要各自輸出。依由上到下、由左到右填入 order、row、column，order 必須從 1 開始。order、row、column 只描述本張圖片內的位置，不得依賴圖片上傳順序。不得把相鄰卡片合併，也不得把相鄰卡片的符號或狀態指派給本卡。detected_card_count 必須是本圖可見或部分可見的卡片總數。
+hundo_leg 只讀取本圖可見的傳說、幻與究極異獸 4* 清單總數或計數；無法讀取時留空並保守填 hundo_leg_confidence。
+
+【B. 物種與型態辨識】
+物種與型態必須先依視覺辨識：仔細比較身體、頭部、四肢、翅膀、尾巴、角、型態專屬特徵，以及傳說、幻與究極異獸的設計特徵。顏色只能作為輔助證據，不能單獨決定物種或型態。
+visible_label 只能作為次要佐證，不能取代視覺辨識；它可能是自訂暱稱，或包含 IV、151515、100、百分比、縮寫、背景、招式、使用者符號、前綴或後綴。絕對不得直接複製到 official_name。例如 visible_label 是「GLO蒼響151515」時，只有視覺證據支持才可做 GLO蒼響151515 -> 蒼響 的正規化。
+official_name 只能使用官方繁體中文名稱與型態名稱。若 visible_label 與視覺證據衝突，以可靠的視覺物種與型態證據為準並降低 species_confidence；若證據衝突或不足以可靠確認，official_name 留空，recognition_status 填 uncertain，不得猜測或發明名稱。
+recognition_status 的使用規則：recognized：僅在實際物種與型態可可靠辨識時使用。partial：僅在卡片或證據只部分可見且辨識未完成時使用；除非物種本身仍可可靠辨識，否則 official_name 留空。uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用。
+
+shiny、purified、shadow 必須分別獨立判斷，不能互相推論。所有狀態證據都必須屬於同一張正在判定的卡片；每一種狀態都必須填 yes、no 或 uncertain，並給自己的 confidence。
+
+【C. 色違 shiny】
+shiny 主要依據同一張卡片 CP／狀態區附近的官方色違閃光或狀態圖示；只靠身體顏色不足。排除背景閃光、最愛星號、夥伴徽章、按鈕、徽章及相鄰卡片符號；證據不清楚時填 uncertain。
+
+【D. 淨化 purified】
+purified 只可依據只屬於該卡片的官方淨化符號或淨化效果。排除無關的藍色、季節、服裝、背景或相鄰卡片圖形；證據不清楚時填 uncertain。purified 只保留在內部結果，絕不能轉成 shiny 或輸出為色違前綴。
+
+【E. 暗影 shadow】
+shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身體或相鄰卡片效果都不足。證據不清楚時填 uncertain。
+
+【F. 必須忽略的 UI 與裝飾】
+除非某項明確與正在判定的 schema 欄位相關，必須忽略最愛、夥伴、搜尋、排序、儲存空間、背景、紀念、全域、服裝、季節、底部導覽、CP 排序等 UI 與裝飾。搜尋欄、篩選/排序按鈕、頁籤、數字徽章、捲動條、玩家頭像、背景裝飾、卡片以外的圖示與任何非寶可夢卡片都不可當作卡片輸出。
+
+【G. Schema 與一致性】
+只輸出符合提供 JSON Schema 的 JSON。不得輸出 Markdown、程式碼框、說明文字或額外欄位。不得遺漏可見卡片，不得發明隱藏或畫面外卡片、不可見卡片或未顯示的狀態，不得輸出重複卡片；每張可見卡片只輸出一次，所有卡片的位置與 order 必須一致。`;
+
+        const fileToOriginalDataUrl = (file) => new Promise((resolve, reject) => {
+            const supportedTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+            if (!supportedTypes.has(String(file?.type || '').toLowerCase())) {
+                reject(new Error('不支援的圖片格式，請選擇 PNG、JPEG、GIF 或 WebP 圖片。'));
+                return;
+            }
             const reader = new FileReader();
+            reader.onerror = () => reject(new Error('讀取圖片失敗，請重新選擇圖片。'));
+            reader.onload = (event) => resolve(event?.target?.result);
+            reader.readAsDataURL(file);
+        });
+
+        const fileToResizedDataUrl = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('讀取圖片失敗，請重新選擇圖片。'));
             reader.onload = (e) => {
                 const img = new Image();
+                img.onerror = () => reject(new Error('載入圖片失敗，請重新選擇圖片。'));
                 img.onload = () => {
                     const maxSize = AI_MAX_IMAGE_SIZE;
                     let width = img.width;
@@ -1570,18 +1627,18 @@ ${outputTemplate}
             reader.readAsDataURL(file);
         });
 
-        const buildAiRequestContent = (prompt, dataUrl) => ([
+        const buildAiRequestContent = (prompt, dataUrl, imageDetail = AI_IMAGE_DETAIL) => ([
             { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: dataUrl, detail: AI_IMAGE_DETAIL } }
+            { type: 'image_url', image_url: { url: dataUrl, detail: imageDetail } }
         ]);
 
-        const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater) => {
+        const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater, options = {}) => {
             const payload = JSON.stringify({
                 model: OPENAI_MODEL,
                 temperature: 0.1,
                 messages: [{
                     role: 'user',
-                    content: buildAiRequestContent(prompt, dataUrl)
+                    content: buildAiRequestContent(prompt, dataUrl, options.imageDetail || AI_IMAGE_DETAIL)
                 }],
                 response_format: {
                     type: 'json_schema',
@@ -1623,6 +1680,24 @@ ${outputTemplate}
             return {};
         };
 
+        const requestSmartHundoExtraction = async (apiKey, originalDataUrl, statusUpdater) => requestOpenAiJsonSchema(
+            apiKey,
+            buildSmartHundoPrompt(),
+            originalDataUrl,
+            HUNDO_SMART_SCHEMA,
+            statusUpdater,
+            { imageDetail: HUNDO_SMART_IMAGE_DETAIL }
+        );
+
+        const smartHundoScan = async ({ apiKey, originalDataUrl, imageIndex, statusUpdater } = {}) => {
+            const helpers = globalThis.SmartHundoHelpers;
+            if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
+            const rawResult = await requestSmartHundoExtraction(apiKey, originalDataUrl, statusUpdater);
+            const normalized = helpers.normalizeSmartHundoResult(rawResult, extractSingleNumber, normalizePokemonBaseName);
+            const conversion = helpers.smartHundoCardsToPokemonList(normalized.cards, normalizePokemonBaseName, normalizePokemonList);
+            return { ...normalized, ...conversion, imageIndex };
+        };
+
         const requestSingleImageClassification = async (apiKey, dataUrl, statusUpdater) => {
             const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiClassificationPrompt(), dataUrl, OPENAI_CLASSIFICATION_JSON_SCHEMA, statusUpdater);
             return normalizeAiClassification(rawResult);
@@ -1633,8 +1708,7 @@ ${outputTemplate}
                 apiKey,
                 buildAiExtractionPrompt({
                     ...classification,
-                    retry_fields: retryFields,
-                    allow_pokemon_list: extractionFields.includes('pokemon_list')
+                    retry_fields: retryFields
                 }),
                 dataUrl,
                 OPENAI_EXTRACTION_JSON_SCHEMA,
@@ -1684,23 +1758,15 @@ ${outputTemplate}
             return classification;
         };
 
-        const getAiExtractionPhaseLabels = ({ isDetailedScan, scanMode = 'quick' }) => {
-            if (isDetailedScan && scanMode === 'full') {
-                return {
-                    extracting: 'GPT 第三階段百神清單辨識中',
-                    retrying: 'GPT 第三階段百神補抓中'
-                };
-            }
-            return {
-                extracting: 'GPT 第二階段數字抽值中',
-                retrying: 'GPT 第二階段補抓中'
-            };
-        };
+        const getAiExtractionPhaseLabels = () => ({
+            extracting: 'GPT 第二階段數字抽值中',
+            retrying: 'GPT 第二階段補抓中'
+        });
 
-        const extractSingleAiImage = async ({ apiKey, dataUrl, classification, scanMode = 'quick', imageIndex, progressIndex = imageIndex, totalFiles, updateStatus, overrideFields = null }) => {
+        const extractSingleAiImage = async ({ apiKey, dataUrl, classification, imageIndex, progressIndex = imageIndex, totalFiles, updateStatus, overrideFields = null }) => {
             const extractionFields = Array.isArray(overrideFields) && overrideFields.length > 0
                 ? [...new Set(overrideFields)]
-                : getAiExtractionFields(classification, scanMode);
+                : getAiExtractionFields(classification);
             if (extractionFields.length === 0) {
                 return {
                     imageResult: normalizeAiExtraction({}, classification, extractionFields),
@@ -1708,8 +1774,7 @@ ${outputTemplate}
                 };
             }
 
-            const isHundoListScan = classification.image_type === 'HUNDO_LEGENDARY_SCREEN' && extractionFields.includes('pokemon_list');
-            const phaseLabels = getAiExtractionPhaseLabels({ isDetailedScan: isHundoListScan, scanMode });
+            const phaseLabels = getAiExtractionPhaseLabels();
             const progressLabel = `${progressIndex + 1}/${totalFiles}`;
             updateStatus(`${phaseLabels.extracting} ${progressLabel}`);
             let imageResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
@@ -1727,7 +1792,7 @@ ${outputTemplate}
 
             console.log({
                 imageIndex: imageIndex + 1,
-                stage: scanMode === 'full' ? 'full_hundo_scan' : 'quick_scan',
+                stage: 'quick_scan',
                 image_type: imageResult.image_type,
                 search_query: imageResult.search_query,
                 extracted_fields: getExtractedFieldsForLog(imageResult, extractionFields)
@@ -1782,19 +1847,18 @@ ${outputTemplate}
             };
         };
 
-        const runAiExtractionBatch = async ({ apiKey, dataUrls, classifications, scanMode = 'quick', targetIndexes = [] }) => {
+        const runAiExtractionBatch = async ({ apiKey, dataUrls, classifications, targetIndexes = [] }) => {
             if (targetIndexes.length === 0) return [];
 
             let extractedCount = 0;
             const totalTargets = targetIndexes.length;
-            const mergeLabel = scanMode === 'full' ? '百神清單統整中' : '快速掃描統整中';
+            const mergeLabel = '快速掃描統整中';
 
             return Promise.all(targetIndexes.map((targetIndex, progressIndex) =>
                 extractSingleAiImage({
                     apiKey,
                     dataUrl: dataUrls[targetIndex],
                     classification: classifications[targetIndex],
-                    scanMode,
                     imageIndex: targetIndex,
                     progressIndex,
                     totalFiles: totalTargets,
@@ -1813,32 +1877,12 @@ ${outputTemplate}
             ));
         };
 
-        const getFullHundoScanTargetIndexes = (classifications = []) => classifications.reduce((indexes, classification, index) => {
-            const isExactHundoSearch = classification.image_type === 'HUNDO_LEGENDARY_SCREEN'
-                && normalizeSearchQuery(classification.search_query) === normalizeSearchQuery(HUNDO_LEGENDARY_FILTER);
-            if (isExactHundoSearch) indexes.push(index);
-            return indexes;
-        }, []);
-
         const quickScan = async ({ apiKey, dataUrls, classifications }) => runAiExtractionBatch({
             apiKey,
             dataUrls,
             classifications,
-            scanMode: 'quick',
             targetIndexes: dataUrls.map((_, index) => index)
         });
-
-        const fullHundoScan = async ({ apiKey, dataUrls, classifications }) => {
-            const targetIndexes = getFullHundoScanTargetIndexes(classifications);
-            const taskResults = await runAiExtractionBatch({
-                apiKey,
-                dataUrls,
-                classifications,
-                scanMode: 'full',
-                targetIndexes
-            });
-            return { taskResults, targetIndexes };
-        };
 
         window.autoScan = async function() {
             const apiKey = document.getElementById('openaiApiKey').value.trim(); const files = document.getElementById('imageInput').files;
@@ -1848,12 +1892,14 @@ ${outputTemplate}
             setAiActionButtonsDisabled(true);
             setAiActionButtonStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 0/${totalFiles}`);
             try {
+                const helpers = globalThis.SmartHundoHelpers;
+                if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
                 let preparedCount = 0;
-                const dataUrls = await Promise.all(Array.from(files).map(file =>
-                    fileToResizedDataUrl(file).then(dataUrl => {
+                const jobs = await Promise.all(Array.from(files).map((file, index) =>
+                    fileToResizedDataUrl(file).then(classificationDataUrl => {
                         preparedCount += 1;
                         setAiActionButtonStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 ${preparedCount}/${totalFiles}`);
-                        return dataUrl;
+                        return { index, file, classificationDataUrl };
                     })
                 ));
 
@@ -1864,11 +1910,11 @@ ${outputTemplate}
                     );
                 };
 
-                const classifications = await Promise.all(dataUrls.map((dataUrl, index) =>
+                const classifiedJobs = await Promise.all(jobs.map(job =>
                     classifySingleAiImage({
                         apiKey,
-                        dataUrl,
-                        imageIndex: index,
+                        dataUrl: job.classificationDataUrl,
+                        imageIndex: job.index,
                         totalFiles,
                         updateStatus: updateClassificationStatus
                     }).then(classification => {
@@ -1876,35 +1922,95 @@ ${outputTemplate}
                         setAiActionButtonStatus(
                             `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 類型分析完成｜已分類 ${classifiedCount}/${totalFiles}`
                         );
-                        return classification;
+                        return { ...job, classification };
                     })
                 ));
 
-                const [quickTaskResults, fullHundoScanResult] = await Promise.all([
-                    quickScan({ apiKey, dataUrls, classifications }),
-                    fullHundoScan({ apiKey, dataUrls, classifications })
-                ]);
-                const { taskResults: fullTaskResults, targetIndexes: fullHundoTargetIndexes } = fullHundoScanResult;
+                const { normalJobs, smartHundoJobs } = helpers.partitionImageJobs(classifiedJobs);
+                const normalDataUrls = normalJobs.map(job => job.classificationDataUrl);
+                const normalClassifications = normalJobs.map(job => job.classification);
+                const normalTask = (async () => {
+                    const taskResults = await quickScan({
+                        apiKey,
+                        dataUrls: normalDataUrls,
+                        classifications: normalClassifications
+                    });
+                    return runRequiredFieldValidation({
+                        apiKey,
+                        dataUrls: normalDataUrls,
+                        classifications: normalClassifications,
+                        taskResults
+                    });
+                })();
+                const smartTasks = smartHundoJobs.map(job => (async () => {
+                    const originalDataUrl = await fileToOriginalDataUrl(job.file);
+                    return smartHundoScan({
+                        apiKey,
+                        originalDataUrl,
+                        imageIndex: job.index,
+                        statusUpdater: (attempt, maxRetries) => {
+                            setAiActionButtonStatus(
+                                `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 智慧百神辨識中（API 重試 ${attempt}/${maxRetries}）`
+                            );
+                        }
+                    });
+                })());
+                const [normalSettlement, ...smartSettlements] = await Promise.allSettled([normalTask, ...smartTasks]);
+                const successfulSmartResults = smartSettlements
+                    .map((settlement, index) => ({ settlement, job: smartHundoJobs[index] }))
+                    .filter(({ settlement }) => settlement.status === 'fulfilled')
+                    .map(({ settlement }) => settlement.value);
+                const failedIndexes = smartSettlements
+                    .map((settlement, index) => ({ settlement, job: smartHundoJobs[index] }))
+                    .filter(({ settlement }) => settlement.status === 'rejected')
+                    .map(({ job }) => job.index);
+                const smartMergedResult = helpers.mergeSmartHundoScanResults(
+                    successfulSmartResults,
+                    extractSingleNumber,
+                    normalizePokemonBaseName,
+                    normalizePokemonList
+                );
+                window.lastSmartHundoScanResult = {
+                    screenshotIndexes: smartHundoJobs.map(job => job.index),
+                    screenshots: successfulSmartResults.map(result => ({
+                        index: result.imageIndex,
+                        hundoLeg: result.hundo_leg,
+                        detectedCardCount: result.detected_card_count,
+                        recognizedCount: result.recognized_count,
+                        uncertainCount: result.uncertain_count,
+                        cards: result.cards
+                    })),
+                    hundoLeg: smartMergedResult.hundo_leg,
+                    detectedCardCount: smartMergedResult.detected_card_count,
+                    recognizedCount: smartMergedResult.recognized_count,
+                    uncertainCount: smartMergedResult.uncertain_count,
+                    cards: smartMergedResult.cards,
+                    hundoLegConflict: smartMergedResult.hundo_leg_conflict,
+                    failedIndexes
+                };
+                if (normalSettlement.status === 'rejected') throw normalSettlement.reason;
 
-                if (fullHundoTargetIndexes.length === 0) {
-                    setAiActionButtonStatus(`<i class="fas fa-check-circle text-green-600"></i> ${AI_SCAN_STATUS_LABEL} 未命中「${HUNDO_LEGENDARY_FILTER}」，略過百神清單辨識`);
-                    await new Promise(resolve => setTimeout(resolve, 700));
+                const { mergedResult: normalMergedResult, validationTaskResults } = normalSettlement.value;
+                const mergedResult = { ...normalMergedResult };
+                if (smartMergedResult.hundo_leg) mergedResult.hundo_leg = smartMergedResult.hundo_leg;
+                if (failedIndexes.length === 0 && smartMergedResult.pokemon_list) {
+                    mergedResult.pokemon_list = smartMergedResult.pokemon_list;
                 }
-
-                const taskResults = [...quickTaskResults, ...fullTaskResults];
-                const { mergedResult, coverage, validationTaskResults } = await runRequiredFieldValidation({
-                    apiKey,
-                    dataUrls,
-                    classifications,
-                    taskResults
-                });
+                const coverage = evaluateRequiredFieldCoverage(
+                    mergedResult,
+                    classifiedJobs.map(job => job.classification)
+                );
                 console.log({
                     finalResult: mergedResult,
                     requiredFieldCoverage: coverage,
-                    classifications,
-                    fullHundoTargetIndexes,
+                    classifications: classifiedJobs.map(job => job.classification),
+                    smartHundoScreenshotIndexes: smartHundoJobs.map(job => job.index),
+                    smartHundoFailedIndexes: failedIndexes,
                     validationTaskResults
                 });
+                if (smartMergedResult.hundo_leg_conflict) {
+                    console.warn('Smart hundo count conflict:', { screenshotIndexes: smartHundoJobs.map(job => job.index) });
+                }
                 applyAiResultToForm(mergedResult);
                 const missingMessages = [];
                 if (coverage.missingWithoutScreens.length > 0) {
@@ -1917,15 +2023,31 @@ ${outputTemplate}
                     console.warn('AI required field validation result:', coverage);
                     alert(`以下欄位已逐一驗證，但本次仍未能自動填入：\n${missingMessages.join('\n')}`);
                 }
-                const aiButton = document.getElementById(AI_ACTION_BUTTON_ID);
-                if (aiButton) aiButton.innerHTML = AI_SCAN_BUTTON_LABEL;
-                setAiActionButtonStatus(AI_SUCCESS_LABEL);
-                await new Promise(resolve => setTimeout(resolve, 1200));
+                if (failedIndexes.length > 0) {
+                    setAiActionButtonStatus(
+                        `<i class="fas fa-exclamation-triangle text-red-600"></i> 智慧百神辨識失敗（${failedIndexes.length} 張），一般欄位已套用，百神清單保留原值`
+                    );
+                } else {
+                    const completionNotices = [];
+                    if (smartMergedResult.hundo_leg_conflict) completionNotices.push('百神數有衝突，請人工確認');
+                    if (smartMergedResult.uncertain_count > 0) {
+                        completionNotices.push(`${smartMergedResult.uncertain_count} 張卡片需人工確認`);
+                    }
+                    setAiActionButtonStatus(
+                        completionNotices.length > 0 ? `${AI_SUCCESS_LABEL}；${completionNotices.join('；')}` : AI_SUCCESS_LABEL
+                    );
+                }
             } catch (e) { 
                 alert("GPT 解析失敗，請稍後再試"); 
                 console.error('OpenAI GPT parsing failed:', e); 
+                setAiActionButtonStatus(`<i class="fas fa-exclamation-triangle text-red-600"></i> ${AI_SCAN_STATUS_LABEL} 失敗，請稍後再試`);
+            } finally {
+                const aiButton = document.getElementById(AI_ACTION_BUTTON_ID);
+                if (aiButton) {
+                    aiButton.disabled = false;
+                    aiButton.innerHTML = AI_SCAN_BUTTON_LABEL;
+                }
             }
-            resetAiActionButtons();
         };
 
         window.analyzeMultipleImages = window.autoScan;
