@@ -100,7 +100,9 @@
     });
 
     const smartHundoCardsToPokemonList = (cards = [], normalizeOfficialName, normalizePokemonList) => {
-        const normalizedCards = normalizeCards(cards, normalizeOfficialName);
+        const normalizedCards = (Array.isArray(cards) ? cards : [])
+            .map(card => normalizeCard(card, normalizeOfficialName))
+            .sort(compareCards);
         const usableNames = [];
         let uncertainCount = 0;
         let recognizedCount = 0;

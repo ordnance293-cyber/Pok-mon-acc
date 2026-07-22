@@ -1101,7 +1101,9 @@
             const inferredType = inferImageTypeFromSearchQuery(rawSearchQuery);
 
             let imageType = rawImageType;
-            if (inferredType) {
+            if (inferredType === 'HUNDO_LEGENDARY_SCREEN' && rawImageType !== 'HUNDO_LEGENDARY_SCREEN') {
+                imageType = 'OTHER';
+            } else if (inferredType) {
                 imageType = inferredType;
             } else if (AI_SEARCH_IMAGE_TYPES.has(rawImageType)) {
                 imageType = 'OTHER';
@@ -1559,25 +1561,32 @@ ${outputTemplate}
 
 這張圖片已經在前一階段確認為 HUNDO_LEGENDARY_SCREEN，搜尋條件已確認為「${HUNDO_LEGENDARY_FILTER}」。禁止重新分類、禁止更改搜尋條件，也不要推論其他圖片。
 
-【A. 清單範圍】
-逐一列出畫面中所有可見的寶可夢卡片；完整卡片、邊緣被裁切或只部分可見的卡片都要各自輸出。依由上到下、由左到右填入 order、row、column。detected_card_count 必須是本圖可見或部分可見的卡片總數。
-
-【B. 物種辨識】
-以卡片的寶可夢外觀、剪影、配色、姿勢與型態作為物種判斷的第一依據。official_name 必須使用官方繁體中文名稱；visible_label 只能作為次要佐證，不能取代視覺辨識。無法可靠辨識時 official_name 留空，recognition_status 填 uncertain，並保守降低 species_confidence。
-
-recognition_status 的使用規則：recognized：僅在實際物種與型態可可靠辨識時使用。partial：僅在卡片或證據只部分可見且辨識未完成時使用；除非物種本身仍可可靠辨識，否則 official_name 留空。uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用。
-
-【C. 狀態判定】
-對 shiny、purified、shadow 三種狀態分別獨立判斷，不能互相推論。每一種都必須填 yes、no 或 uncertain，並給自己的 confidence。色違必須有色違的可見證據；淨化與暗影也必須各自有可見的遊戲 UI 或卡片證據。證據不足時填 uncertain。
-
-【D. 百分百傳說數量】
+【A. 卡片列舉與位置】
+逐一列出畫面中所有可見的寶可夢卡片；完整可見或部分可見（包含邊緣被裁切）的卡片都要各自輸出。依由上到下、由左到右填入 order、row、column，order 必須從 1 開始。order、row、column 只描述本張圖片內的位置，不得依賴圖片上傳順序。不得把相鄰卡片合併，也不得把相鄰卡片的符號或狀態指派給本卡。detected_card_count 必須是本圖可見或部分可見的卡片總數。
 hundo_leg 只讀取本圖可見的傳說、幻與究極異獸 4* 清單總數或計數；無法讀取時留空並保守填 hundo_leg_confidence。
 
-【E. 排除項目】
-搜尋欄、篩選/排序按鈕、頁籤、數字徽章、捲動條、玩家頭像、背景裝飾、卡片以外的圖示與任何非寶可夢卡片都不可當作卡片輸出。不要發明不可見卡片或未顯示的狀態；每張可見卡片只輸出一次，不要重複卡片。
+【B. 物種與型態辨識】
+物種與型態必須先依視覺辨識：仔細比較身體、頭部、四肢、翅膀、尾巴、角、型態專屬特徵，以及傳說、幻與究極異獸的設計特徵。顏色只能作為輔助證據，不能單獨決定物種或型態。
+visible_label 只能作為次要佐證，不能取代視覺辨識；它可能是自訂暱稱，或包含 IV、151515、100、百分比、縮寫、背景、招式、使用者符號、前綴或後綴。絕對不得直接複製到 official_name。例如 visible_label 是「GLO蒼響151515」時，只有視覺證據支持才可做 GLO蒼響151515 -> 蒼響 的正規化。
+official_name 只能使用官方繁體中文名稱與型態名稱。若 visible_label 與視覺證據衝突，以可靠的視覺物種與型態證據為準並降低 species_confidence；若證據衝突或不足以可靠確認，official_name 留空，recognition_status 填 uncertain，不得猜測或發明名稱。
+recognition_status 的使用規則：recognized：僅在實際物種與型態可可靠辨識時使用。partial：僅在卡片或證據只部分可見且辨識未完成時使用；除非物種本身仍可可靠辨識，否則 official_name 留空。uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用。
 
-【F. 輸出】
-只輸出符合提供 JSON Schema 的 JSON。不得輸出 Markdown、程式碼框、說明文字或額外欄位。`;
+shiny、purified、shadow 必須分別獨立判斷，不能互相推論。所有狀態證據都必須屬於同一張正在判定的卡片；每一種狀態都必須填 yes、no 或 uncertain，並給自己的 confidence。
+
+【C. 色違 shiny】
+shiny 主要依據同一張卡片 CP／狀態區附近的官方色違閃光或狀態圖示；只靠身體顏色不足。排除背景閃光、最愛星號、夥伴徽章、按鈕、徽章及相鄰卡片符號；證據不清楚時填 uncertain。
+
+【D. 淨化 purified】
+purified 只可依據只屬於該卡片的官方淨化符號或淨化效果。排除無關的藍色、季節、服裝、背景或相鄰卡片圖形；證據不清楚時填 uncertain。purified 只保留在內部結果，絕不能轉成 shiny 或輸出為色違前綴。
+
+【E. 暗影 shadow】
+shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身體或相鄰卡片效果都不足。證據不清楚時填 uncertain。
+
+【F. 必須忽略的 UI 與裝飾】
+除非某項明確與正在判定的 schema 欄位相關，必須忽略最愛、夥伴、搜尋、排序、儲存空間、背景、紀念、全域、服裝、季節、底部導覽、CP 排序等 UI 與裝飾。搜尋欄、篩選/排序按鈕、頁籤、數字徽章、捲動條、玩家頭像、背景裝飾、卡片以外的圖示與任何非寶可夢卡片都不可當作卡片輸出。
+
+【G. Schema 與一致性】
+只輸出符合提供 JSON Schema 的 JSON。不得輸出 Markdown、程式碼框、說明文字或額外欄位。不得遺漏可見卡片，不得發明隱藏或畫面外卡片、不可見卡片或未顯示的狀態，不得輸出重複卡片；每張可見卡片只輸出一次，所有卡片的位置與 order 必須一致。`;
 
         const fileToOriginalDataUrl = (file) => new Promise((resolve, reject) => {
             const supportedTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);

@@ -12,6 +12,81 @@
       'use strict';
 
       const results = [];
+      const loggedValues = [];
+      const unexpectedDiagnostics = [];
+      const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
+      let executionStatus = 'running';
+      const serializeHarnessValue = (value, seen = new WeakSet()) => {
+        if (value instanceof Error) {
+          return {
+            name: String(value.name || 'Error'),
+            message: String(value.message || ''),
+            stack: String(value.stack || '')
+          };
+        }
+        if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) return value;
+        if (['undefined', 'bigint', 'symbol', 'function'].includes(typeof value)) return String(value);
+        if (seen.has(value)) return '[Circular]';
+        seen.add(value);
+        if (Array.isArray(value)) return value.map(item => serializeHarnessValue(item, seen));
+        try {
+          return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [key, serializeHarnessValue(item, seen)])
+          );
+        } catch (error) {
+          return {
+            name: 'UnserializableValue',
+            message: String(error && error.message ? error.message : error),
+            stack: ''
+          };
+        }
+      };
+      const createHarnessErrorRecorder = (target, onRecord = () => {}) => {
+        const record = (channel, args) => {
+          const diagnostic = {
+            channel,
+            arguments: args.map(argument => serializeHarnessValue(argument))
+          };
+          target.push(diagnostic);
+          onRecord();
+          return diagnostic;
+        };
+        return {
+          consoleError: (...args) => record('console.error', args),
+          windowError: (event = {}) => record('window.error', [
+            event.error instanceof Error
+              ? event.error
+              : { name: 'Error', message: String(event.message || 'Unknown window error'), stack: '' }
+          ]),
+          unhandledRejection: (event = {}) => record('unhandledrejection', [
+            event.reason === undefined ? 'Unknown unhandled rejection' : event.reason
+          ])
+        };
+      };
+      const deriveHarnessStatus = (status, failedCount, diagnostics) => (
+        status === 'pass' && failedCount === 0 && diagnostics.length === 0 ? 'pass' : 'fail'
+      );
+      const renderTestSummary = () => {
+        const passedCount = results.filter(result => result.startsWith('PASS ')).length;
+        const assertionFailures = results.filter(result => result.startsWith('FAIL '));
+        const diagnosticFailures = unexpectedDiagnostics.map(diagnostic => (
+          `FAIL ${diagnostic.channel}: ${JSON.stringify(diagnostic.arguments)}`
+        ));
+        const failedCount = assertionFailures.length + diagnosticFailures.length;
+        document.body.dataset.testPassed = String(passedCount);
+        document.body.dataset.testFailed = String(failedCount);
+        document.body.dataset.testStatus = deriveHarnessStatus(executionStatus, failedCount, unexpectedDiagnostics);
+        document.getElementById('results').textContent = [...results, ...diagnosticFailures].join('\n');
+      };
+      const harnessErrorRecorder = createHarnessErrorRecorder(unexpectedDiagnostics, renderTestSummary);
+      window.addEventListener('error', harnessErrorRecorder.windowError);
+      window.addEventListener('unhandledrejection', harnessErrorRecorder.unhandledRejection);
+      console.log = (...args) => { loggedValues.push(args.map(argument => serializeHarnessValue(argument))); };
+      console.warn = (...args) => { loggedValues.push(args.map(argument => serializeHarnessValue(argument))); };
+      console.error = (...args) => {
+        loggedValues.push(args.map(argument => serializeHarnessValue(argument)));
+        harnessErrorRecorder.consoleError(...args);
+      };
       const fail = (message) => { throw new Error(message); };
       const equal = (actual, expected, message = 'values differ') => {
         if (actual !== expected) fail(`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
@@ -51,6 +126,15 @@
       };
       const normalizeName = (value) => String(value ?? '').trim().replace(/^官方:/, '');
       const normalizeList = (value) => [...new Set(String(value ?? '').split(',').filter(Boolean))].join(',');
+      const normalizeCountingList = (value) => {
+        const counts = new Map();
+        const order = [];
+        String(value ?? '').split(',').filter(Boolean).forEach(name => {
+          if (!counts.has(name)) order.push(name);
+          counts.set(name, (counts.get(name) || 0) + 1);
+        });
+        return order.map(name => counts.get(name) > 1 ? `${name}*${counts.get(name)}` : name).join(',');
+      };
       const assertRejects = async (promise, expectedMessage, forbiddenValue) => {
         try {
           await promise;
@@ -134,6 +218,18 @@
           equal(normalized.detected_card_count, 3);
         });
 
+        test('deduplicates exact cards within one screenshot before conversion', () => {
+          const duplicateWithinScreenshot = card({ official_name: '超夢', order: 1, row: 1, column: 1 });
+          const normalized = normalizeSmartHundoResult({
+            detected_card_count: 2,
+            cards: [duplicateWithinScreenshot, { ...duplicateWithinScreenshot }]
+          }, normalizeNumber, normalizeName);
+          const conversion = smartHundoCardsToPokemonList(normalized.cards, normalizeName, normalizeCountingList);
+          equal(normalized.cards.length, 1);
+          equal(conversion.pokemon_list, '超夢');
+          equal(conversion.recognized_count, 1);
+        });
+
         test('counts uncertain species or independent states for manual review', () => {
           const conversion = smartHundoCardsToPokemonList([
             card({ official_name: '超夢', shiny_state: 'uncertain' })
@@ -172,6 +268,18 @@
           equal(merged.recognized_count, 2);
           equal(merged.uncertain_count, 0);
           equal(merged.pokemon_list, '超夢,色違夢幻');
+        });
+
+        test('preserves identical same-position cards from different screenshots', () => {
+          const duplicateAcrossScreenshots = card({ official_name: '超夢', order: 1, row: 1, column: 1 });
+          const merged = mergeSmartHundoScanResults([
+            { hundo_leg: '8', detected_card_count: 1, cards: [duplicateAcrossScreenshots] },
+            { hundo_leg: '8', detected_card_count: 1, cards: [{ ...duplicateAcrossScreenshots }] }
+          ], normalizeNumber, normalizeName, normalizeCountingList);
+          equal(merged.pokemon_list, '超夢*2');
+          equal(merged.recognized_count, 2);
+          equal(merged.cards.length, 2);
+          equal(merged.detected_card_count, 2);
         });
 
         const indexRequest = new XMLHttpRequest();
@@ -297,6 +405,63 @@
           '除非物種本身仍可可靠辨識，否則 official_name 留空',
           'uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用'
         ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt defines ${fragment}`));
+        test('contains the complete A-G smart prompt contract', () => {
+          const requiredBySection = {
+            A: [
+              '【A. 卡片列舉與位置】', '完整可見或部分可見', '由上到下、由左到右', 'order 必須從 1 開始',
+              '不得依賴圖片上傳順序', '不得把相鄰卡片合併', '不得把相鄰卡片的符號或狀態指派給本卡'
+            ],
+            B: [
+              '【B. 物種與型態辨識】', '身體、頭部、四肢、翅膀、尾巴、角', '型態專屬特徵',
+              '傳說、幻與究極異獸的設計特徵', '顏色只能作為輔助證據', '自訂暱稱',
+              'IV、151515、100、百分比', '縮寫、背景、招式、使用者符號、前綴或後綴',
+              '絕對不得直接複製到 official_name', 'GLO蒼響151515 -> 蒼響', '官方繁體中文名稱與型態名稱',
+              '證據衝突', 'official_name 留空', '不得猜測或發明'
+            ],
+            C: [
+              '【C. 色違 shiny】', 'CP／狀態區附近的官方色違閃光或狀態圖示', '只靠身體顏色不足',
+              '背景閃光、最愛星號、夥伴徽章、按鈕、徽章及相鄰卡片符號', '不清楚時填 uncertain'
+            ],
+            D: [
+              '【D. 淨化 purified】', '只屬於該卡片的官方淨化符號或淨化效果',
+              '無關的藍色、季節、服裝、背景或相鄰卡片圖形', '只保留在內部結果', '絕不能轉成 shiny'
+            ],
+            E: [
+              '【E. 暗影 shadow】', '只屬於該卡片的官方紫色火焰或煙霧', '紫色身體或相鄰卡片效果都不足'
+            ],
+            F: [
+              '【F. 必須忽略的 UI 與裝飾】', '最愛、夥伴、搜尋、排序、儲存空間、背景、紀念、全域、服裝、季節、底部導覽、CP 排序'
+            ],
+            G: [
+              '【G. Schema 與一致性】', '只輸出符合提供 JSON Schema 的 JSON', '不得遺漏可見卡片',
+              '不得發明隱藏或畫面外卡片', '不得輸出重複卡片', '位置與 order 必須一致'
+            ]
+          };
+          Object.entries(requiredBySection).forEach(([section, fragments]) => {
+            fragments.forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt section ${section} includes ${fragment}`));
+          });
+          equal(smartPrompt.includes('所有狀態證據都必須屬於同一張正在判定的卡片'), true, 'same-card evidence ownership is explicit');
+        });
+        test('harness error channels serialize Error details and force failure', () => {
+          const diagnostics = [];
+          const recorder = createHarnessErrorRecorder(diagnostics);
+          recorder.consoleError('console context', new Error('synthetic console error'));
+          recorder.windowError({ error: new TypeError('synthetic window error'), message: 'fallback window message' });
+          recorder.unhandledRejection({ reason: new RangeError('synthetic rejection') });
+
+          deepEqual(diagnostics.map(diagnostic => diagnostic.channel), [
+            'console.error', 'window.error', 'unhandledrejection'
+          ]);
+          const serializedError = diagnostics[0].arguments[1];
+          equal(serializedError.name, 'Error');
+          equal(serializedError.message, 'synthetic console error');
+          equal(typeof serializedError.stack, 'string');
+          equal(serializedError.stack.includes('synthetic console error'), true);
+          diagnostics.forEach(diagnostic => {
+            equal(deriveHarnessStatus('pass', 0, [diagnostic]), 'fail', `${diagnostic.channel} forces failure`);
+          });
+          equal(deriveHarnessStatus('pass', 0, []), 'pass');
+        });
         for (const type of ['image/jpeg', 'image/gif', 'image/webp']) {
           const dataUrl = `data:${type};base64,ORIGINAL_${type}`;
           equal(await fileToOriginalDataUrl({ type, dataUrl }), dataUrl, `accepts ${type}`);
@@ -310,7 +475,7 @@
           'openaiApiKey', 'imageInput', 'aiAutoBtn', 'aiAutoStatus', 'g_hundos',
           'g_level', 'g_team', 'g_xp', 'g_stardust',
           'st_hundo_leg', 'st_shiny', 'st_coin', 'st_poke_bag', 'st_item_bag',
-          'st_rarecandy', 'st_greenpass', 'st_masterball',
+          'st_rarecandy', 'st_greenpass', 'st_masterball', 'st_old_poke',
           ...Array.from({ length: 11 }, (_, index) => `chk_sp_${index + 1}`),
           'chk_kyurem', 'sel_kyurem', 'chk_zamazenta', 'sel_dogs',
           'chk_necrozma', 'sel_necrozma', 'chk_lati', 'sel_lati',
@@ -354,12 +519,17 @@
           HUNDO: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
           HUNDO_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢，幻，究極異獸＆4＊' },
           HUNDO_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: ' 傳說的寶可夢, 幻, 究極異獸 & 4* ' },
+          RAW_OTHER_HUNDO: { image_type: 'OTHER', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          CONFLICT_HUNDO: { image_type: 'SHINY_CATEGORY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          RAW_HUNDO_FULL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '　傳說的寶可夢， 幻， 究極異獸 ＆ ４＊ ' },
+          RAW_OTHER_OLD: { image_type: 'OTHER', search_query: ' 年１６-２０ ' },
           SHINY: { image_type: 'SHINY_CATEGORY_SCREEN', search_query: '' },
           RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' }
         };
         const extractionForPrompt = (prompt) => {
           if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) return { level: '50', team: '紅隊', xp: '3500000' };
           if (prompt.includes('image_type = SHINY_CATEGORY_SCREEN')) return { shiny: '77' };
+          if (prompt.includes('image_type = OLD_POKEMON_SCREEN')) return { old_poke: '42' };
           if (prompt.includes('image_type = RESOURCE_SCREEN')) {
             return { coin: '123', poke_bag: '7800', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' };
           }
@@ -388,19 +558,18 @@
             hundo_leg_confidence: 0.89,
             detected_card_count: 1,
             cards: [card({ official_name: '夢幻', shiny_state: 'uncertain' })]
+          },
+          RAW_HUNDO_FULL: {
+            hundo_leg: '8',
+            hundo_leg_confidence: 0.95,
+            detected_card_count: 1,
+            cards: [card({ official_name: '蒼響' })]
           }
         };
         let routedRequests = [];
         let requestStageEvents = [];
         let failSmartRequests = false;
         let failedSmartIdentities = new Set();
-        const loggedValues = [];
-        const nativeConsoleLog = console.log;
-        const nativeConsoleWarn = console.warn;
-        const nativeConsoleError = console.error;
-        console.log = (...args) => { loggedValues.push(args); };
-        console.warn = (...args) => { loggedValues.push(args); };
-        console.error = (...args) => { loggedValues.push(args); };
         globalThis.alert = () => {};
         globalThis.setTimeout = (callback) => { callback(); return 0; };
         globalThis.fetch = async (_url, options = {}) => {
@@ -412,11 +581,11 @@
           routedRequests.push({ schemaName, prompt, imageUrl, detail });
           requestStageEvents.push({ event: 'start', schemaName });
           if (schemaName === 'pokemon_go_image_classifier') {
-            const identity = imageUrl.match(/RESIZED_(PROFILE|HUNDO(?:_[AB])?|SHINY|RESOURCE)$/)?.[1];
+            const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
             return openAiResponse(classificationByImage[identity], () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           if (schemaName === 'pokemon_go_hundo_smart_extractor') {
-            const identity = imageUrl.match(/ORIGINAL_(HUNDO(?:_[AB])?)$/)?.[1];
+            const identity = imageUrl.match(/ORIGINAL_(.+)$/)?.[1];
             if (failSmartRequests || failedSmartIdentities.has(identity)) throw new Error('mock smart network failure');
             return openAiResponse(smartResultByImage[identity], () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
@@ -470,6 +639,35 @@
           equal(window.lastSmartHundoScanResult.hundoLegConflict, false);
           equal(document.getElementById('aiAutoStatus').textContent.includes('1'), true, 'status shows manual-review count');
           equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
+        });
+
+        await asyncTest('requires both the raw hundo type and normalized exact query for smart routing', async () => {
+          fileReadCounts.clear();
+          routedRequests = [];
+          requestStageEvents = [];
+          failSmartRequests = false;
+          failedSmartIdentities = new Set();
+          setScanFiles(['RAW_OTHER_HUNDO', 'CONFLICT_HUNDO', 'RAW_HUNDO_FULL', 'RAW_OTHER_OLD']);
+          document.getElementById('g_hundos').value = '舊百神';
+
+          await autoScan();
+
+          const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
+          const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
+          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
+          equal(classifierRequests.length, 4, 'all raw classifier results are exercised end to end');
+          equal(ordinaryRequests.length, 1, 'ordinary non-hundo query inference remains enabled');
+          equal(ordinaryRequests[0].prompt.includes('image_type = OLD_POKEMON_SCREEN'), true);
+          equal(ordinaryRequests[0].imageUrl, 'data:image/jpeg;base64,RESIZED_RAW_OTHER_OLD');
+          deepEqual(smartRequests.map(request => request.imageUrl), [
+            'data:image/png;base64,ORIGINAL_RAW_HUNDO_FULL'
+          ], 'query-only inference never creates a smart request');
+          equal(fileReadCounts.get('RAW_OTHER_HUNDO'), 1, 'raw OTHER never reads the original image');
+          equal(fileReadCounts.get('CONFLICT_HUNDO'), 1, 'conflicting non-hundo type never reads the original image');
+          equal(fileReadCounts.get('RAW_HUNDO_FULL'), 2, 'raw hundo with normalized exact query uses its original image');
+          equal(fileReadCounts.get('RAW_OTHER_OLD'), 1, 'ordinary inferred search type remains on the resized path');
+          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [2]);
+          equal(document.getElementById('g_hundos').value, '蒼響');
         });
 
         await asyncTest('normalizes full-width routing and merges multiple smart screenshots conservatively', async () => {
@@ -576,24 +774,15 @@
         const serializedLogs = JSON.stringify(loggedValues);
         equal(serializedLogs.includes('test-key'), false, 'logs omit the API key');
         equal(serializedLogs.includes('data:image/'), false, 'logs omit image data URLs');
-        console.log = nativeConsoleLog;
-        console.warn = nativeConsoleWarn;
-        console.error = nativeConsoleError;
 
-        document.body.dataset.testStatus = 'pass';
+        executionStatus = 'pass';
       } catch (error) {
         results.push(`FAIL ${error && error.message ? error.message : String(error)}`);
-        document.body.dataset.testStatus = 'fail';
+        executionStatus = 'fail';
       }
 
-      const passedCount = results.filter(result => result.startsWith('PASS ')).length;
-      const failedCount = results.filter(result => result.startsWith('FAIL ')).length;
-      document.body.dataset.testPassed = String(passedCount);
-      document.body.dataset.testFailed = String(failedCount);
-      if (failedCount > 0 || document.body.dataset.testStatus !== 'pass') {
-        document.body.dataset.testStatus = 'fail';
-      }
-      document.getElementById('results').textContent = results.join('\n');
+      await new Promise(resolve => nativeSetTimeout(resolve, 0));
+      renderTestSummary();
     })();
   </script>
 </body>
