@@ -15,8 +15,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 TEST_PATH = "/tests/smart-hundo.test.html"
 BROWSER_CANDIDATES = (
-    Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+    Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
 )
 
 
@@ -77,8 +77,13 @@ def main() -> int:
         print(output, file=sys.stderr)
         return 1
 
-    passed = stdout.count("PASS ")
-    print(f"Smart hundo browser tests passed: {passed} assertions groups; OpenAI requests: 0")
+    passed_groups = stdout.count("PASS ")
+    failed_groups = stdout.count("FAIL ")
+    print(
+        "Smart hundo browser tests passed: "
+        f"{passed_groups} test groups; failed test groups: {failed_groups}; "
+        "OpenAI requests: 0 (mocked)"
+    )
     return 0
 
 
