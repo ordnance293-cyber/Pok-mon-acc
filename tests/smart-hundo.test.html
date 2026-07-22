@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Smart hundo helper tests</title>
+  <script src="../smart-hundo-helpers.js"></script>
+</head>
+<body data-test-status="running">
+  <pre id="results"></pre>
+  <script>
+    (() => {
+      'use strict';
+
+      const results = [];
+      const fail = (message) => { throw new Error(message); };
+      const equal = (actual, expected, message = 'values differ') => {
+        if (actual !== expected) fail(`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+      };
+      const deepEqual = (actual, expected, message = 'values differ') => {
+        const actualJson = JSON.stringify(actual);
+        const expectedJson = JSON.stringify(expected);
+        if (actualJson !== expectedJson) fail(`${message}: expected ${expectedJson}, got ${actualJson}`);
+      };
+      const test = (name, callback) => {
+        callback();
+        results.push(`PASS ${name}`);
+      };
+      const card = (overrides = {}) => ({
+        order: 1,
+        row: 1,
+        column: 1,
+        visible_label: '畫面名稱',
+        official_name: '超夢',
+        recognition_status: 'recognized',
+        species_confidence: 0.9,
+        shiny_state: 'no',
+        shiny_confidence: 0.9,
+        purified_state: 'no',
+        purified_confidence: 0.9,
+        shadow_state: 'no',
+        shadow_confidence: 0.9,
+        ...overrides
+      });
+      const normalizeNumber = (value) => {
+        const match = String(value ?? '').match(/\d+/);
+        return match ? match[0] : '';
+      };
+      const normalizeName = (value) => String(value ?? '').trim().replace(/^官方:/, '');
+      const normalizeList = (value) => [...new Set(String(value ?? '').split(',').filter(Boolean))].join(',');
+
+      try {
+        const helpers = globalThis.SmartHundoHelpers;
+        if (!helpers) fail('SmartHundoHelpers is missing');
+        const {
+          normalizeSearchQuery,
+          isSmartHundoClassification,
+          partitionImageJobs,
+          normalizeSmartHundoResult,
+          smartHundoCardsToPokemonList,
+          mergeSmartHundoScanResults
+        } = helpers;
+
+        test('normalizes each required hundo query variant', () => {
+          const canonical = '傳說的寶可夢,幻,究極異獸&4*';
+          const variants = [
+            ['full-width punctuation', '傳說的寶可夢，幻，究極異獸＆4＊'],
+            ['unicode whitespace', '\u3000傳說的寶可夢,\n幻,\t究極異獸&4*\u00a0'],
+            ['mixed width punctuation', '傳說的寶可夢，幻，究極異獸＆４＊']
+          ];
+          variants.forEach(([name, value]) => equal(normalizeSearchQuery(value), canonical, name));
+        });
+
+        test('partitions only the exact hundo classification route', () => {
+          const jobs = [
+            { index: 0, classification: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色&4*' } },
+            { index: 1, classification: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢，幻，究極異獸＆4＊' } },
+            { index: 2, classification: { image_type: 'OTHER', search_query: '傳說的寶可夢,幻,究極異獸&4*' } }
+          ];
+          const partitioned = partitionImageJobs(jobs);
+          deepEqual(partitioned.smartHundoJobs.map(job => job.index), [1]);
+          deepEqual(partitioned.normalJobs.map(job => job.index), [0, 2]);
+          equal(isSmartHundoClassification(jobs[1].classification), true);
+          equal(isSmartHundoClassification(jobs[0].classification), false);
+        });
+
+        test('converts purified, shiny, shadow, and duplicate cards without a purified prefix', () => {
+          const cards = [
+            card({ official_name: '超夢', purified_state: 'yes' }),
+            card({ order: 2, official_name: '夢幻', shiny_state: 'yes', purified_state: 'yes' }),
+            card({ order: 3, official_name: '烈空坐', shadow_state: 'yes' }),
+            card({ order: 4, official_name: '超夢', shiny_state: 'yes', shadow_state: 'yes' }),
+            card({ order: 5, official_name: '超夢', shiny_state: 'yes', shadow_state: 'yes' })
+          ];
+          const conversion = smartHundoCardsToPokemonList(cards, normalizeName, normalizeList);
+          equal(conversion.pokemon_list, '超夢,色違夢幻,暗影烈空坐,色違暗影超夢');
+          equal(conversion.recognized_count, 5);
+          equal(conversion.uncertain_count, 0);
+          equal(smartHundoCardsToPokemonList([card({ shiny_state: 'yes', shadow_state: 'yes' })], normalizeName, normalizeList).pokemon_list, '色違暗影超夢');
+        });
+
+        test('normalizes empty official names and only exact normalized duplicate positions', () => {
+          const normalized = normalizeSmartHundoResult({
+            hundo_leg: '第 8 隻',
+            hundo_leg_confidence: 1.7,
+            detected_card_count: '3',
+            cards: [
+              card({ order: '2', row: '1', column: '1', official_name: '  ', visible_label: '不可用', species_confidence: -2 }),
+              card({ order: '1', row: '1', column: '1', official_name: ' 超夢 ' }),
+              card({ order: '1', row: '1', column: '1', official_name: '超夢' }),
+              card({ order: '1', row: '1', column: '1', official_name: '夢幻' })
+            ]
+          }, normalizeNumber, normalizeName);
+          equal(normalized.cards[0].official_name, '超夢');
+          equal(normalized.cards[1].official_name, '夢幻');
+          equal(normalized.cards[2].official_name, '');
+          equal(normalized.cards.length, 3);
+          equal(normalized.cards[2].species_confidence, 0);
+          equal(normalized.hundo_leg_confidence, 1);
+          equal(normalized.hundo_leg, '8');
+          equal(normalized.detected_card_count, 3);
+        });
+
+        test('counts uncertain species or independent states for manual review', () => {
+          const conversion = smartHundoCardsToPokemonList([
+            card({ official_name: '超夢', shiny_state: 'uncertain' })
+          ], normalizeName, normalizeList);
+          equal(conversion.pokemon_list, '超夢');
+          equal(conversion.recognized_count, 1);
+          equal(conversion.uncertain_count, 1);
+
+          const unknownSpecies = smartHundoCardsToPokemonList([
+            card({ official_name: '未知', recognition_status: 'uncertain' })
+          ], normalizeName, normalizeList);
+          equal(unknownSpecies.pokemon_list, '');
+          equal(unknownSpecies.recognized_count, 0);
+          equal(unknownSpecies.uncertain_count, 1);
+        });
+
+        test('merges multiple results and reports hundo leg conflicts', () => {
+          const merged = mergeSmartHundoScanResults([
+            { hundo_leg: '8', detected_card_count: 2, cards: [card({ official_name: '超夢' })] },
+            { hundo_leg: '9', detected_card_count: 1, cards: [card({ official_name: '夢幻', order: 2, shiny_state: 'yes' })] }
+          ], normalizeNumber, normalizeName, normalizeList);
+          equal(merged.hundo_leg, '8');
+          equal(merged.hundo_leg_conflict, true);
+          equal(merged.detected_card_count, 3);
+          equal(merged.recognized_count, 2);
+          equal(merged.uncertain_count, 0);
+          equal(merged.pokemon_list, '超夢,色違夢幻');
+        });
+
+        document.body.dataset.testStatus = 'pass';
+      } catch (error) {
+        results.push(`FAIL ${error && error.message ? error.message : String(error)}`);
+        document.body.dataset.testStatus = 'fail';
+      }
+
+      document.getElementById('results').textContent = results.join('\n');
+    })();
+  </script>
+</body>
+</html>
