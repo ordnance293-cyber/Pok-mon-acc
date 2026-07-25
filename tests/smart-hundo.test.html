@@ -842,6 +842,71 @@
           equal(buildHundoDisplayName(modelYesButRejected, normalizeName), '超夢');
         });
 
+        test('strips repeated model presentation labels before effective-state display conversion', () => {
+          const pollutedNames = [
+            '色違固拉多',
+            '異色固拉多',
+            '淨化固拉多',
+            '亮晶晶固拉多',
+            '我的最愛固拉多',
+            '暗影固拉多',
+            '紀念背卡固拉多',
+            '特別背卡固拉多',
+            '全球背卡固拉多',
+            'GLOBAL固拉多',
+            'Global_Background:固拉多',
+            ' 【色違】：暗影／特別背卡--固拉多 '
+          ];
+          pollutedNames.forEach(official_name => {
+            const normalized = normalizeSmartHundoCard(card({
+              official_name,
+              shiny_state: 'yes',
+              rocket_state: 'shadow',
+              background_type: 'special'
+            }), normalizeName);
+            equal(normalized.official_name, '固拉多', `${official_name} normalizes to species only`);
+            equal(
+              buildHundoDisplayName(validatedCard({
+                ...normalized,
+                effective_shiny_state: 'no',
+                effective_rocket_state: 'normal',
+                effective_background_type: 'none'
+              }), normalizeName),
+              '固拉多',
+              `${official_name} cannot bypass effective states`
+            );
+          });
+
+          const callbackReintroduced = normalizeSmartHundoCard(
+            card({ official_name: '固拉多' }),
+            value => `色違：${value}`
+          );
+          equal(callbackReintroduced.official_name, '固拉多', 'the alias callback cannot reintroduce a display label');
+        });
+
+        test('adds a validated visible prefix exactly once after sanitizing model labels', () => {
+          const normalized = normalizeSmartHundoCard(
+            card({ official_name: '特別背卡／特別背卡固拉多' }),
+            normalizeName
+          );
+          equal(buildHundoDisplayName(validatedCard({
+            ...normalized,
+            effective_background_type: 'special'
+          }), normalizeName), '特別背卡固拉多');
+        });
+
+        test('requires a usable recognized species before building any display name', () => {
+          const unusableCards = [
+            validatedCard({ official_name: '' }),
+            validatedCard({ recognition_status: 'partial' }),
+            validatedCard({ recognition_status: 'uncertain' }),
+            validatedCard({ species_confidence: SPECIES_CONFIDENCE_THRESHOLD - 0.001 })
+          ];
+          unusableCards.forEach((unusable, index) => {
+            equal(buildHundoDisplayName(unusable, normalizeName), '', `unusable species ${index + 1}`);
+          });
+        });
+
         test('exposes the exact manual-review reason messages', () => {
           deepEqual(HUNDO_REVIEW_REASON_MESSAGES, {
             species_uncertain: '物種需人工確認',
@@ -861,8 +926,8 @@
         test('keeps hidden states internal and groups by display name', () => {
           const cards = [
             validatedCard({ official_name: '固拉多', effective_rocket_state: 'normal' }),
-            validatedCard({ official_name: '固拉多', effective_rocket_state: 'purified' }),
-            validatedCard({ official_name: '固拉多', effective_lucky_state: 'yes' })
+            validatedCard({ official_name: '淨化固拉多', effective_rocket_state: 'purified' }),
+            validatedCard({ official_name: '亮晶晶固拉多', effective_lucky_state: 'yes' })
           ];
           equal(effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list, '固拉多*3');
         });
@@ -1056,6 +1121,76 @@
 
         test('normalizes overlap labels with NFKC and every Unicode whitespace removed', () => {
           equal(normalizeVisibleLabel(' Ｐ I\u00a0K\nA\u3000'), 'PIKA');
+        });
+
+        test('normalizes canonical and model-polluted species names before two-card overlap signatures', () => {
+          const pollutedSuffix = [
+            normalizeSmartHundoCard(card({
+              order: 2,
+              row: 2,
+              cp: '100',
+              visible_label: 'GROUDON',
+              official_name: '色違：固拉多'
+            }), normalizeName, { screenshotIndex: 1 }),
+            normalizeSmartHundoCard(card({
+              order: 3,
+              row: 3,
+              cp: '200',
+              visible_label: 'MEWTWO',
+              official_name: 'GLOBAL_BACKGROUND／超夢'
+            }), normalizeName, { screenshotIndex: 1 })
+          ];
+          const canonical = [
+            normalizeSmartHundoCard(card({
+              order: 1,
+              cp: '100',
+              visible_label: 'GROUDON',
+              official_name: '固拉多'
+            }), normalizeName, { screenshotIndex: 2 }),
+            normalizeSmartHundoCard(card({
+              order: 2,
+              row: 2,
+              cp: '200',
+              visible_label: 'MEWTWO',
+              official_name: '超夢'
+            }), normalizeName, { screenshotIndex: 2 })
+          ];
+          pollutedSuffix.forEach((item, index) => {
+            Object.assign(item, {
+              effective_shiny_state: 'no',
+              effective_lucky_state: 'no',
+              effective_favorite_state: 'no',
+              effective_rocket_state: 'normal',
+              effective_background_type: 'none'
+            });
+            Object.assign(canonical[index], {
+              effective_shiny_state: 'no',
+              effective_lucky_state: 'no',
+              effective_favorite_state: 'no',
+              effective_rocket_state: 'normal',
+              effective_background_type: 'none'
+            });
+          });
+
+          const decision = detectScreenshotOverlap(
+            {
+              index: 1,
+              cards: [
+                validatedCard({ card_id: '1:1:1:1', order: 1, cp: '50', official_name: '鳳王', visible_label: 'LEAD' }),
+                ...pollutedSuffix
+              ]
+            },
+            {
+              index: 2,
+              cards: [
+                ...canonical,
+                validatedCard({ card_id: '2:3:3:1', order: 3, cp: '300', official_name: '炎帝', visible_label: 'TAIL' })
+              ]
+            }
+          );
+          equal(decision.overlap_count, 2);
+          equal(decision.direction, 'left_suffix_right_prefix');
+          equal(decision.ambiguous, false);
         });
 
         test('removes only a two-card suffix-prefix overlap and restores scroll order from reversed uploads', () => {
@@ -1511,6 +1646,17 @@
           ].forEach(sentinel => {
             equal(serialized.includes(sentinel), false, `diagnostics excludes ${sentinel}`);
           });
+        });
+
+        test('sanitizes model presentation labels in safe card diagnostics', () => {
+          const diagnostics = shapeSmartHundoDiagnostics({
+            screenshots: [{
+              cards: [validatedCard({ official_name: '全球背卡：色違固拉多' })]
+            }],
+            pokemon_list: '固拉多'
+          });
+          equal(diagnostics.screenshots[0].cards[0].official_name, '固拉多');
+          equal(diagnostics.pokemon_list, '固拉多');
         });
 
         test('validates allowed diagnostic values and redacts secrets injected into allowlisted fields', () => {
@@ -2264,7 +2410,8 @@
           MULTI_REVIEW: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
           VALID_EMPTY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
           INCOMPLETE_EMPTY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
-          UNRECOGNIZED_ONLY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
+          UNRECOGNIZED_ONLY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          POLLUTED_NAME: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
         };
         const extractionForPrompt = (prompt) => {
           if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) return { level: '50', team: '紅隊', xp: '3500000' };
@@ -2481,6 +2628,28 @@
           equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
           equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
           equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
+        });
+
+        await asyncTest('sanitizes model-polluted species names before production list and diagnostics', async () => {
+          resetScanScenario();
+          setScanFiles(['POLLUTED_NAME']);
+          countResultByImage.set('POLLUTED_NAME', validCount('(1)', '1'));
+          cardResultByImage.set('POLLUTED_NAME', completeCardResult([
+            v2Card({
+              official_name: '色違：GLOBAL_BACKGROUND／固拉多',
+              visible_label: '固拉多100',
+              shiny_state: 'yes',
+              shiny_confidence: 0.98,
+              shiny_evidence: cyanPurificationEvidence(),
+              background_type: 'none'
+            })
+          ]));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '固拉多');
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[0].official_name, '固拉多');
+          equal(window.lastSmartHundoDiagnostics.pokemon_list, '固拉多');
         });
 
         await asyncTest('keeps a newer completed smart run authoritative when an older classification resumes late', async () => {

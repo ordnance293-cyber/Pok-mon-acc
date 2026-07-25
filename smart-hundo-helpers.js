@@ -313,6 +313,23 @@
         return stringValue(normalized);
     };
 
+    const SMART_HUNDO_PRESENTATION_PREFIX_PATTERN = /^(?:[\s\p{White_Space}:：,，、;；/／|｜·•・_\-－—–【】\[\]［］()（）]*)(?:global_background|紀念背卡|特別背卡|全球背卡|我的最愛|亮晶晶|色違|異色|暗影|淨化|global)(?:[\s\p{White_Space}:：,，、;；/／|｜·•・_\-－—–【】\[\]［］()（）]*)/iu;
+
+    const stripSmartHundoPresentationPrefixes = (value) => {
+        let normalized = stringValue(value).normalize('NFKC').trim();
+        while (normalized) {
+            const stripped = normalized.replace(SMART_HUNDO_PRESENTATION_PREFIX_PATTERN, '');
+            if (stripped === normalized) break;
+            normalized = stripped;
+        }
+        return normalized.trim();
+    };
+
+    const normalizeSmartHundoOfficialName = (value, normalizer) => {
+        const sanitized = stripSmartHundoPresentationPrefixes(value);
+        return stripSmartHundoPresentationPrefixes(normalizeWith(normalizer, sanitized));
+    };
+
     const normalizeSmartHundoCard = (card = {}, normalizeOfficialName, options = {}) => {
         const screenshotIndex = normalizeCoordinate(options?.screenshotIndex);
         const hasRocketState = card?.rocket_state !== undefined && card?.rocket_state !== null;
@@ -348,7 +365,7 @@
             row,
             column,
             visible_label: stringValue(card?.visible_label),
-            official_name: normalizeWith(normalizeOfficialName, card?.official_name),
+            official_name: normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName),
             recognition_status: normalizeRecognitionStatus(card?.recognition_status),
             species_confidence: clampConfidence(card?.species_confidence),
             cp: stringValue(card?.cp),
@@ -396,7 +413,7 @@
 
     const overlapCardSignature = (card = {}) => JSON.stringify([
         stringValue(card?.cp),
-        stringValue(card?.official_name),
+        stripSmartHundoPresentationPrefixes(card?.official_name),
         normalizeVisibleLabel(card?.visible_label),
         stringValue(card?.effective_shiny_state),
         stringValue(card?.effective_lucky_state),
@@ -407,7 +424,7 @@
 
     const hasUsableOverlapIdentity = (card = {}) => (
         stringValue(card?.cp) !== ''
-        && stringValue(card?.official_name) !== ''
+        && stripSmartHundoPresentationPrefixes(card?.official_name) !== ''
         && normalizeVisibleLabel(card?.visible_label) !== ''
     );
 
@@ -491,7 +508,7 @@
         const comparisonScreenshots = screenshotList.map(screenshot => ({
             cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(card => ({
                 ...card,
-                official_name: normalizeWith(normalizeOfficialName, card?.official_name)
+                official_name: normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName)
             }))
         }));
         const pairRecords = [];
@@ -694,7 +711,7 @@
             column: diagnosticNonnegativeInteger(card?.column),
             cp: diagnosticString(card?.cp),
             visible_label: diagnosticString(card?.visible_label),
-            official_name: diagnosticString(card?.official_name),
+            official_name: diagnosticString(stripSmartHundoPresentationPrefixes(card?.official_name)),
             recognition_status: diagnosticEnum(card?.recognition_status, RECOGNITION_VALUES),
             raw_states: {
                 shiny: rawState('shiny', 'shiny_state', INDEPENDENT_STATE_VALUES),
@@ -866,7 +883,7 @@
 
     const hasUsableRecognizedSpecies = (card = {}) => (
         card?.recognition_status === 'recognized'
-        && stringValue(card?.official_name) !== ''
+        && stripSmartHundoPresentationPrefixes(card?.official_name) !== ''
         && Number(card?.species_confidence) >= SPECIES_CONFIDENCE_THRESHOLD
     );
 
@@ -1002,7 +1019,9 @@
     };
 
     const buildHundoDisplayName = (card = {}, normalizeOfficialName) => {
-        const officialName = normalizeWith(normalizeOfficialName, card?.official_name);
+        if (!hasUsableRecognizedSpecies(card)) return '';
+        const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
+        if (!officialName) return '';
         const prefix = [
             card?.effective_shiny_state === 'yes' ? '色違' : '',
             card?.effective_rocket_state === 'shadow' ? '暗影' : '',
@@ -1040,10 +1059,11 @@
         let recognizedCount = 0;
 
         (Array.isArray(cards) ? cards : []).forEach(card => {
-            const officialName = normalizeWith(normalizeOfficialName, card?.official_name);
+            const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
             if (!hasUsableRecognizedSpecies(card) || !officialName) return;
 
             const displayName = buildHundoDisplayName(card, normalizeOfficialName);
+            if (!displayName) return;
             displayGroups.set(displayName, (displayGroups.get(displayName) || 0) + 1);
             recognizedCount += 1;
         });

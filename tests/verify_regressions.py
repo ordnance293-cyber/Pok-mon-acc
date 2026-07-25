@@ -92,6 +92,10 @@ def assert_manual_acceptance_doc() -> None:
     document = normalized_source(MANUAL_ACCEPTANCE_DOC)
     for fragment in (
         "hundo_leg=3\npokemon_list=鳳王,哲爾尼亞斯,雷吉奇卡斯",
+        "藏瑪然特*2,拉帝亞斯,蒼響,固拉多,酋雷姆",
+        "鳳王*2,閃電鳥,蒼響,蓋歐卡,炎帝",
+        "12+ full/partial cards all represented",
+        "strong two-card overlap removed; legitimate duplicates retained",
         "固拉多*3",
         "固拉多,色違固拉多,特別背卡固拉多",
     ):
