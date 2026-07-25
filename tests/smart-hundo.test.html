@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Smart hundo helper tests</title>
+  <script src="../trainer-team-helpers.js"></script>
   <script src="../smart-hundo-helpers.js"></script>
 </head>
 <body data-test-status="running">
@@ -103,6 +104,27 @@
       const asyncTest = async (name, callback) => {
         await callback();
         results.push(`PASS ${name}`);
+      };
+      const trainerContractFailures = [];
+      const trainerContractTest = (name, callback) => {
+        try {
+          callback();
+          results.push(`PASS trainer-team integration: ${name}`);
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          trainerContractFailures.push({ name, message });
+          results.push(`FAIL trainer-team integration: ${name}: ${message}`);
+        }
+      };
+      const trainerContractAsyncTest = async (name, callback) => {
+        try {
+          await callback();
+          results.push(`PASS trainer-team integration: ${name}`);
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          trainerContractFailures.push({ name, message });
+          results.push(`FAIL trainer-team integration: ${name}: ${message}`);
+        }
       };
       const sparkleEvidence = (overrides = {}) => ({
         present: false,
@@ -1841,19 +1863,46 @@
 
         const nativeCreateElement = document.createElement.bind(document);
         let inlineHundoInputCalls = 0;
-        ['g_hundos', 'st_hundo_leg', 'aiAutoStatus', 'aiAutoBtn'].forEach(id => {
-          const element = nativeCreateElement(id === 'g_hundos' ? 'textarea' : id === 'aiAutoStatus' ? 'p' : id === 'aiAutoBtn' ? 'button' : 'input');
+        ['g_hundos', 'st_hundo_leg', 'g_team', 'trainerTeamStatus', 'aiAutoStatus', 'aiAutoBtn', 'imageInput', 'imagePreviewContainer'].forEach(id => {
+          const tagName = id === 'g_hundos'
+            ? 'textarea'
+            : id === 'g_team'
+              ? 'select'
+              : ['trainerTeamStatus', 'aiAutoStatus'].includes(id)
+                ? 'p'
+                : id === 'aiAutoBtn'
+                  ? 'button'
+                  : id === 'imagePreviewContainer'
+                    ? 'div'
+                    : 'input';
+          const element = nativeCreateElement(tagName);
           element.id = id;
+          if (id === 'imageInput') element.type = 'file';
+          if (id === 'g_team') {
+            [
+              ['', '請手動確認'],
+              ['黃隊', '黃隊'],
+              ['藍隊', '藍隊'],
+              ['紅隊', '紅隊']
+            ].forEach(([value, label]) => {
+              const option = nativeCreateElement('option');
+              option.value = value;
+              option.textContent = label;
+              element.appendChild(option);
+            });
+          }
           document.body.appendChild(element);
         });
         document.getElementById('g_hundos').oninput = () => { inlineHundoInputCalls += 1; };
         let canvasCalls = 0;
         const canvasRecords = [];
+        const canvasDrawRecords = [];
         let lastPayload = null;
         let countRequestCount = 0;
         const fileReadCounts = new Map();
         const resizedByOriginal = new Map();
         const countRegionByOriginal = new Map();
+        const trainerTeamEvidenceByOriginal = new Map();
         const originalDataUrl = 'data:image/png;base64,SMART_ORIGINAL_DO_NOT_EXPOSE';
         const resizedUrl = 'data:image/jpeg;base64,RESIZED';
         const countRegionUrl = 'data:image/png;base64,HUNDO_COUNT_REGION_SENTINEL';
@@ -1863,7 +1912,8 @@
           'pokemon_go_image_classifier',
           'pokemon_go_forced_field_extractor',
           'pokemon_go_hundo_count_extractor',
-          'pokemon_go_hundo_smart_extractor_v2'
+          'pokemon_go_hundo_smart_extractor_v2',
+          'pokemon_go_trainer_team_fixed_ui_extractor'
         ]);
         const installStrictOpenAiFetchMock = (responder) => {
           globalThis.fetch = async (url, options = {}) => {
@@ -1911,6 +1961,7 @@
           canvasCalls += 1;
           let drawnImage = null;
           let drawArguments = [];
+          const drawCalls = [];
           const canvas = {
             width: 0,
             height: 0,
@@ -1918,6 +1969,12 @@
               drawImage: (...drawArgs) => {
                 [drawnImage] = drawArgs;
                 drawArguments = drawArgs.slice(1);
+                const drawRecord = {
+                  source: drawnImage?.source,
+                  drawArguments: [...drawArguments]
+                };
+                drawCalls.push(drawRecord);
+                canvasDrawRecords.push(drawRecord);
               }
             }),
             toDataURL: (type, quality) => {
@@ -1929,6 +1986,10 @@
                 type,
                 quality
               });
+              if (type === 'image/png' && drawCalls.length === 2) {
+                return trainerTeamEvidenceByOriginal.get(drawCalls[0]?.source)
+                  || 'data:image/png;base64,TEAM_EVIDENCE_SENTINEL';
+              }
               return type === 'image/png'
                 ? countRegionByOriginal.get(drawnImage?.source) || countRegionUrl
                 : resizedByOriginal.get(drawnImage?.source) || resizedUrl;
@@ -1949,7 +2010,17 @@
           if (schemaName === 'pokemon_go_hundo_count_extractor') countRequestCount += 1;
           const content = schemaName === 'pokemon_go_hundo_count_extractor'
             ? validCount('(3)', '3')
-            : {
+            : schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor'
+              ? {
+                model_team_candidate: 'yellow',
+                model_confidence: 0.99,
+                level_number: { visibility: 'clear', color: 'yellow' },
+                xp_bar_fill: { visibility: 'clear', color: 'yellow' },
+                xp_value_text: { visibility: 'clear', color: 'yellow' },
+                profile_name_block: { visibility: 'clear', color: 'yellow' },
+                arrow_or_progress_accent: { visibility: 'clear', color: 'yellow' }
+              }
+              : {
               detected_card_count: 0,
               scan_complete: true,
               bottom_edge_checked: true,
@@ -1966,8 +2037,211 @@
 
         const pageModule = moduleMatch[1]
           .replace(/^\s*import\s+[^;]+;\s*$/gm, '')
-          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV2, requestSmartHundoWithStructuralRetry, smartHundoScan, normalizeAiClassification, beginSmartHundoScanSession, markSmartHundoAiValue, handleSmartHundoManualEdit, isCurrentSmartHundoSession, publishSmartHundoDiagnostics, setSmartHundoStatus });';
+          + `\nObject.assign(globalThis, {
+            OPENAI_CHAT_COMPLETIONS_URL,
+            HUNDO_SMART_IMAGE_DETAIL,
+            HUNDO_SMART_SCHEMA,
+            HUNDO_COUNT_SCHEMA,
+            buildSmartHundoPrompt,
+            buildHundoCountPrompt,
+            fileToOriginalDataUrl,
+            fileToResizedDataUrl,
+            fileToHundoCountRegionDataUrl,
+            buildAiRequestContent,
+            requestOpenAiJsonSchema,
+            requestHundoCountExtraction,
+            requestSmartHundoExtractionV2,
+            requestSmartHundoWithStructuralRetry,
+            smartHundoScan,
+            normalizeAiClassification,
+            beginSmartHundoScanSession,
+            markSmartHundoAiValue,
+            handleSmartHundoManualEdit,
+            isCurrentSmartHundoSession,
+            publishSmartHundoDiagnostics,
+            setSmartHundoStatus,
+            TRAINER_TEAM_SCHEMA: typeof TRAINER_TEAM_SCHEMA === 'undefined' ? undefined : TRAINER_TEAM_SCHEMA,
+            buildTrainerTeamPrompt: typeof buildTrainerTeamPrompt === 'undefined' ? undefined : buildTrainerTeamPrompt,
+            buildTrainerTeamEvidenceImage: typeof buildTrainerTeamEvidenceImage === 'undefined' ? undefined : buildTrainerTeamEvidenceImage,
+            requestTrainerTeamExtraction: typeof requestTrainerTeamExtraction === 'undefined' ? undefined : requestTrainerTeamExtraction,
+            runTrainerTeamScan: typeof runTrainerTeamScan === 'undefined' ? undefined : runTrainerTeamScan,
+            beginTrainerTeamScan: typeof beginTrainerTeamScan === 'undefined' ? undefined : beginTrainerTeamScan,
+            markTrainerTeamAiValue: typeof markTrainerTeamAiValue === 'undefined' ? undefined : markTrainerTeamAiValue,
+            handleTrainerTeamManualEdit: typeof handleTrainerTeamManualEdit === 'undefined' ? undefined : handleTrainerTeamManualEdit,
+            isCurrentTrainerTeamScan: typeof isCurrentTrainerTeamScan === 'undefined' ? undefined : isCurrentTrainerTeamScan,
+            publishTrainerTeamDiagnostics: typeof publishTrainerTeamDiagnostics === 'undefined' ? undefined : publishTrainerTeamDiagnostics,
+            setTrainerTeamStatus: typeof setTrainerTeamStatus === 'undefined' ? undefined : setTrainerTeamStatus
+          });`;
         (0, eval)(pageModule);
+
+        const requiredTrainerProductionContracts = [
+          'TRAINER_TEAM_SCHEMA',
+          'buildTrainerTeamPrompt',
+          'buildTrainerTeamEvidenceImage',
+          'requestTrainerTeamExtraction',
+          'runTrainerTeamScan',
+          'beginTrainerTeamScan',
+          'markTrainerTeamAiValue',
+          'handleTrainerTeamManualEdit',
+          'isCurrentTrainerTeamScan',
+          'publishTrainerTeamDiagnostics',
+          'setTrainerTeamStatus'
+        ];
+        const requireTrainerProductionContract = (name) => {
+          const value = globalThis[name];
+          if (value === undefined) fail(`missing production contract ${name}`);
+          return value;
+        };
+        const trainerTeamEvidence = (color = 'yellow', overrides = {}) => ({
+          model_team_candidate: color,
+          model_confidence: 0.99,
+          level_number: { visibility: 'clear', color },
+          xp_bar_fill: { visibility: 'clear', color },
+          xp_value_text: { visibility: 'clear', color },
+          profile_name_block: { visibility: 'clear', color },
+          arrow_or_progress_accent: { visibility: 'clear', color },
+          ...overrides
+        });
+        const uncertainTrainerTeamEvidence = () => trainerTeamEvidence('uncertain', {
+          model_confidence: 0.4,
+          level_number: { visibility: 'hidden', color: 'uncertain' },
+          xp_bar_fill: { visibility: 'partial', color: 'uncertain' },
+          xp_value_text: { visibility: 'uncertain', color: 'uncertain' },
+          profile_name_block: { visibility: 'hidden', color: 'uncertain' },
+          arrow_or_progress_accent: { visibility: 'hidden', color: 'uncertain' }
+        });
+
+        trainerContractTest('exposes every dedicated page contract without a production shim', () => {
+          const missing = requiredTrainerProductionContracts.filter(name => globalThis[name] === undefined);
+          deepEqual(missing, [], `missing dedicated page contracts: ${missing.join(', ')}`);
+        });
+
+        trainerContractTest('defines the exact strict seven-property fixed-UI schema', () => {
+          const schema = requireTrainerProductionContract('TRAINER_TEAM_SCHEMA');
+          const propertyNames = [
+            'model_team_candidate',
+            'model_confidence',
+            'level_number',
+            'xp_bar_fill',
+            'xp_value_text',
+            'profile_name_block',
+            'arrow_or_progress_accent'
+          ];
+          const evidenceNames = propertyNames.slice(2);
+          const colorEnum = ['yellow', 'blue', 'red', 'uncertain'];
+          const visibilityEnum = ['clear', 'partial', 'hidden', 'uncertain'];
+          equal(schema.name, 'pokemon_go_trainer_team_fixed_ui_extractor');
+          equal(schema.strict, true);
+          equal(schema.schema.type, 'object');
+          equal(schema.schema.additionalProperties, false);
+          deepEqual(Object.keys(schema.schema.properties), propertyNames);
+          deepEqual(schema.schema.required, propertyNames);
+          deepEqual(schema.schema.properties.model_team_candidate.enum, colorEnum);
+          evidenceNames.forEach(name => {
+            const evidenceSchema = schema.schema.properties[name];
+            equal(evidenceSchema.type, 'object', `${name} is an object`);
+            equal(evidenceSchema.additionalProperties, false, `${name} forbids unknown keys`);
+            deepEqual(Object.keys(evidenceSchema.properties), ['visibility', 'color'], `${name} property order`);
+            deepEqual(evidenceSchema.required, ['visibility', 'color'], `${name} required keys`);
+            deepEqual(evidenceSchema.properties.visibility.enum, visibilityEnum, `${name} visibility enum`);
+            deepEqual(evidenceSchema.properties.color.enum, colorEnum, `${name} color enum`);
+          });
+        });
+
+        trainerContractTest('prompts only from fixed UI and includes every exclusion and counterexample', () => {
+          const prompt = requireTrainerProductionContract('buildTrainerTeamPrompt')();
+          [
+            'large level number',
+            'XP bar fill',
+            'XP numeric text',
+            'profile-name block',
+            'XP-side arrow',
+            'plus',
+            'high-level accent',
+            'Buddy Pokémon',
+            'species',
+            'body',
+            'outline',
+            'Shadow smoke',
+            'Shadow aura',
+            'shiny',
+            'Dynamax',
+            'Gigantamax',
+            'avatar',
+            'clothing',
+            'hair',
+            'rewards',
+            'items',
+            'lower green buttons',
+            'status bar',
+            'clock',
+            'battery',
+            'Dynamic Island',
+            '自己',
+            'underline',
+            'dominant image color',
+            'central foreground',
+            'central background',
+            'large foreground objects',
+            'outer background',
+            'watermark',
+            'diagnostic context only',
+            'crop percentages',
+            'focusing defaults',
+            'missing components',
+            'uncertain',
+            'yellow UI + blue Dialga',
+            'yellow UI + red Groudon',
+            'purple Shadow smoke',
+            'blue UI + black/blue Necrozma',
+            'red UI + blue/gold Zamazenta',
+            'body color never overrides fixed UI'
+          ].forEach(fragment => equal(prompt.includes(fragment), true, `trainer prompt protects ${fragment}`));
+          equal(prompt.includes('yellow UI + blue Dialga → yellow'), true);
+          equal(prompt.includes('yellow UI + red Groudon/purple Shadow smoke → yellow'), true);
+          equal(prompt.includes('blue UI + black/blue Necrozma → blue'), true);
+          equal(prompt.includes('red UI + blue/gold Zamazenta → red'), true);
+        });
+
+        await trainerContractAsyncTest('builds the two-region native-resolution lossless PNG and rejects load failure', async () => {
+          const buildEvidenceImage = requireTrainerProductionContract('buildTrainerTeamEvidenceImage');
+          const source = 'data:image/png;base64,ORIGINAL_TEAM_DIRECT';
+          const expectedComposite = 'data:image/png;base64,TEAM_EVIDENCE_DIRECT';
+          trainerTeamEvidenceByOriginal.set(source, expectedComposite);
+          const drawStart = canvasDrawRecords.length;
+          const canvasStart = canvasRecords.length;
+          const composite = await buildEvidenceImage(source);
+          equal(composite, expectedComposite);
+          equal(canvasRecords.length, canvasStart + 1, 'one composite canvas is encoded');
+          deepEqual(canvasRecords.at(-1), {
+            width: 1600,
+            height: 504,
+            source,
+            drawArguments: [0, 495, 1600, 306, 0, 198, 1600, 306],
+            type: 'image/png',
+            quality: undefined
+          });
+          deepEqual(canvasDrawRecords.slice(drawStart), [
+            {
+              source,
+              drawArguments: [32, 99, 1216, 198, 0, 0, 1216, 198]
+            },
+            {
+              source,
+              drawArguments: [0, 495, 1600, 306, 0, 198, 1600, 306]
+            }
+          ], 'named percentage defaults produce two independent native-resolution draws');
+          equal(canvasRecords.at(-1).width === 1000, false, 'trainer evidence never enters the 1000 px path');
+          equal(canvasRecords.at(-1).type === 'image/jpeg', false, 'trainer evidence never uses JPEG');
+
+          const failedCanvasStart = canvasRecords.length;
+          await assertRejects(
+            buildEvidenceImage('data:image/png;base64,TEAM_EVIDENCE_IMAGE_ERROR'),
+            '載入圖片失敗',
+            'TEAM_EVIDENCE_IMAGE_ERROR'
+          );
+          equal(canvasRecords.length, failedCanvasStart, 'load failure has no whole-image or JPEG fallback');
+        });
 
         equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
         equal(canvasCalls, 0);
@@ -2353,6 +2627,60 @@
           equal(document.getElementById('aiAutoStatus').textContent, '目前 session 狀態');
         });
 
+        trainerContractTest('owns only g_team and preserves manual changes across uncertain and stale writes', () => {
+          const beginTeamScan = requireTrainerProductionContract('beginTrainerTeamScan');
+          const markTeamValue = requireTrainerProductionContract('markTrainerTeamAiValue');
+          const handleManualEdit = requireTrainerProductionContract('handleTrainerTeamManualEdit');
+          const isCurrentTeamScan = requireTrainerProductionContract('isCurrentTrainerTeamScan');
+          const publishDiagnostics = requireTrainerProductionContract('publishTrainerTeamDiagnostics');
+          const writeTeamStatus = requireTrainerProductionContract('setTrainerTeamStatus');
+          const teamInput = document.getElementById('g_team');
+          const teamStatus = document.getElementById('trainerTeamStatus');
+
+          teamInput.value = '';
+          const firstScan = beginTeamScan();
+          equal(markTeamValue('黃隊', firstScan), true);
+          equal(teamInput.value, '黃隊');
+          const secondScan = beginTeamScan();
+          equal(secondScan > firstScan, true, 'trainer scan IDs are monotonic');
+          equal(teamInput.value, '', 'a new scan clears only an unchanged AI-owned team');
+          equal(isCurrentTeamScan(secondScan), true);
+          equal(isCurrentTeamScan(firstScan), false);
+
+          teamInput.value = '紅隊';
+          teamInput.dispatchEvent(new Event('change'));
+          equal(handleManualEdit(), true, 'manual edit handler owns only the team select');
+          const thirdScan = beginTeamScan();
+          equal(teamInput.value, '紅隊', 'uncertain/new scans preserve a user-selected team');
+          equal(markTeamValue('黃隊', secondScan), false, 'older team scans cannot overwrite a manual team');
+          equal(teamInput.value, '紅隊');
+
+          const currentDiagnostics = { scan_id: String(thirdScan), applied_to_form: false };
+          const staleDiagnostics = { scan_id: String(secondScan), applied_to_form: true };
+          equal(publishDiagnostics(thirdScan, currentDiagnostics), true);
+          equal(writeTeamStatus(thirdScan, '隊伍需人工確認：固定 UI 證據不足'), true);
+          equal(publishDiagnostics(secondScan, staleDiagnostics), false);
+          equal(writeTeamStatus(secondScan, '隊伍辨識完成：黃隊'), false);
+          equal(window.lastTrainerTeamDiagnostics, currentDiagnostics);
+          equal(teamStatus.textContent, '隊伍需人工確認：固定 UI 證據不足');
+
+          teamInput.value = '';
+          const fourthScan = beginTeamScan();
+          equal(markTeamValue('黃隊', fourthScan), true);
+          teamInput.value = '紅隊';
+          teamInput.dispatchEvent(new Event('change'));
+          const fifthScan = beginTeamScan();
+          equal(fifthScan > fourthScan, true);
+          equal(teamInput.value, '紅隊', 'change removes AI ownership before the next scan');
+        });
+
+        trainerContractTest('renders an explicit manual-confirmation option and dedicated status in production markup', () => {
+          equal(indexHtml.includes('id="trainerTeamStatus"'), true, 'production includes the dedicated status element');
+          const selectMatch = indexHtml.match(/<select[^>]+id="g_team"[^>]*>([\s\S]*?)<\/select>/);
+          if (!selectMatch) fail('production team select is missing');
+          equal(/<option\s+value=""[^>]*>/.test(selectMatch[1]), true, 'team select starts with an empty manual-confirmation option');
+        });
+
         const makeFile = (id) => ({
           id,
           type: 'image/png',
@@ -2363,6 +2691,7 @@
           files.forEach(file => {
             resizedByOriginal.set(file.dataUrl, `data:image/jpeg;base64,RESIZED_${file.id}`);
             countRegionByOriginal.set(file.dataUrl, `data:image/png;base64,HUNDO_COUNT_REGION_${file.id}`);
+            trainerTeamEvidenceByOriginal.set(file.dataUrl, `data:image/png;base64,TEAM_EVIDENCE_${file.id}`);
           });
           Object.defineProperty(document.getElementById('imageInput'), 'files', {
             configurable: true,
@@ -2379,6 +2708,15 @@
         });
         const classificationByImage = {
           PROFILE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_YELLOW: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_YELLOW_B: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_UNCERTAIN: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_BLUE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_FAILURE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_DELAYED_OLD: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_CURRENT_BLUE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_MANUAL_PENDING: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_SELECTION_INVALIDATED: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' },
           SHINY_LEGENDARY: { image_type: 'SHINY_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色' },
           EXACT_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '　傳說的寶可夢， 幻， 究極異獸 ＆ ４＊ ' },
@@ -2413,8 +2751,14 @@
           UNRECOGNIZED_ONLY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
           POLLUTED_NAME: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
         };
-        const extractionForPrompt = (prompt) => {
-          if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) return { level: '50', team: '紅隊', xp: '3500000' };
+        const extractionForPrompt = (prompt, identity = '') => {
+          if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) {
+            return {
+              level: '50',
+              team: identity.startsWith('TEAM_') ? '藍隊' : '紅隊',
+              xp: '3500000'
+            };
+          }
           if (prompt.includes('image_type = SHINY_CATEGORY_SCREEN')) return { shiny: '77' };
           if (prompt.includes('image_type = SHINY_LEGENDARY_SCREEN')) return { shiny_leg: '12' };
           if (prompt.includes('image_type = OLD_POKEMON_SCREEN')) return { old_poke: '42' };
@@ -2446,6 +2790,12 @@
         let failedOperations = new Set();
         let failedOperationErrorNames = new Map();
         let failedClassificationIdentities = new Set();
+        let trainerTeamResultByImage = new Map();
+        let failedTrainerTeamIdentities = new Set();
+        let delayedTrainerTeamIdentity = '';
+        let releaseDelayedTrainerTeam = null;
+        let notifyDelayedTrainerTeam = null;
+        let delayedTrainerTeamReleased = false;
         let delayedClassificationIdentity = '';
         let releaseDelayedClassification = null;
         let notifyDelayedClassification = null;
@@ -2464,7 +2814,7 @@
           const prompt = payload.messages[0].content[0].text;
           const imageUrl = payload.messages[0].content[1].image_url.url;
           const detail = payload.messages[0].content[1].image_url.detail;
-          routedRequests.push({ schemaName, prompt, imageUrl, detail });
+          routedRequests.push({ schemaName, prompt, imageUrl, detail, payload });
           requestStageEvents.push({ event: 'start', schemaName });
           if (schemaName === 'pokemon_go_image_classifier') {
             const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
@@ -2520,6 +2870,28 @@
               : configured;
             return openAiResponse(content, () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
+          if (schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor') {
+            const identity = imageUrl.match(/TEAM_EVIDENCE_(.+)$/)?.[1];
+            if (identity === delayedTrainerTeamIdentity && !delayedTrainerTeamReleased) {
+              await new Promise(resolve => {
+                releaseDelayedTrainerTeam = () => {
+                  delayedTrainerTeamReleased = true;
+                  resolve();
+                };
+                notifyDelayedTrainerTeam?.();
+              });
+            }
+            if (failedTrainerTeamIdentities.has(identity)) {
+              const error = new Error('TEAM_REQUEST_SECRET test-key Authorization data:image/png;base64,RAW_RESPONSE');
+              error.name = 'SECRET_TEAM_ERROR_NAME';
+              error.httpStatus = 503;
+              throw error;
+            }
+            return openAiResponse(
+              trainerTeamResultByImage.get(identity) || trainerTeamEvidence('yellow'),
+              () => requestStageEvents.push({ event: 'finish', schemaName })
+            );
+          }
           if (schemaName === 'pokemon_go_forced_field_extractor') {
             const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
             if (identity === delayedOrdinaryIdentity) {
@@ -2528,7 +2900,7 @@
                 notifyDelayedOrdinary?.();
               });
             }
-            return openAiResponse(extractionForPrompt(prompt), () => requestStageEvents.push({ event: 'finish', schemaName }));
+            return openAiResponse(extractionForPrompt(prompt, identity), () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           fail(`unexpected schema ${schemaName}`);
         });
@@ -2541,6 +2913,12 @@
           failedOperations = new Set();
           failedOperationErrorNames = new Map();
           failedClassificationIdentities = new Set();
+          trainerTeamResultByImage = new Map();
+          failedTrainerTeamIdentities = new Set();
+          delayedTrainerTeamIdentity = '';
+          releaseDelayedTrainerTeam = null;
+          notifyDelayedTrainerTeam = null;
+          delayedTrainerTeamReleased = false;
           delayedClassificationIdentity = '';
           releaseDelayedClassification = null;
           notifyDelayedClassification = null;
@@ -2554,6 +2932,349 @@
           delayedCardReleased = false;
           alertMessages = [];
         };
+
+        await trainerContractAsyncTest('sends one high-detail strict request and validates fixed evidence instead of a model team scalar', async () => {
+          const requestTeam = requireTrainerProductionContract('requestTrainerTeamExtraction');
+          resetScanScenario();
+          trainerTeamResultByImage.set('DIRECT_REQUEST', trainerTeamEvidence('yellow'));
+          const response = await requestTeam(
+            'test-key',
+            'data:image/png;base64,TEAM_EVIDENCE_DIRECT_REQUEST',
+            7,
+            null
+          );
+          const requests = routedRequests.filter(request => request.schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor');
+          equal(requests.length, 1, 'dedicated extraction sends one HTTP request');
+          equal(requests[0].imageUrl, 'data:image/png;base64,TEAM_EVIDENCE_DIRECT_REQUEST');
+          equal(requests[0].detail, 'high');
+          equal(requests[0].payload.model, 'gpt-4.1-mini', 'dedicated extraction keeps OPENAI_MODEL unchanged');
+          deepEqual(requests[0].payload.response_format.json_schema, TRAINER_TEAM_SCHEMA, 'request sends the exact strict schema');
+          equal(response.screenshot_index, 7);
+          equal(response.valid, true);
+          equal(response.effective_color, 'yellow');
+          equal(response.effective_team, '黃隊');
+          equal(Object.hasOwn(response, 'team'), false, 'no Chinese model scalar is trusted or returned');
+          deepEqual(Object.keys(response.fixed_ui_evidence), [
+            'level_number',
+            'xp_bar_fill',
+            'xp_value_text',
+            'profile_name_block',
+            'arrow_or_progress_accent'
+          ]);
+        });
+
+        await trainerContractAsyncTest('caps a failed dedicated extraction at one HTTP attempt', async () => {
+          const requestTeam = requireTrainerProductionContract('requestTrainerTeamExtraction');
+          const previousFetch = globalThis.fetch;
+          let failedHttpCalls = 0;
+          installStrictOpenAiFetchMock(async ({ schemaName }) => {
+            equal(schemaName, 'pokemon_go_trainer_team_fixed_ui_extractor');
+            failedHttpCalls += 1;
+            const error = new Error('TEAM_REQUEST_FAILURE');
+            error.httpStatus = 503;
+            throw error;
+          });
+          try {
+            await assertRejects(
+              requestTeam(
+                'test-key',
+                'data:image/png;base64,TEAM_EVIDENCE_REQUEST_FAILURE',
+                0,
+                null
+              ),
+              'TEAM_REQUEST_FAILURE'
+            );
+            equal(failedHttpCalls, 1, 'maxRetries: 1 prohibits a second HTTP attempt');
+          } finally {
+            globalThis.fetch = previousFetch;
+          }
+        });
+
+        await trainerContractAsyncTest('isolates ordinary profile level and XP from dedicated yellow team authority', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          setScanFiles(['TEAM_YELLOW']);
+          trainerTeamResultByImage.set('TEAM_YELLOW', trainerTeamEvidence('yellow'));
+          document.getElementById('g_level').value = '';
+          document.getElementById('g_xp').value = '';
+          document.getElementById('g_team').value = '';
+
+          await autoScan();
+
+          const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
+          const teamRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor');
+          equal(document.getElementById('g_level').value, '50', 'ordinary level remains unchanged');
+          equal(document.getElementById('g_xp').value, '350', 'ordinary XP normalization remains unchanged');
+          equal(document.getElementById('g_team').value, '黃隊', 'only dedicated fixed evidence writes team');
+          equal(document.getElementById('trainerTeamStatus').textContent, '隊伍辨識完成：黃隊');
+          equal(ordinaryRequests.length >= 1, true);
+          equal(ordinaryRequests.every(request => !request.prompt.includes('team')), true, 'ordinary prompt and retries never request team');
+          equal(
+            ordinaryRequests.every(request => !Object.hasOwn(request.payload.response_format.json_schema.schema.properties, 'team')),
+            true,
+            'ordinary structured output has no team authority'
+          );
+          equal(teamRequests.length, 1, 'one team schema request exists per profile screenshot');
+          equal(fileReadCounts.get('TEAM_YELLOW'), 2, 'profile is read once for ordinary resize and once for original team evidence');
+          equal(teamRequests[0].imageUrl, 'data:image/png;base64,TEAM_EVIDENCE_TEAM_YELLOW');
+          equal(teamRequests[0].detail, 'high');
+        });
+
+        await trainerContractAsyncTest('merges agreeing yellow profile screenshots without combining evidence elements', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          setScanFiles(['TEAM_YELLOW', 'TEAM_YELLOW_B']);
+          trainerTeamResultByImage.set('TEAM_YELLOW', trainerTeamEvidence('yellow'));
+          trainerTeamResultByImage.set('TEAM_YELLOW_B', trainerTeamEvidence('yellow', {
+            profile_name_block: { visibility: 'hidden', color: 'uncertain' }
+          }));
+          document.getElementById('g_team').value = '';
+
+          await autoScan();
+
+          const teamRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor');
+          equal(document.getElementById('g_team').value, '黃隊');
+          equal(teamRequests.length, 2, 'each screenshot gets one independent team request');
+          deepEqual(teamRequests.map(request => request.imageUrl), [
+            'data:image/png;base64,TEAM_EVIDENCE_TEAM_YELLOW',
+            'data:image/png;base64,TEAM_EVIDENCE_TEAM_YELLOW_B'
+          ]);
+          deepEqual(
+            window.lastTrainerTeamDiagnostics.screenshots.map(screenshot => screenshot.index),
+            [0, 1],
+            'per-screenshot evidence remains independent'
+          );
+        });
+
+        await trainerContractAsyncTest('uses one valid yellow screenshot while keeping uncertain evidence independent and unselected', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          setScanFiles(['TEAM_UNCERTAIN', 'TEAM_YELLOW']);
+          trainerTeamResultByImage.set('TEAM_UNCERTAIN', uncertainTrainerTeamEvidence());
+          trainerTeamResultByImage.set('TEAM_YELLOW', trainerTeamEvidence('yellow'));
+          document.getElementById('g_team').value = '';
+
+          await autoScan();
+
+          equal(document.getElementById('g_team').value, '黃隊');
+          equal(
+            window.lastTrainerTeamDiagnostics.screenshots.find(screenshot => screenshot.index === 0).effective_color,
+            'uncertain'
+          );
+          equal(
+            window.lastTrainerTeamDiagnostics.screenshots.find(screenshot => screenshot.index === 1).effective_color,
+            'yellow'
+          );
+
+          resetScanScenario();
+          setScanFiles(['TEAM_UNCERTAIN']);
+          trainerTeamResultByImage.set('TEAM_UNCERTAIN', uncertainTrainerTeamEvidence());
+          document.getElementById('g_team').value = '';
+          await autoScan();
+          equal(document.getElementById('g_team').value, '', 'fully uncertain evidence never defaults to blue');
+          equal(document.getElementById('trainerTeamStatus').textContent, '隊伍需人工確認：固定 UI 證據不足');
+        });
+
+        await trainerContractAsyncTest('keeps yellow-blue conflicts unresolved without upload-order dependence', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          const runConflict = async (ids) => {
+            resetScanScenario();
+            setScanFiles(ids);
+            trainerTeamResultByImage.set('TEAM_YELLOW', trainerTeamEvidence('yellow'));
+            trainerTeamResultByImage.set('TEAM_BLUE', trainerTeamEvidence('blue'));
+            document.getElementById('g_team').value = '';
+            await autoScan();
+            return {
+              value: document.getElementById('g_team').value,
+              reasons: [...window.lastTrainerTeamDiagnostics.validation_reasons],
+              status: document.getElementById('trainerTeamStatus').textContent
+            };
+          };
+
+          const forward = await runConflict(['TEAM_YELLOW', 'TEAM_BLUE']);
+          const reverse = await runConflict(['TEAM_BLUE', 'TEAM_YELLOW']);
+          deepEqual(forward, reverse, 'team conflict outcome does not depend on upload order');
+          equal(forward.value, '', 'conflicting valid teams never write the select');
+          equal(forward.reasons.includes('team_conflict'), true);
+          equal(forward.status, '隊伍需人工確認：多張截圖的固定 UI 隊伍結果互相衝突');
+        });
+
+        await trainerContractAsyncTest('keeps level and XP when the dedicated team request fails once', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          setScanFiles(['TEAM_FAILURE']);
+          failedTrainerTeamIdentities.add('TEAM_FAILURE');
+          document.getElementById('g_level').value = '';
+          document.getElementById('g_xp').value = '';
+          document.getElementById('g_team').value = '紅隊';
+          document.getElementById('g_team').dispatchEvent(new Event('change'));
+          const logStart = loggedValues.length;
+
+          await autoScan();
+
+          equal(document.getElementById('g_level').value, '50');
+          equal(document.getElementById('g_xp').value, '350');
+          equal(document.getElementById('g_team').value, '紅隊', 'failed team evidence preserves a manual team');
+          equal(
+            routedRequests.filter(request => request.schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor').length,
+            1,
+            'failed team extraction is never retried'
+          );
+          const failureSummaries = loggedValues.slice(logStart).flat(2).filter(value => (
+            value && typeof value === 'object' && value.reasonCode
+          ));
+          equal(failureSummaries.length >= 1, true);
+          failureSummaries.forEach(summary => {
+            deepEqual(Object.keys(summary), ['stage', 'name', 'httpStatus', 'reasonCode']);
+            equal(summary.stage, 'trainer_team');
+            equal(summary.name, 'Error');
+            equal(summary.httpStatus, 503);
+          });
+        });
+
+        await trainerContractAsyncTest('lets a manual team edit win while the current request is pending', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          delayedTrainerTeamIdentity = 'TEAM_MANUAL_PENDING';
+          setScanFiles(['TEAM_MANUAL_PENDING']);
+          trainerTeamResultByImage.set('TEAM_MANUAL_PENDING', trainerTeamEvidence('yellow'));
+          document.getElementById('g_team').value = '';
+          const requestReached = new Promise(resolve => { notifyDelayedTrainerTeam = resolve; });
+          const pendingScan = autoScan();
+          await requestReached;
+
+          document.getElementById('g_team').value = '紅隊';
+          document.getElementById('g_team').dispatchEvent(new Event('change'));
+          releaseDelayedTrainerTeam();
+          await pendingScan;
+
+          equal(document.getElementById('g_team').value, '紅隊');
+          equal(window.lastTrainerTeamDiagnostics.applied_to_form, false);
+        });
+
+        await trainerContractAsyncTest('prevents an older delayed team scan from replacing newer form status or diagnostics', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          delayedTrainerTeamIdentity = 'TEAM_DELAYED_OLD';
+          setScanFiles(['TEAM_DELAYED_OLD']);
+          trainerTeamResultByImage.set('TEAM_DELAYED_OLD', trainerTeamEvidence('yellow'));
+          const requestReached = new Promise(resolve => { notifyDelayedTrainerTeam = resolve; });
+          const oldScan = autoScan();
+          await requestReached;
+
+          setScanFiles(['TEAM_CURRENT_BLUE']);
+          trainerTeamResultByImage.set('TEAM_CURRENT_BLUE', trainerTeamEvidence('blue'));
+          await autoScan();
+          const currentDiagnostics = window.lastTrainerTeamDiagnostics;
+          const currentStatus = document.getElementById('trainerTeamStatus').textContent;
+          equal(document.getElementById('g_team').value, '藍隊');
+
+          releaseDelayedTrainerTeam();
+          await oldScan;
+
+          equal(document.getElementById('g_team').value, '藍隊');
+          equal(document.getElementById('trainerTeamStatus').textContent, currentStatus);
+          equal(window.lastTrainerTeamDiagnostics, currentDiagnostics);
+        });
+
+        await trainerContractAsyncTest('invalidates pending team writes when selected images change without resetting Smart Hundo state', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          const smartSession = beginSmartHundoScanSession();
+          const smartDiagnostics = { scan_session_id: String(smartSession), sentinel: 'unchanged' };
+          publishSmartHundoDiagnostics(smartSession, smartDiagnostics);
+          markSmartHundoAiValue('g_hundos', '智慧清單保持', smartSession);
+          delayedTrainerTeamIdentity = 'TEAM_SELECTION_INVALIDATED';
+          setScanFiles(['TEAM_SELECTION_INVALIDATED']);
+          trainerTeamResultByImage.set('TEAM_SELECTION_INVALIDATED', trainerTeamEvidence('yellow'));
+          const requestReached = new Promise(resolve => { notifyDelayedTrainerTeam = resolve; });
+          const pendingScan = autoScan();
+          await requestReached;
+
+          setScanFiles([]);
+          document.getElementById('imageInput').dispatchEvent(new Event('change'));
+          releaseDelayedTrainerTeam();
+          await pendingScan;
+
+          equal(document.getElementById('g_team').value, '', 'changed selection rejects the pending trainer-team value');
+          equal(document.getElementById('g_hundos').value, '智慧清單保持');
+          equal(window.lastSmartHundoDiagnostics, smartDiagnostics);
+        });
+
+        await trainerContractAsyncTest('never calls general resetForm from the team path', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          setScanFiles(['TEAM_YELLOW']);
+          trainerTeamResultByImage.set('TEAM_YELLOW', trainerTeamEvidence('yellow'));
+          let resetFormCalls = 0;
+          const originalResetForm = window.resetForm;
+          window.resetForm = (...args) => {
+            resetFormCalls += 1;
+            return originalResetForm?.(...args);
+          };
+          try {
+            await autoScan();
+          } finally {
+            window.resetForm = originalResetForm;
+          }
+          equal(resetFormCalls, 0);
+        });
+
+        await trainerContractAsyncTest('publishes only allowlisted trainer-team diagnostics and redacts failure logs', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          setScanFiles(['TEAM_YELLOW']);
+          trainerTeamResultByImage.set('TEAM_YELLOW', trainerTeamEvidence('yellow'));
+          await autoScan();
+
+          const diagnostics = window.lastTrainerTeamDiagnostics;
+          const allowedRootKeys = new Set([
+            'scan_id',
+            'scan_run_id',
+            'run_id',
+            'screenshots',
+            'effective_color',
+            'effective_team',
+            'validation_reasons',
+            'conflicts',
+            'applied_to_form'
+          ]);
+          const allowedScreenshotKeys = new Set([
+            'index',
+            'screenshot_index',
+            'model_team_candidate',
+            'model_confidence',
+            'fixed_ui_evidence',
+            'effective_color',
+            'effective_team',
+            'validation_reasons',
+            'conflicts'
+          ]);
+          equal(Object.keys(diagnostics).every(key => allowedRootKeys.has(key)), true, 'root diagnostics use only public fields');
+          equal(
+            diagnostics.screenshots.every(screenshot => Object.keys(screenshot).every(key => allowedScreenshotKeys.has(key))),
+            true,
+            'per-screenshot diagnostics use only public fixed-evidence fields'
+          );
+          equal(['scan_id', 'scan_run_id', 'run_id'].some(key => Object.hasOwn(diagnostics, key)), true, 'diagnostics expose a safe run ID');
+          const serialized = JSON.stringify({
+            diagnostics,
+            logs: loggedValues
+          });
+          [
+            'test-key',
+            'Authorization',
+            'data:image/',
+            'ORIGINAL_',
+            'RESIZED_',
+            'TEAM_EVIDENCE_',
+            'classificationDataUrl',
+            'File',
+            'firebaseConfig',
+            'gasUrl',
+            'password'
+          ].forEach(secret => equal(serialized.includes(secret), false, `trainer diagnostics/logs exclude ${secret}`));
+        });
 
         await asyncTest('canonically routes exactly two arbitrary-order smart jobs through independent V2 count and card operations', async () => {
           resetScanScenario();
