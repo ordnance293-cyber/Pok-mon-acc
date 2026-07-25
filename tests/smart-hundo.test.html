@@ -2002,7 +2002,8 @@
         globalThis.ref = () => ({});
         globalThis.set = async () => {};
         globalThis.push = () => ({});
-        globalThis.onValue = () => {};
+        let inventoryValueListener = null;
+        globalThis.onValue = (_target, callback) => { inventoryValueListener = callback; };
         globalThis.remove = async () => {};
         globalThis.update = async () => {};
         installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
@@ -2548,9 +2549,12 @@
 
         const fixtureIds = [
           'openaiApiKey', 'imageInput', 'aiAutoBtn', 'aiAutoStatus', 'g_hundos',
-          'g_level', 'g_team', 'g_xp', 'g_stardust',
-          'st_hundo_leg', 'st_shiny', 'st_shiny_leg', 'st_coin', 'st_poke_bag', 'st_item_bag',
-          'st_rarecandy', 'st_greenpass', 'st_masterball', 'st_old_poke',
+          'g_id', 'g_level', 'g_team', 'g_price', 'g_xp', 'g_stardust', 'g_rare_list',
+          'g_item_status', 'submitBtn', 'cancelEditBtn',
+          'st_hundo_leg', 'st_legend', 'st_shiny', 'st_shiny_leg', 'st_costume',
+          'st_bg_comm', 'st_bg_special', 'st_dyna', 'st_giga', 'st_perfect',
+          'st_coin', 'st_poke_bag', 'st_item_bag',
+          'st_rarecandy', 'st_greenpass', 'st_masterball', 'st_old_poke', 'st_old_leg',
           ...Array.from({ length: 11 }, (_, index) => `chk_sp_${index + 1}`),
           'chk_kyurem', 'sel_kyurem', 'chk_zamazenta', 'sel_dogs',
           'chk_necrozma', 'sel_necrozma', 'chk_lati', 'sel_lati',
@@ -2559,7 +2563,7 @@
         fixtureIds.forEach(id => {
           if (document.getElementById(id)) return;
           const isStatus = id === 'aiAutoStatus';
-          const isButton = id === 'aiAutoBtn';
+          const isButton = ['aiAutoBtn', 'submitBtn', 'cancelEditBtn'].includes(id);
           const isCheckbox = id.startsWith('chk_');
           const element = nativeCreateElement(isStatus ? 'p' : isButton ? 'button' : id === 'g_hundos' ? 'textarea' : 'input');
           element.id = id;
@@ -2709,8 +2713,10 @@
 
         trainerContractTest('clear-image and reset clear only published trainer-team state', () => {
           const beginTeamScan = requireTrainerProductionContract('beginTrainerTeamScan');
+          const markTeamValue = requireTrainerProductionContract('markTrainerTeamAiValue');
           const publishDiagnostics = requireTrainerProductionContract('publishTrainerTeamDiagnostics');
           const writeTeamStatus = requireTrainerProductionContract('setTrainerTeamStatus');
+          const teamInput = document.getElementById('g_team');
           const teamStatus = document.getElementById('trainerTeamStatus');
 
           const clearScan = beginTeamScan();
@@ -2732,6 +2738,17 @@
             window.resetForm();
             equal(window.lastTrainerTeamDiagnostics, null, 'reset clears trainer-team diagnostics');
             equal(teamStatus.textContent, '', 'reset clears trainer-team status');
+
+            const ownedScan = beginTeamScan();
+            equal(markTeamValue('黃隊', ownedScan), true);
+            window.resetForm();
+            teamInput.value = '黃隊';
+            beginTeamScan();
+            equal(
+              teamInput.value,
+              '黃隊',
+              'reset removes AI ownership so an equal programmatic/manual-context value is preserved'
+            );
           } finally {
             window.togglePage = previousTogglePage;
           }
@@ -2773,6 +2790,7 @@
           TEAM_DELAYED_OLD: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_CURRENT_BLUE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_MANUAL_PENDING: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_EDIT_PENDING: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_SELECTION_INVALIDATED: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' },
           SHINY_LEGENDARY: { image_type: 'SHINY_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色' },
@@ -3236,6 +3254,58 @@
             document.getElementById('trainerTeamStatus').textContent,
             '隊伍已保留手動選擇'
           );
+        });
+
+        await trainerContractAsyncTest('loading an existing account invalidates a delayed trainer-team result without touching Smart state', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          delayedTrainerTeamIdentity = 'TEAM_EDIT_PENDING';
+          setScanFiles(['TEAM_EDIT_PENDING']);
+          trainerTeamResultByImage.set('TEAM_EDIT_PENDING', trainerTeamEvidence('yellow'));
+          inventoryValueListener({
+            val: () => ({
+              existing_red: {
+                accountId: 'EXISTING-RED',
+                team: '紅隊',
+                level: '50',
+                hundos: '智慧清單保持',
+                fullText: '',
+                status: 'active'
+              }
+            })
+          });
+
+          const smartSession = beginSmartHundoScanSession();
+          const smartDiagnostics = { scan_session_id: String(smartSession), sentinel: 'edit-context-unchanged' };
+          publishSmartHundoDiagnostics(smartSession, smartDiagnostics);
+          markSmartHundoAiValue('g_hundos', '智慧清單保持', smartSession);
+          document.getElementById('g_team').value = '';
+          const requestReached = new Promise(resolve => { notifyDelayedTrainerTeam = resolve; });
+          const pendingScan = autoScan();
+          await requestReached;
+
+          const previousTogglePage = window.togglePage;
+          const previousScrollTo = window.scrollTo;
+          window.togglePage = () => {};
+          window.scrollTo = () => {};
+          try {
+            window.editAccount('existing_red');
+          } finally {
+            window.togglePage = previousTogglePage;
+            window.scrollTo = previousScrollTo;
+          }
+          equal(document.getElementById('g_team').value, '紅隊', 'loaded account team is applied immediately');
+          equal(document.getElementById('trainerTeamStatus').textContent, '');
+          equal(window.lastTrainerTeamDiagnostics, null);
+
+          releaseDelayedTrainerTeam();
+          await pendingScan;
+
+          equal(document.getElementById('g_team').value, '紅隊', 'delayed old AI team cannot overwrite loaded account');
+          equal(document.getElementById('trainerTeamStatus').textContent, '');
+          equal(window.lastTrainerTeamDiagnostics, null);
+          equal(document.getElementById('g_hundos').value, '智慧清單保持');
+          equal(window.lastSmartHundoDiagnostics, smartDiagnostics);
         });
 
         await trainerContractAsyncTest('prevents an older delayed team scan from replacing newer form status or diagnostics', async () => {

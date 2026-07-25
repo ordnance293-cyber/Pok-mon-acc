@@ -376,6 +376,15 @@
             }
         };
 
+        const editAccountWithExistingFormBehavior = window.editAccount;
+        window.editAccount = function(uid) {
+            const item = inventoryData.find(entry => entry.uid === uid);
+            if (!item) return;
+            trainerTeamAiValueOwnership = null;
+            invalidateTrainerTeamScan();
+            return editAccountWithExistingFormBehavior(uid);
+        };
+
         window.bulkUpdateAccountIds = async function() {
             if (!confirm('⚠️ 確定要將所有舊帳號代碼中的「空白」替換為「分號 ( ; )」嗎？\n此動作將修改資料庫中的紀錄。')) return;
             
@@ -3001,6 +3010,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
         };
 
         window.resetForm = function() {
+            trainerTeamAiValueOwnership = null;
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
                 if(!['googleSheetId','gasUrl','openaiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
                     if(el.type === 'checkbox') el.checked = false; 
