@@ -1242,6 +1242,73 @@
           deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
         });
 
+        test('never treats consecutive empty partial cards as usable overlap identity', () => {
+          const blankPartial = (cardId, order) => validatedCard({
+            card_id: cardId,
+            order,
+            cp: '',
+            official_name: '',
+            visible_label: '',
+            recognition_status: 'partial',
+            species_confidence: 0,
+            effective_shiny_state: 'uncertain',
+            effective_lucky_state: 'uncertain',
+            effective_favorite_state: 'uncertain',
+            effective_rocket_state: 'uncertain',
+            effective_background_type: 'uncertain'
+          });
+          const left = {
+            index: 0,
+            cards: [
+              validatedCard({ card_id: '0:1:1:1', order: 1, cp: '1', official_name: 'Lead', visible_label: 'LEAD' }),
+              blankPartial('0:2:2:1', 2),
+              blankPartial('0:3:3:1', 3)
+            ]
+          };
+          const right = {
+            index: 1,
+            cards: [
+              blankPartial('1:1:1:1', 1),
+              blankPartial('1:2:2:1', 2),
+              validatedCard({ card_id: '1:3:3:1', order: 3, cp: '2', official_name: 'Tail', visible_label: 'TAIL' })
+            ]
+          };
+
+          deepEqual(detectScreenshotOverlap(left, right), {
+            direction: 'none',
+            overlap_count: 0,
+            ambiguous: false,
+            matched_card_ids: [],
+            manual_review_reasons: []
+          });
+          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          equal(merged.cards.length, 6);
+          deepEqual(merged.manual_review_reasons, []);
+        });
+
+        test('preserves one overlap uncertainty reason occurrence per uncertain decision', () => {
+          const weakCard = (screenshotIndex, order, cp, name) => validatedCard({
+            card_id: `${screenshotIndex}:${order}:${order}:1`,
+            order,
+            cp,
+            official_name: name,
+            visible_label: name
+          });
+          const merged = mergeSmartHundoScreenshots([
+            { index: 0, cards: [weakCard(0, 1, '10', 'LeadA'), weakCard(0, 2, '11', 'WeakA')] },
+            { index: 1, cards: [weakCard(1, 1, '11', 'WeakA'), weakCard(1, 2, '12', 'TailA')] },
+            { index: 2, cards: [weakCard(2, 1, '20', 'LeadB'), weakCard(2, 2, '21', 'WeakB')] },
+            { index: 3, cards: [weakCard(3, 1, '21', 'WeakB'), weakCard(3, 2, '22', 'TailB')] }
+          ], normalizeName);
+
+          equal(merged.cards.length, 8);
+          equal(merged.overlap_decisions.filter(decision => decision.ambiguous).length, 2);
+          deepEqual(merged.manual_review_reasons, [
+            'screenshot_overlap_uncertain',
+            'screenshot_overlap_uncertain'
+          ]);
+        });
+
         test('never deduplicates identical non-boundary cards without a consecutive boundary sequence', () => {
           const duplicate = {
             cp: '99',
@@ -1408,7 +1475,10 @@
           ], normalizeName);
           equal(merged.cards.length, 9);
           equal(merged.overlap_decisions.filter(decision => decision.ambiguous).length, 2);
-          deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
+          deepEqual(merged.manual_review_reasons, [
+            'screenshot_overlap_uncertain',
+            'screenshot_overlap_uncertain'
+          ]);
         });
 
         test('constructs exact safe diagnostics by allowlist without serializing unknown session fields', () => {
@@ -1559,6 +1629,153 @@
             'account;password'
           ].forEach(sentinel => {
             equal(serialized.includes(sentinel), false, `diagnostics excludes ${sentinel}`);
+          });
+        });
+
+        test('validates allowed diagnostic values and redacts secrets injected into allowlisted fields', () => {
+          const diagnostics = shapeSmartHundoDiagnostics({
+            scan_session_id: 'scan-API_KEY-secret',
+            screenshots: [{
+              index: 6,
+              classification: {
+                image_type: 'HUNDO_LEGENDARY_SCREEN',
+                search_query: 'gas-secret'
+              },
+              normalized_search_query: 'Authorization: Bearer injected',
+              raw_count_text: 'data:image/png;base64,COUNT',
+              validated_count: '03',
+              count_source: 'unknown-source',
+              count_confidence: 9,
+              detected_card_count: 1,
+              cards_length: 1,
+              scan_complete: true,
+              bottom_edge_checked: true,
+              finish_reason: 'password=hunter2',
+              structural_retry_used: true,
+              structural_retry_reason: ['scan_incomplete', 'unknown-retry', 'gas-secret'],
+              cards: [validatedCard({
+                card_id: 'sk-proj-1234567890abcdef',
+                cp: 'data:image/png;base64,CARD',
+                visible_label: 'Authorization',
+                official_name: 'Bearer injected',
+                recognition_status: 'made-up',
+                raw: {
+                  states: {
+                    shiny: 'invalid-shiny',
+                    lucky: 'yes',
+                    favorite: 'no',
+                    rocket: 'invalid-rocket',
+                    background: 'global'
+                  },
+                  confidences: {
+                    shiny: 4,
+                    lucky: -2,
+                    favorite: .5,
+                    rocket: .6,
+                    background: .7
+                  },
+                  evidence: {
+                    shiny: {
+                      present: true,
+                      region_visibility: 'invalid-visibility',
+                      position: 'Authorization',
+                      color: 'invalid-color',
+                      shape: 'invalid-shape'
+                    },
+                    lucky: luckyEvidence(),
+                    favorite: appearanceEvidence(),
+                    rocket: rocketEvidence(),
+                    background: backgroundEvidence()
+                  }
+                },
+                effective_shiny_state: 'invalid-effective',
+                effective_lucky_state: 'yes',
+                effective_favorite_state: 'no',
+                effective_rocket_state: 'invalid-effective',
+                effective_background_type: 'invalid-effective',
+                manual_review_reasons: ['favorite_uncertain', 'unknown-reason', 'firebase-secret']
+              })]
+            }],
+            count_candidates: [
+              { value: '03', votes: 1, confidence: .8 },
+              { value: '3', votes: -1, confidence: .8 },
+              { value: '4', votes: 1.5, confidence: .8 },
+              { value: '6', votes: '2', confidence: .8 },
+              { value: '7', votes: null, confidence: .8 },
+              { value: '5', votes: 2, confidence: 4 }
+            ],
+            count_conflict: true,
+            overlap_decisions: [{
+              direction: 'none',
+              overlap_count: 1,
+              ambiguous: true,
+              matched_card_ids: ['data:image/png;base64,MATCH', 'test-key'],
+              manual_review_reasons: ['screenshot_overlap_uncertain', 'unknown-overlap', 'api-key']
+            }],
+            manual_review_reasons: ['favorite_uncertain', 'unknown-session', 'GAS secret'],
+            pokemon_list: 'firebase-api-key password sk-proj-abcdef123456'
+          });
+
+          equal(diagnostics.scan_session_id, '');
+          equal(diagnostics.screenshots[0].classification.search_query, '');
+          equal(diagnostics.screenshots[0].normalized_search_query, '');
+          equal(diagnostics.screenshots[0].raw_count_text, '');
+          equal(diagnostics.screenshots[0].validated_count, '');
+          equal(diagnostics.screenshots[0].count_source, 'uncertain');
+          equal(diagnostics.screenshots[0].count_confidence, 1);
+          equal(diagnostics.screenshots[0].finish_reason, '');
+          deepEqual(diagnostics.screenshots[0].structural_retry_reason, ['scan_incomplete']);
+          const safeCard = diagnostics.screenshots[0].cards[0];
+          equal(safeCard.card_id, '');
+          equal(safeCard.cp, '');
+          equal(safeCard.visible_label, '');
+          equal(safeCard.official_name, '');
+          equal(safeCard.recognition_status, 'uncertain');
+          deepEqual(safeCard.raw_states, {
+            shiny: 'uncertain',
+            lucky: 'yes',
+            favorite: 'no',
+            rocket: 'uncertain',
+            background: 'global'
+          });
+          equal(safeCard.raw_confidences.shiny, 1);
+          equal(safeCard.raw_confidences.lucky, 0);
+          deepEqual(safeCard.raw_evidence.shiny, {
+            present: true,
+            region_visibility: 'uncertain',
+            position: 'uncertain',
+            color: 'uncertain',
+            shape: 'uncertain'
+          });
+          deepEqual(safeCard.effective_states, {
+            shiny: 'uncertain',
+            lucky: 'yes',
+            favorite: 'no',
+            rocket: 'uncertain',
+            background: 'uncertain'
+          });
+          deepEqual(safeCard.manual_review_reasons, ['favorite_uncertain']);
+          deepEqual(diagnostics.count_candidates, [{ value: '5', votes: 2, confidence: 1 }]);
+          deepEqual(diagnostics.overlap_decisions[0].matched_card_ids, []);
+          deepEqual(diagnostics.overlap_decisions[0].manual_review_reasons, ['screenshot_overlap_uncertain']);
+          deepEqual(diagnostics.manual_review_reasons, ['favorite_uncertain']);
+          equal(diagnostics.pokemon_list, '');
+
+          const serialized = JSON.stringify(diagnostics);
+          [
+            'data:image/',
+            'Authorization',
+            'Bearer',
+            'test-key',
+            'API_KEY',
+            'api-key',
+            'password',
+            'firebase',
+            'gas-secret',
+            'GAS secret',
+            'sk-proj-'
+          ].forEach(sentinel => {
+            equal(serialized.toLowerCase().includes(sentinel.toLowerCase()), false, `allowed diagnostics redact ${sentinel}`);
           });
         });
 

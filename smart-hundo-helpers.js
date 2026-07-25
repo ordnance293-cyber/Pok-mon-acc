@@ -411,14 +411,25 @@
         stringValue(card?.effective_background_type)
     ]);
 
+    const hasUsableOverlapIdentity = (card = {}) => (
+        stringValue(card?.cp) !== ''
+        && stringValue(card?.official_name) !== ''
+        && normalizeVisibleLabel(card?.visible_label) !== ''
+    );
+
     const boundaryOverlapCount = (suffixCards, prefixCards) => {
         const maximum = Math.min(suffixCards.length, prefixCards.length);
         for (let count = maximum; count >= 1; count -= 1) {
             const suffixStart = suffixCards.length - count;
-            const matches = Array.from({ length: count }, (_, index) => (
-                overlapCardSignature(suffixCards[suffixStart + index])
-                === overlapCardSignature(prefixCards[index])
-            )).every(Boolean);
+            const matches = Array.from({ length: count }, (_, index) => {
+                const suffixCard = suffixCards[suffixStart + index];
+                const prefixCard = prefixCards[index];
+                return (
+                    hasUsableOverlapIdentity(suffixCard)
+                    && hasUsableOverlapIdentity(prefixCard)
+                    && overlapCardSignature(suffixCard) === overlapCardSignature(prefixCard)
+                );
+            }).every(Boolean);
             if (matches) return count;
         }
         return 0;
@@ -609,11 +620,9 @@
             return incomingEdge ? screenshotCards.slice(incomingEdge.count) : screenshotCards;
         }));
         const overlapDecisions = pairRecords.map(record => record.decision);
-        const manualReviewReasons = overlapDecisions.some(decision => (
-            decision.manual_review_reasons.includes('screenshot_overlap_uncertain')
-        ))
-            ? ['screenshot_overlap_uncertain']
-            : [];
+        const manualReviewReasons = overlapDecisions.flatMap(decision => (
+            decision.manual_review_reasons.filter(reason => reason === 'screenshot_overlap_uncertain')
+        ));
 
         return {
             cards,
@@ -622,21 +631,44 @@
         };
     };
 
-    const diagnosticString = (value) => (
-        ['string', 'number', 'boolean'].includes(typeof value) ? String(value) : ''
-    );
-    const diagnosticNumber = (value) => {
+    const DIAGNOSTIC_FORBIDDEN_VALUE_PATTERN = /data:image\/|authorization|bearer|api[\s_-]*key|test[\s_-]*key|credentials?|password|firebase(?:[\s_-]*(?:api[\s_-]*key|secret))?|gas[\s_-]*secret|(?:^|[^a-z0-9])sk-[a-z0-9_-]{8,}/i;
+    const STRUCTURAL_RETRY_REASON_VALUES = new Set([
+        'detected_card_count_mismatch',
+        'scan_incomplete',
+        'bottom_edge_not_checked',
+        'invalid_card_coordinates',
+        'duplicate_card_coordinates',
+        'finish_reason_length'
+    ]);
+    const RAW_BACKGROUND_DIAGNOSTIC_VALUES = new Set([...BACKGROUND_TYPE_VALUES, 'global']);
+    const sanitizeDiagnosticString = (value) => {
+        if (!['string', 'number', 'boolean'].includes(typeof value)) return '';
+        const normalized = String(value).normalize('NFKC');
+        return DIAGNOSTIC_FORBIDDEN_VALUE_PATTERN.test(normalized) ? '' : normalized;
+    };
+    const diagnosticString = sanitizeDiagnosticString;
+    const diagnosticNonnegativeInteger = (value) => {
         const number = Number(value);
-        return Number.isFinite(number) ? number : 0;
+        return Number.isInteger(number) && number >= 0 ? number : 0;
     };
     const diagnosticStrings = (values) => (Array.isArray(values) ? values : [])
         .filter(value => ['string', 'number', 'boolean'].includes(typeof value))
-        .map(diagnosticString);
-    const diagnosticEvidence = (evidence, fields) => {
+        .map(diagnosticString)
+        .filter(Boolean);
+    const diagnosticEnum = (value, values, fallback = 'uncertain') => {
+        const normalized = diagnosticString(value).toLowerCase();
+        return values.has(normalized) ? normalized : fallback;
+    };
+    const diagnosticReviewReasons = (values) => diagnosticStrings(values).filter(isHundoReviewReason);
+    const diagnosticStructuralReasons = (values) => diagnosticStrings(values)
+        .filter(reason => STRUCTURAL_RETRY_REASON_VALUES.has(reason));
+    const diagnosticEvidence = (evidence, enumFields) => {
         const source = evidence && typeof evidence === 'object' ? evidence : {};
-        return Object.fromEntries(fields.map(field => [
+        return Object.fromEntries(Object.entries(enumFields).map(([field, values]) => [
             field,
-            field === 'present' ? source[field] === true : diagnosticString(source[field])
+            field === 'present'
+                ? source[field] === true
+                : diagnosticEnum(source[field], values)
         ]));
     };
     const diagnosticCard = (card = {}) => {
@@ -649,32 +681,33 @@
         const rawEvidence = card?.raw?.evidence && typeof card.raw.evidence === 'object'
             ? card.raw.evidence
             : {};
-        const rawState = (dimension, field) => diagnosticString(
-            rawStates[dimension] ?? card?.[field]
+        const rawState = (dimension, field, values) => diagnosticEnum(
+            rawStates[dimension] ?? card?.[field],
+            values
         );
-        const rawConfidence = (dimension, field) => diagnosticNumber(
+        const rawConfidence = (dimension, field) => clampConfidence(
             rawConfidences[dimension] ?? card?.[field]
         );
-        const evidence = (dimension, field, fields) => diagnosticEvidence(
+        const evidence = (dimension, field, enumFields) => diagnosticEvidence(
             rawEvidence[dimension] ?? card?.[field],
-            fields
+            enumFields
         );
 
         return {
             card_id: diagnosticString(card?.card_id),
-            order: diagnosticNumber(card?.order),
-            row: diagnosticNumber(card?.row),
-            column: diagnosticNumber(card?.column),
+            order: diagnosticNonnegativeInteger(card?.order),
+            row: diagnosticNonnegativeInteger(card?.row),
+            column: diagnosticNonnegativeInteger(card?.column),
             cp: diagnosticString(card?.cp),
             visible_label: diagnosticString(card?.visible_label),
             official_name: diagnosticString(card?.official_name),
-            recognition_status: diagnosticString(card?.recognition_status),
+            recognition_status: diagnosticEnum(card?.recognition_status, RECOGNITION_VALUES),
             raw_states: {
-                shiny: rawState('shiny', 'shiny_state'),
-                lucky: rawState('lucky', 'lucky_state'),
-                favorite: rawState('favorite', 'favorite_state'),
-                rocket: rawState('rocket', 'rocket_state'),
-                background: rawState('background', 'background_type')
+                shiny: rawState('shiny', 'shiny_state', INDEPENDENT_STATE_VALUES),
+                lucky: rawState('lucky', 'lucky_state', INDEPENDENT_STATE_VALUES),
+                favorite: rawState('favorite', 'favorite_state', INDEPENDENT_STATE_VALUES),
+                rocket: rawState('rocket', 'rocket_state', ROCKET_STATE_VALUES),
+                background: rawState('background', 'background_type', RAW_BACKGROUND_DIAGNOSTIC_VALUES)
             },
             raw_confidences: {
                 shiny: rawConfidence('shiny', 'shiny_confidence'),
@@ -684,62 +717,98 @@
                 background: rawConfidence('background', 'background_confidence')
             },
             raw_evidence: {
-                shiny: evidence('shiny', 'shiny_evidence', ['present', 'region_visibility', 'position', 'color', 'shape']),
-                lucky: evidence('lucky', 'lucky_evidence', ['present', 'region_visibility', 'position', 'appearance']),
-                favorite: evidence('favorite', 'favorite_evidence', ['present', 'region_visibility', 'position', 'appearance']),
-                rocket: evidence('rocket', 'rocket_evidence', ['present', 'region_visibility', 'position', 'color', 'shape']),
-                background: evidence('background', 'background_evidence', ['present', 'region_visibility', 'position', 'badge_type', 'appearance'])
+                shiny: evidence('shiny', 'shiny_evidence', {
+                    present: null,
+                    region_visibility: REGION_VISIBILITY_VALUES,
+                    position: SHINY_POSITION_VALUES,
+                    color: SHINY_COLOR_VALUES,
+                    shape: SHINY_SHAPE_VALUES
+                }),
+                lucky: evidence('lucky', 'lucky_evidence', {
+                    present: null,
+                    region_visibility: REGION_VISIBILITY_VALUES,
+                    position: LUCKY_POSITION_VALUES,
+                    appearance: LUCKY_APPEARANCE_VALUES
+                }),
+                favorite: evidence('favorite', 'favorite_evidence', {
+                    present: null,
+                    region_visibility: REGION_VISIBILITY_VALUES,
+                    position: FAVORITE_POSITION_VALUES,
+                    appearance: FAVORITE_APPEARANCE_VALUES
+                }),
+                rocket: evidence('rocket', 'rocket_evidence', {
+                    present: null,
+                    region_visibility: REGION_VISIBILITY_VALUES,
+                    position: ROCKET_POSITION_VALUES,
+                    color: ROCKET_COLOR_VALUES,
+                    shape: ROCKET_SHAPE_VALUES
+                }),
+                background: evidence('background', 'background_evidence', {
+                    present: null,
+                    region_visibility: REGION_VISIBILITY_VALUES,
+                    position: BACKGROUND_POSITION_VALUES,
+                    badge_type: BADGE_TYPE_VALUES,
+                    appearance: BACKGROUND_APPEARANCE_VALUES
+                })
             },
             effective_states: {
-                shiny: diagnosticString(card?.effective_shiny_state),
-                lucky: diagnosticString(card?.effective_lucky_state),
-                favorite: diagnosticString(card?.effective_favorite_state),
-                rocket: diagnosticString(card?.effective_rocket_state),
-                background: diagnosticString(card?.effective_background_type)
+                shiny: diagnosticEnum(card?.effective_shiny_state, INDEPENDENT_STATE_VALUES),
+                lucky: diagnosticEnum(card?.effective_lucky_state, INDEPENDENT_STATE_VALUES),
+                favorite: diagnosticEnum(card?.effective_favorite_state, INDEPENDENT_STATE_VALUES),
+                rocket: diagnosticEnum(card?.effective_rocket_state, ROCKET_STATE_VALUES),
+                background: diagnosticEnum(card?.effective_background_type, BACKGROUND_TYPE_VALUES)
             },
-            manual_review_reasons: diagnosticStrings(card?.manual_review_reasons)
+            manual_review_reasons: diagnosticReviewReasons(card?.manual_review_reasons)
         };
     };
     const diagnosticOverlapDecision = (decision = {}) => ({
         direction: ['left_suffix_right_prefix', 'right_suffix_left_prefix'].includes(decision?.direction)
             ? decision.direction
             : 'none',
-        overlap_count: diagnosticNumber(decision?.overlap_count),
+        overlap_count: diagnosticNonnegativeInteger(decision?.overlap_count),
         ambiguous: decision?.ambiguous === true,
         matched_card_ids: diagnosticStrings(decision?.matched_card_ids),
-        manual_review_reasons: diagnosticStrings(decision?.manual_review_reasons)
+        manual_review_reasons: diagnosticReviewReasons(decision?.manual_review_reasons)
     });
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),
         screenshots: (Array.isArray(session?.screenshots) ? session.screenshots : []).map(screenshot => ({
-            index: diagnosticNumber(screenshot?.index),
+            index: diagnosticNonnegativeInteger(screenshot?.index),
             classification: {
                 image_type: diagnosticString(screenshot?.classification?.image_type),
                 search_query: diagnosticString(screenshot?.classification?.search_query)
             },
             normalized_search_query: diagnosticString(screenshot?.normalized_search_query),
             raw_count_text: diagnosticString(screenshot?.raw_count_text),
-            validated_count: diagnosticString(screenshot?.validated_count),
-            count_source: diagnosticString(screenshot?.count_source),
-            count_confidence: diagnosticNumber(screenshot?.count_confidence),
-            detected_card_count: diagnosticNumber(screenshot?.detected_card_count),
-            cards_length: diagnosticNumber(screenshot?.cards_length),
+            validated_count: /^(0|[1-9]\d*)$/.test(diagnosticString(screenshot?.validated_count))
+                ? diagnosticString(screenshot?.validated_count)
+                : '',
+            count_source: diagnosticEnum(screenshot?.count_source, HUNDO_COUNT_SOURCE_VALUES),
+            count_confidence: clampConfidence(screenshot?.count_confidence),
+            detected_card_count: diagnosticNonnegativeInteger(screenshot?.detected_card_count),
+            cards_length: diagnosticNonnegativeInteger(screenshot?.cards_length),
             scan_complete: screenshot?.scan_complete === true,
             bottom_edge_checked: screenshot?.bottom_edge_checked === true,
             finish_reason: diagnosticString(screenshot?.finish_reason),
             structural_retry_used: screenshot?.structural_retry_used === true,
-            structural_retry_reason: diagnosticStrings(screenshot?.structural_retry_reason),
+            structural_retry_reason: diagnosticStructuralReasons(screenshot?.structural_retry_reason),
             cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(diagnosticCard)
         })),
-        count_candidates: (Array.isArray(session?.count_candidates) ? session.count_candidates : []).map(candidate => ({
-            value: diagnosticString(candidate?.value),
-            votes: diagnosticNumber(candidate?.votes),
-            confidence: diagnosticNumber(candidate?.confidence)
-        })),
+        count_candidates: (Array.isArray(session?.count_candidates) ? session.count_candidates : [])
+            .filter(candidate => (
+                /^(0|[1-9]\d*)$/.test(diagnosticString(candidate?.value))
+                && Number.isInteger(candidate?.votes)
+                && candidate.votes >= 0
+            ))
+            .map(candidate => ({
+                value: diagnosticString(candidate?.value),
+                votes: candidate.votes,
+                confidence: clampConfidence(candidate?.confidence)
+            })),
         count_conflict: session?.count_conflict === true,
         overlap_decisions: (Array.isArray(session?.overlap_decisions) ? session.overlap_decisions : [])
             .map(diagnosticOverlapDecision),
-        manual_review_reasons: diagnosticStrings(session?.manual_review_reasons),
+        manual_review_reasons: diagnosticReviewReasons(session?.manual_review_reasons),
         pokemon_list: diagnosticString(session?.pokemon_list)
     });
 
