@@ -167,6 +167,7 @@ equal(TRAINER_TEAM_SCHEMA.schema.additionalProperties, false);
 equal(TRAINER_TEAM_SCHEMA.schema.required.length, 7);
 equal(teamPayload.messages[0].content[1].image_url.detail, 'high');
 equal(teamComposite.startsWith('data:image/png'), true);
+equal(teamHttpRequestCount, 1);
 ```
 
 Every nested evidence schema must have `additionalProperties: false` and both
@@ -243,8 +244,10 @@ onto one canvas without JPEG conversion or 1000 px resizing, and return
 - [ ] **Step 4: Add dedicated request and per-screenshot validation**
 
 Call the existing JSON-schema request primitive once with
-`{ imageDetail: 'high' }`, normalize and validate with the helper, and retain
-only safe evidence fields.
+`{ imageDetail: 'high', maxRetries: 1 }`, normalize and validate with the
+helper, and retain only safe evidence fields. Make the request primitive use
+`options.maxRetries ?? 3` so ordinary and Smart Hundo retry behavior is
+unchanged.
 
 - [ ] **Step 5: Integrate the team batch with `autoScan`**
 
@@ -311,4 +314,3 @@ finding and rerun its covering tests.
 Stage only intended files, commit with a focused message, push
 `fix/trainer-team-fixed-ui-evidence`, and open a PR against `main`. Do not merge
 the PR.
-

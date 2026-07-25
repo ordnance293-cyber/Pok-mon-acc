@@ -99,9 +99,10 @@ are input-focusing defaults only. The prompt requires `uncertain` when the fixed
 components are absent and forbids inferring team from crop location or image
 dominance.
 
-There is one logical dedicated request per trainer-profile screenshot. HTTP
-transport retries remain those of the existing request primitive; there is no
-semantic retry and no per-element request.
+There is at most one HTTP request per trainer-profile screenshot. The existing
+request primitive gains an optional retry limit; the team call uses
+`maxRetries: 1`, while ordinary and Smart Hundo callers retain their current
+three-attempt behavior. There is no semantic retry and no per-element request.
 
 ## Structured schema and prompt
 
@@ -232,4 +233,3 @@ Static regressions preserve the Smart Hundo V2 schema/helper/routing, ordinary
 resize behavior, Firebase/GAS save path, and generated copywriting. Manual
 acceptance records real-image results without committing screenshots or raw API
 responses.
-
