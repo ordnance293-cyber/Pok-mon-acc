@@ -2252,7 +2252,19 @@
           CARD_FAIL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
           PROFILE_DELAY: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           STALE_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
-          CURRENT_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
+          CURRENT_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          LATE_CLASSIFICATION_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          STALE_CLASSIFICATION_FAIL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          CURRENT_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          OLD_ORDINARY_ONLY: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          CURRENT_DELAYED_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          COVERAGE_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          REPEATED_INCOMPLETE_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          REPEATED_INCOMPLETE_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          MULTI_REVIEW: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          VALID_EMPTY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          INCOMPLETE_EMPTY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          UNRECOGNIZED_ONLY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
         };
         const extractionForPrompt = (prompt) => {
           if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) return { level: '50', team: '紅隊', xp: '3500000' };
@@ -2285,9 +2297,20 @@
         let routedRequests = [];
         let requestStageEvents = [];
         let failedOperations = new Set();
+        let failedOperationErrorNames = new Map();
+        let failedClassificationIdentities = new Set();
+        let delayedClassificationIdentity = '';
+        let releaseDelayedClassification = null;
+        let notifyDelayedClassification = null;
+        let delayedClassificationReleased = false;
         let delayedOrdinaryIdentity = '';
         let releaseDelayedOrdinary = null;
-        globalThis.alert = () => {};
+        let notifyDelayedOrdinary = null;
+        let delayedCardIdentity = '';
+        let releaseDelayedCard = null;
+        let notifyDelayedCard = null;
+        let alertMessages = [];
+        globalThis.alert = (message) => alertMessages.push(String(message));
         globalThis.setTimeout = (callback) => { callback(); return 0; };
         installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
           const prompt = payload.messages[0].content[0].text;
@@ -2297,12 +2320,27 @@
           requestStageEvents.push({ event: 'start', schemaName });
           if (schemaName === 'pokemon_go_image_classifier') {
             const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
+            if (identity === delayedClassificationIdentity && !delayedClassificationReleased) {
+              await new Promise(resolve => {
+                releaseDelayedClassification = () => {
+                  delayedClassificationReleased = true;
+                  resolve();
+                };
+                notifyDelayedClassification?.();
+              });
+            }
+            if (failedClassificationIdentities.has(identity)) {
+              const error = new Error('STALE_CLASSIFICATION_SECRET');
+              error.httpStatus = 500;
+              throw error;
+            }
             return openAiResponse(classificationByImage[identity], () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           if (schemaName === 'pokemon_go_hundo_count_extractor') {
             const identity = imageUrl.match(/HUNDO_COUNT_REGION_(.+)$/)?.[1];
             if (failedOperations.has(`count:${identity}`)) {
               const error = new Error('COUNT_FAIL_SECRET test-key data:image/png;base64,COUNT_RESPONSE_BODY');
+              error.name = failedOperationErrorNames.get(`count:${identity}`) || 'Error';
               error.httpStatus = 503;
               throw error;
             }
@@ -2313,8 +2351,15 @@
           }
           if (schemaName === 'pokemon_go_hundo_smart_extractor_v2') {
             const identity = imageUrl.match(/ORIGINAL_(.+)$/)?.[1];
+            if (identity === delayedCardIdentity) {
+              await new Promise(resolve => {
+                releaseDelayedCard = resolve;
+                notifyDelayedCard?.();
+              });
+            }
             if (failedOperations.has(`cards:${identity}`)) {
               const error = new Error('CARD_FAIL_SECRET test-key data:image/png;base64,CARD_RESPONSE_BODY');
+              error.name = failedOperationErrorNames.get(`cards:${identity}`) || 'Error';
               error.httpStatus = 502;
               throw error;
             }
@@ -2327,7 +2372,10 @@
           if (schemaName === 'pokemon_go_forced_field_extractor') {
             const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
             if (identity === delayedOrdinaryIdentity) {
-              await new Promise(resolve => { releaseDelayedOrdinary = resolve; });
+              await new Promise(resolve => {
+                releaseDelayedOrdinary = resolve;
+                notifyDelayedOrdinary?.();
+              });
             }
             return openAiResponse(extractionForPrompt(prompt), () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
@@ -2340,8 +2388,19 @@
           countResultByImage = new Map();
           cardResultByImage = new Map();
           failedOperations = new Set();
+          failedOperationErrorNames = new Map();
+          failedClassificationIdentities = new Set();
+          delayedClassificationIdentity = '';
+          releaseDelayedClassification = null;
+          notifyDelayedClassification = null;
+          delayedClassificationReleased = false;
           delayedOrdinaryIdentity = '';
           releaseDelayedOrdinary = null;
+          notifyDelayedOrdinary = null;
+          delayedCardIdentity = '';
+          releaseDelayedCard = null;
+          notifyDelayedCard = null;
+          alertMessages = [];
         };
 
         await asyncTest('canonically routes exactly two arbitrary-order smart jobs through independent V2 count and card operations', async () => {
@@ -2417,6 +2476,120 @@
           equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
           equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
           equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
+        });
+
+        await asyncTest('keeps a newer completed smart run authoritative when an older classification resumes late', async () => {
+          resetScanScenario();
+          delayedClassificationIdentity = 'LATE_CLASSIFICATION_A';
+          setScanFiles(['LATE_CLASSIFICATION_A']);
+          countResultByImage.set('LATE_CLASSIFICATION_A', validCount('(8)', '8'));
+          cardResultByImage.set('LATE_CLASSIFICATION_A', completeCardResult([
+            v2Card({ cp: '8000', visible_label: '晚到舊批次', official_name: '夢幻' })
+          ]));
+          const lateClassificationReached = new Promise(resolve => { notifyDelayedClassification = resolve; });
+          const lateScan = autoScan();
+          await lateClassificationReached;
+
+          setScanFiles(['CURRENT_B']);
+          countResultByImage.set('CURRENT_B', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_B', completeCardResult([
+            v2Card({ cp: '3000', visible_label: '目前批次', official_name: '鳳王' })
+          ]));
+          await autoScan();
+          const currentDiagnostics = window.lastSmartHundoDiagnostics;
+          const currentStatus = document.getElementById('aiAutoStatus').textContent;
+
+          releaseDelayedClassification();
+          await lateScan;
+
+          equal(document.getElementById('st_hundo_leg').value, '3');
+          equal(document.getElementById('g_hundos').value, '鳳王');
+          equal(document.getElementById('aiAutoStatus').textContent, currentStatus);
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(window.lastSmartHundoScanResult, currentDiagnostics);
+          equal(document.getElementById('aiAutoBtn').disabled, false);
+        });
+
+        await asyncTest('suppresses stale catch alerts logs and status after a newer smart run completes', async () => {
+          resetScanScenario();
+          delayedClassificationIdentity = 'STALE_CLASSIFICATION_FAIL';
+          failedClassificationIdentities.add('STALE_CLASSIFICATION_FAIL');
+          setScanFiles(['STALE_CLASSIFICATION_FAIL']);
+          const staleFailureReached = new Promise(resolve => { notifyDelayedClassification = resolve; });
+          const staleFailureScan = autoScan();
+          await staleFailureReached;
+
+          setScanFiles(['CURRENT_B']);
+          countResultByImage.set('CURRENT_B', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_B', completeCardResult([
+            v2Card({ cp: '3000', visible_label: '目前批次', official_name: '鳳王' })
+          ]));
+          await autoScan();
+          const currentDiagnostics = window.lastSmartHundoDiagnostics;
+          const currentStatus = document.getElementById('aiAutoStatus').textContent;
+          const alertCount = alertMessages.length;
+          const logCount = loggedValues.length;
+
+          releaseDelayedClassification();
+          await staleFailureScan;
+
+          equal(alertMessages.length, alertCount, 'stale catch does not alert');
+          equal(loggedValues.length, logCount, 'stale catch does not log');
+          equal(document.getElementById('aiAutoStatus').textContent, currentStatus);
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(document.getElementById('aiAutoBtn').disabled, false);
+        });
+
+        await asyncTest('blocks a stale ordinary-only completion from mutating or unlocking a newer pending smart run', async () => {
+          resetScanScenario();
+          document.getElementById('g_level').value = '40';
+          delayedOrdinaryIdentity = 'OLD_ORDINARY_ONLY';
+          setScanFiles(['OLD_ORDINARY_ONLY']);
+          const oldOrdinaryReached = new Promise(resolve => { notifyDelayedOrdinary = resolve; });
+          const oldOrdinaryScan = autoScan();
+          await oldOrdinaryReached;
+
+          delayedCardIdentity = 'CURRENT_DELAYED_SMART';
+          setScanFiles(['CURRENT_DELAYED_SMART']);
+          countResultByImage.set('CURRENT_DELAYED_SMART', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_DELAYED_SMART', completeCardResult([
+            v2Card({ cp: '3001', visible_label: '目前待完成', official_name: '哲爾尼亞斯' })
+          ]));
+          const currentCardReached = new Promise(resolve => { notifyDelayedCard = resolve; });
+          const currentSmartScan = autoScan();
+          await currentCardReached;
+
+          releaseDelayedOrdinary();
+          await oldOrdinaryScan;
+
+          equal(document.getElementById('g_level').value, '40', 'stale ordinary form output is ignored');
+          equal(document.getElementById('aiAutoStatus').textContent === '合併完成', false, 'stale ordinary success status is ignored');
+          equal(document.getElementById('aiAutoBtn').disabled, true, 'stale finally cannot unlock the active run');
+
+          releaseDelayedCard();
+          await currentSmartScan;
+          equal(document.getElementById('g_level').value, '40');
+          equal(document.getElementById('g_hundos').value, '哲爾尼亞斯');
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識1張卡片');
+          equal(document.getElementById('aiAutoBtn').disabled, false);
+        });
+
+        await asyncTest('excludes a resolved exact smart count from final missing-field alerts', async () => {
+          resetScanScenario();
+          setScanFiles(['COVERAGE_SMART']);
+          countResultByImage.set('COVERAGE_SMART', validCount('(3)', '3'));
+          cardResultByImage.set('COVERAGE_SMART', completeCardResult([
+            v2Card({ cp: '3333', visible_label: '完整百神', official_name: '鳳王' })
+          ]));
+
+          await autoScan();
+
+          const alertText = alertMessages.join('\n');
+          equal(alertText.includes('百神數'), false, 'validated smart count is covered');
+          equal(routedRequests.some(request => (
+            request.schemaName === 'pokemon_go_forced_field_extractor'
+            && request.imageUrl.includes('COVERAGE_SMART')
+          )), false, 'coverage does not route smart input into ordinary validation');
         });
 
         await asyncTest('merges three independent counts 3, 3, and 9 by votes while retaining conflict diagnostics', async () => {
@@ -2514,6 +2687,63 @@
           equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('background_uncertain'), true);
         });
 
+        await asyncTest('shows deduplicated reviewed-card total alongside multiple per-reason buckets', async () => {
+          resetScanScenario();
+          setScanFiles(['MULTI_REVIEW']);
+          countResultByImage.set('MULTI_REVIEW', validCount('(1)', '1'));
+          cardResultByImage.set('MULTI_REVIEW', completeCardResult([
+            v2Card({
+              cp: '1001',
+              visible_label: '雙重確認',
+              official_name: '超夢',
+              shiny_state: 'uncertain',
+              shiny_confidence: 0.99,
+              background_type: 'uncertain',
+              background_confidence: 0.99
+            })
+          ]));
+
+          await autoScan();
+
+          equal(
+            document.getElementById('aiAutoStatus').textContent,
+            '百神掃描完成：總數1，偵測1張卡片，辨識1張；共1張卡片需人工確認；1張色違狀態需人工確認；1張背卡狀態需人工確認'
+          );
+          deepEqual(window.lastSmartHundoDiagnostics.manual_review_reasons, [
+            'shiny_uncertain',
+            'background_uncertain'
+          ]);
+        });
+
+        await asyncTest('retains repeated screenshot review occurrences in diagnostics and visible status', async () => {
+          resetScanScenario();
+          setScanFiles(['REPEATED_INCOMPLETE_A', 'REPEATED_INCOMPLETE_B']);
+          ['REPEATED_INCOMPLETE_A', 'REPEATED_INCOMPLETE_B'].forEach((identity, index) => {
+            countResultByImage.set(identity, validCount('(2)', '2'));
+            const result = completeCardResult([
+              v2Card({
+                cp: String(2000 + index),
+                visible_label: identity,
+                official_name: index === 0 ? '鳳王' : '超夢'
+              })
+            ], { scan_complete: false });
+            cardResultByImage.set(identity, [result, result]);
+          });
+
+          await autoScan();
+
+          equal(
+            document.getElementById('aiAutoStatus').textContent,
+            '百神掃描完成：總數2，辨識2張卡片；2次卡片列舉不完整，需人工確認'
+          );
+          deepEqual(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.filter(
+              reason => reason === 'incomplete_card_enumeration'
+            ),
+            ['incomplete_card_enumeration', 'incomplete_card_enumeration']
+          );
+        });
+
         await asyncTest('uses one structural retry replacement and reports incomplete enumeration', async () => {
           resetScanScenario();
           setScanFiles(['INCOMPLETE']);
@@ -2580,6 +2810,8 @@
           countResultByImage.set('CARD_FAIL', validCount('(3)', '3'));
           document.getElementById('g_hundos').value = '手動保留清單';
           document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+          failedOperationErrorNames.set('cards:CARD_FAIL', 'SECRET_ERROR_NAME_test-key-Bearer');
+          const errorLogStart = loggedValues.length;
 
           await autoScan();
 
@@ -2588,10 +2820,71 @@
           equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_request_failed), true);
           equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'), true);
           equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult);
+          const serializedFailureLogs = JSON.stringify(loggedValues.slice(errorLogStart));
+          equal(serializedFailureLogs.includes('SECRET_ERROR_NAME'), false, 'secret-shaped error names never reach logs');
+          const cardFailureSummary = loggedValues
+            .slice(errorLogStart)
+            .flat(2)
+            .find(value => value && typeof value === 'object' && value.stage === 'hundo_cards');
+          equal(cardFailureSummary.name, 'Error', 'unknown error names fall back to Error');
           const serializedAudit = JSON.stringify(window.lastSmartHundoDiagnostics);
           ['test-key', 'Authorization', 'ORIGINAL_', 'RESIZED_', 'data:image/', 'classificationDataUrl', 'file', 'CARD_FAIL_SECRET', 'COUNT_FAIL_SECRET'].forEach(secret => {
             equal(serializedAudit.includes(secret), false, `audit excludes ${secret}`);
           });
+        });
+
+        await asyncTest('clears only a fully validated empty smart list and preserves all unresolved empty outcomes', async () => {
+          resetScanScenario();
+          setScanFiles(['VALID_EMPTY']);
+          countResultByImage.set('VALID_EMPTY', validCount('(0)', '0'));
+          cardResultByImage.set('VALID_EMPTY', completeCardResult([]));
+          document.getElementById('g_hundos').value = '應由有效空結果清除';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '', 'complete zero-card result is an AI-owned empty replacement');
+
+          resetScanScenario();
+          setScanFiles(['INCOMPLETE_EMPTY']);
+          countResultByImage.set('INCOMPLETE_EMPTY', validCount('(0)', '0'));
+          const incompleteEmpty = completeCardResult([], { scan_complete: false });
+          cardResultByImage.set('INCOMPLETE_EMPTY', [incompleteEmpty, incompleteEmpty]);
+          document.getElementById('g_hundos').value = '不完整空結果須保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '不完整空結果須保留');
+
+          resetScanScenario();
+          setScanFiles(['UNRECOGNIZED_ONLY']);
+          countResultByImage.set('UNRECOGNIZED_ONLY', validCount('(1)', '1'));
+          cardResultByImage.set('UNRECOGNIZED_ONLY', completeCardResult([
+            v2Card({
+              cp: '1111',
+              visible_label: '無法辨識',
+              official_name: '',
+              recognition_status: 'uncertain',
+              species_confidence: 0.1
+            })
+          ]));
+          document.getElementById('g_hundos').value = '未辨識非空須保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '未辨識非空須保留');
+
+          resetScanScenario();
+          setScanFiles(['CARD_FAIL']);
+          failedOperations.add('cards:CARD_FAIL');
+          document.getElementById('g_hundos').value = '請求失敗須保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '請求失敗須保留');
         });
 
         await asyncTest('prevents every delayed mixed-batch status and diagnostic write from replacing the current smart session', async () => {
@@ -2657,6 +2950,7 @@
           await autoScan();
           equal(window.lastSmartHundoDiagnostics, sentinel);
           equal(window.lastSmartHundoScanResult, sentinel);
+          equal(alertMessages.join('\n').includes('百神清單'), false, 'ordinary coverage contract does not add smart-list alerts');
         });
 
         const serializedLogs = JSON.stringify(loggedValues);

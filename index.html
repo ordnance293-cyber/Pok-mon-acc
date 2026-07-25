@@ -445,6 +445,18 @@
         const smartHundoAiValueOwnership = new Map();
         let smartHundoSessionCounter = 0;
         let activeSmartHundoSessionId = 0;
+        let autoScanRunCounter = 0;
+        let activeAutoScanRunId = 0;
+
+        const beginAutoScanRun = () => {
+            autoScanRunCounter += 1;
+            activeAutoScanRunId = autoScanRunCounter;
+            return activeAutoScanRunId;
+        };
+
+        const isCurrentAutoScanRun = (runId) => (
+            runId === activeAutoScanRunId && activeAutoScanRunId > 0
+        );
 
         const isCurrentSmartHundoSession = (sessionId) => (
             sessionId === activeSmartHundoSessionId && activeSmartHundoSessionId > 0
@@ -503,11 +515,23 @@
             return true;
         };
 
+        const SAFE_SMART_HUNDO_ERROR_NAMES = new Set([
+            'Error',
+            'TypeError',
+            'RangeError',
+            'ReferenceError',
+            'SyntaxError',
+            'URIError',
+            'EvalError',
+            'AggregateError'
+        ]);
+
         const safeSmartHundoErrorSummary = (error, stage, reasonCode) => {
             const httpStatus = Number(error?.httpStatus ?? error?.status);
+            const errorName = String(error?.name || 'Error');
             return {
                 stage: String(stage || 'smart_hundo'),
-                name: String(error?.name || 'Error').replace(/[^A-Za-z0-9_$.-]/g, '').slice(0, 80) || 'Error',
+                name: SAFE_SMART_HUNDO_ERROR_NAMES.has(errorName) ? errorName : 'Error',
                 httpStatus: Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? httpStatus : 0,
                 reasonCode: String(reasonCode || error?.reasonCode || 'smart_hundo_request_failed')
             };
@@ -2080,10 +2104,19 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                 'background_uncertain'
             ];
             const detailMessages = [];
+            const activeCardReasonCodes = cardReasonCodes.filter(
+                reason => Number(reasonCounts[reason] || 0) > 0
+            );
 
-            cardReasonCodes.forEach(reason => {
+            if (
+                activeCardReasonCodes.length > 1
+                && Number(reviewSummary?.review_card_count || 0) > 0
+            ) {
+                detailMessages.push(`共${reviewSummary.review_card_count}張卡片需人工確認`);
+            }
+            activeCardReasonCodes.forEach(reason => {
                 const count = Number(reasonCounts[reason] || 0);
-                if (count > 0) detailMessages.push(`${count}張${reasonMessages[reason]}`);
+                detailMessages.push(`${count}張${reasonMessages[reason]}`);
             });
             [
                 'incomplete_card_enumeration',
@@ -2091,7 +2124,10 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                 'screenshot_overlap_uncertain',
                 'smart_hundo_request_failed'
             ].forEach(reason => {
-                if (Number(reasonCounts[reason] || 0) > 0) detailMessages.push(reasonMessages[reason]);
+                const count = Number(reasonCounts[reason] || 0);
+                if (count > 0) {
+                    detailMessages.push(count > 1 ? `${count}次${reasonMessages[reason]}` : reasonMessages[reason]);
+                }
             });
 
             if (!hasCount && recognizedCount > 0) {
@@ -2319,10 +2355,20 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
             const files = document.getElementById('imageInput').files;
             if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
             if(files.length === 0) return;
+            const scanRunId = beginAutoScanRun();
             const totalFiles = files.length;
             let smartSessionId = 0;
+            const writeRunStatus = (statusHtml) => {
+                if (!isCurrentAutoScanRun(scanRunId)) return false;
+                setAiActionButtonStatus(statusHtml);
+                return true;
+            };
+            const isCurrentSmartRun = () => (
+                isCurrentAutoScanRun(scanRunId)
+                && isCurrentSmartHundoSession(smartSessionId)
+            );
             setAiActionButtonsDisabled(true);
-            setAiActionButtonStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 0/${totalFiles}`);
+            writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 0/${totalFiles}`);
             try {
                 const helpers = globalThis.SmartHundoHelpers;
                 if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
@@ -2330,14 +2376,15 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                 const jobs = await Promise.all(Array.from(files).map((file, index) =>
                     fileToResizedDataUrl(file).then(classificationDataUrl => {
                         preparedCount += 1;
-                        setAiActionButtonStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 ${preparedCount}/${totalFiles}`);
+                        writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 ${preparedCount}/${totalFiles}`);
                         return { index, file, classificationDataUrl };
                     })
                 ));
+                if (!isCurrentAutoScanRun(scanRunId)) return;
 
                 let classifiedCount = 0;
                 const updateClassificationStatus = (message) => {
-                    setAiActionButtonStatus(
+                    writeRunStatus(
                         `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} ${message}｜已分類 ${classifiedCount}/${totalFiles}`
                     );
                 };
@@ -2350,18 +2397,22 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                         updateStatus: updateClassificationStatus
                     }).then(classification => {
                         classifiedCount += 1;
-                        setAiActionButtonStatus(
+                        writeRunStatus(
                             `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 類型分析完成｜已分類 ${classifiedCount}/${totalFiles}`
                         );
                         return { ...job, classification };
                     })
                 ));
+                if (!isCurrentAutoScanRun(scanRunId)) return;
 
                 const { normalJobs, smartHundoJobs } = helpers.partitionImageJobs(classifiedJobs);
                 if (smartHundoJobs.length > 0) smartSessionId = beginSmartHundoScanSession();
                 const writeBatchStatus = smartSessionId
-                    ? statusHtml => setSmartHundoStatus(smartSessionId, statusHtml)
-                    : setAiActionButtonStatus;
+                    ? statusHtml => (
+                        isCurrentAutoScanRun(scanRunId)
+                        && setSmartHundoStatus(smartSessionId, statusHtml)
+                    )
+                    : writeRunStatus;
 
                 const normalDataUrls = normalJobs.map(job => job.classificationDataUrl);
                 const normalClassifications = normalJobs.map(job => job.classification);
@@ -2372,6 +2423,7 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                         classifications: normalClassifications,
                         statusWriter: writeBatchStatus
                     });
+                    if (!isCurrentAutoScanRun(scanRunId)) return null;
                     return runRequiredFieldValidation({
                         apiKey,
                         dataUrls: normalDataUrls,
@@ -2382,12 +2434,14 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                 })();
                 const smartTasks = smartHundoJobs.map(job => (async () => {
                     const originalDataUrl = await fileToOriginalDataUrl(job.file);
+                    if (!isCurrentAutoScanRun(scanRunId)) return null;
                     return smartHundoScan({
                         apiKey,
                         originalDataUrl,
                         imageIndex: job.index,
                         classification: job.classification,
                         statusUpdater: (stage, attempt, maxRetries) => {
+                            if (!isCurrentAutoScanRun(scanRunId)) return;
                             setSmartHundoStatus(
                                 smartSessionId,
                                 `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 百神${stage === 'count' ? '總數' : '卡片'}辨識中（API 重試 ${attempt}/${maxRetries}）`
@@ -2396,6 +2450,7 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                     });
                 })());
                 const [normalSettlement, ...smartSettlements] = await Promise.allSettled([normalTask, ...smartTasks]);
+                if (!isCurrentAutoScanRun(scanRunId)) return;
                 if (normalSettlement.status === 'rejected') throw normalSettlement.reason;
 
                 const smartResults = smartSettlements.map((settlement, index) => {
@@ -2437,7 +2492,13 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                     };
                 });
 
-                const { mergedResult: normalMergedResult, coverage, validationTaskResults } = normalSettlement.value;
+                const {
+                    mergedResult: normalMergedResult,
+                    coverage: ordinaryCoverage,
+                    validationTaskResults
+                } = normalSettlement.value;
+                let finalCoverage = ordinaryCoverage;
+                if (!isCurrentAutoScanRun(scanRunId)) return;
                 applyAiResultToForm(normalMergedResult);
 
                 if (smartHundoJobs.length > 0) {
@@ -2460,18 +2521,44 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                     );
                     const sessionReasons = [
                         ...countMerge.manual_review_reasons,
-                        ...(countMerge.conflict ? ['hundo_count_conflict'] : []),
+                        ...(
+                            countMerge.conflict
+                            && !countMerge.manual_review_reasons.includes('hundo_count_conflict')
+                                ? ['hundo_count_conflict']
+                                : []
+                        ),
                         ...smartResults.flatMap(result => result.manual_review_reasons),
                         ...overlapMerge.manual_review_reasons
                     ];
-                    const uniqueSessionReasons = [...new Set(sessionReasons)];
                     const reviewSummary = helpers.summarizeHundoManualReview(
                         overlapMerge.cards,
-                        uniqueSessionReasons
+                        sessionReasons
                     );
                     const detectedCardCount = smartResults.reduce(
                         (total, result) => total + Number(result.card_result.detected_card_count || 0),
                         0
+                    );
+                    const allCardOperationsSucceeded = smartResults.every(result => result.card_operation_succeeded);
+                    const hasValidatedEmptyCardList = (
+                        smartResults.length > 0
+                        && smartResults.every(result => (
+                            result.card_operation_succeeded
+                            && result.structure?.structurally_complete === true
+                            && Number(result.card_result.enumeration_confidence || 0) >= helpers.ENUMERATION_CONFIDENCE_THRESHOLD
+                            && result.card_result.cards.length === 0
+                        ))
+                    );
+                    const shouldReplaceSmartList = (
+                        allCardOperationsSucceeded
+                        && (Boolean(conversion.pokemon_list) || hasValidatedEmptyCardList)
+                    );
+                    const coverageResult = {
+                        ...normalMergedResult,
+                        hundo_leg: countMerge.hundo_leg || normalMergedResult.hundo_leg
+                    };
+                    finalCoverage = evaluateRequiredFieldCoverage(
+                        coverageResult,
+                        classifiedJobs.map(job => job.classification)
                     );
                     const diagnostics = helpers.shapeSmartHundoDiagnostics({
                         scan_session_id: String(smartSessionId),
@@ -2495,20 +2582,27 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                         count_candidates: countMerge.candidates,
                         count_conflict: countMerge.conflict,
                         overlap_decisions: overlapMerge.overlap_decisions,
-                        manual_review_reasons: Object.keys(reviewSummary.review_reason_counts),
+                        manual_review_reasons: Object.entries(reviewSummary.review_reason_counts)
+                            .flatMap(([reason, count]) => Array.from(
+                                { length: Number(count) || 0 },
+                                () => reason
+                            )),
                         pokemon_list: conversion.pokemon_list
                     });
+                    if (!isCurrentSmartRun()) return;
                     publishSmartHundoDiagnostics(smartSessionId, diagnostics);
 
                     if (countMerge.hundo_leg) {
+                        if (!isCurrentSmartRun()) return;
                         markSmartHundoAiValue('st_hundo_leg', countMerge.hundo_leg, smartSessionId);
                     }
-                    const allCardOperationsSucceeded = smartResults.every(result => result.card_operation_succeeded);
-                    if (allCardOperationsSucceeded && conversion.pokemon_list) {
+                    if (shouldReplaceSmartList) {
+                        if (!isCurrentSmartRun()) return;
                         if (markSmartHundoAiValue('g_hundos', conversion.pokemon_list, smartSessionId)) {
                             window.updateHundoCount();
                         }
                     }
+                    if (!isCurrentSmartRun()) return;
                     setSmartHundoStatus(smartSessionId, formatSmartHundoStatus({
                         countMerge,
                         conversion,
@@ -2517,34 +2611,43 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                     }));
                 }
 
+                if (!isCurrentAutoScanRun(scanRunId)) return;
                 console.log({
                     finalResult: normalMergedResult,
-                    requiredFieldCoverage: coverage,
+                    requiredFieldCoverage: finalCoverage,
                     classifications: classifiedJobs.map(job => job.classification),
                     smartHundoScreenshotIndexes: smartHundoJobs.map(job => job.index),
                     validationTaskResults
                 });
                 const missingMessages = [];
-                if (coverage.missingWithoutScreens.length > 0) {
-                    missingMessages.push(`未提供對應截圖：${coverage.missingWithoutScreens.map(field => AI_FIELD_LABELS[field] || field).join('、')}`);
+                if (finalCoverage.missingWithoutScreens.length > 0) {
+                    missingMessages.push(`未提供對應截圖：${finalCoverage.missingWithoutScreens.map(field => AI_FIELD_LABELS[field] || field).join('、')}`);
                 }
-                if (coverage.missingWithScreens.length > 0) {
-                    missingMessages.push(`已有對應截圖但重檢後仍無法確認：${coverage.missingWithScreens.map(({ field }) => AI_FIELD_LABELS[field] || field).join('、')}`);
+                if (finalCoverage.missingWithScreens.length > 0) {
+                    missingMessages.push(`已有對應截圖但重檢後仍無法確認：${finalCoverage.missingWithScreens.map(({ field }) => AI_FIELD_LABELS[field] || field).join('、')}`);
                 }
                 if (missingMessages.length > 0) {
-                    console.warn('AI required field validation result:', coverage);
+                    if (!isCurrentAutoScanRun(scanRunId)) return;
+                    console.warn('AI required field validation result:', finalCoverage);
                     alert(`以下欄位已逐一驗證，但本次仍未能自動填入：\n${missingMessages.join('\n')}`);
                 }
-                if (smartHundoJobs.length === 0) setAiActionButtonStatus(AI_SUCCESS_LABEL);
+                if (smartHundoJobs.length === 0) writeRunStatus(AI_SUCCESS_LABEL);
             } catch (error) {
+                if (!isCurrentAutoScanRun(scanRunId)) return;
                 alert("GPT 解析失敗，請稍後再試");
                 const summary = safeSmartHundoErrorSummary(error, 'auto_scan', 'auto_scan_failed');
                 console.warn('AI scan failed', summary);
                 const failureStatus = `<i class="fas fa-exclamation-triangle text-red-600"></i> ${AI_SCAN_STATUS_LABEL} 失敗，請稍後再試`;
-                if (smartSessionId) setSmartHundoStatus(smartSessionId, failureStatus);
-                else setAiActionButtonStatus(failureStatus);
+                if (smartSessionId) {
+                    if (isCurrentSmartRun()) setSmartHundoStatus(smartSessionId, failureStatus);
+                } else {
+                    writeRunStatus(failureStatus);
+                }
             } finally {
-                if (!smartSessionId || isCurrentSmartHundoSession(smartSessionId)) {
+                if (
+                    isCurrentAutoScanRun(scanRunId)
+                    && (!smartSessionId || isCurrentSmartHundoSession(smartSessionId))
+                ) {
                     const aiButton = document.getElementById(AI_ACTION_BUTTON_ID);
                     if (aiButton) {
                         aiButton.disabled = false;
