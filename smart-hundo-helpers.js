@@ -3,6 +3,13 @@
 
     const HUNDO_LEGENDARY_QUERY = '傳說的寶可夢,幻,究極異獸&4*';
     const SMART_IMAGE_TYPE = 'HUNDO_LEGENDARY_SCREEN';
+    // Count/enumeration gates are consumed by screenshot-level validation in Task 4.
+    const HUNDO_COUNT_CONFIDENCE_THRESHOLD = 0.85;
+    const ENUMERATION_CONFIDENCE_THRESHOLD = 0.85;
+    // Species and state gates are consumed by card validation and list conversion.
+    const SPECIES_CONFIDENCE_THRESHOLD = 0.80;
+    const STATE_YES_CONFIDENCE_THRESHOLD = 0.85;
+    const STATE_NEGATIVE_CONFIDENCE_THRESHOLD = 0.75;
     const INDEPENDENT_STATE_VALUES = new Set(['yes', 'no', 'uncertain']);
     const ROCKET_STATE_VALUES = new Set(['normal', 'shadow', 'purified', 'uncertain']);
     const BACKGROUND_TYPE_VALUES = new Set(['none', 'commemorative', 'special', 'uncertain']);
@@ -136,6 +143,72 @@
         badge_type: normalizeEnum(evidence?.badge_type, BADGE_TYPE_VALUES, 'none'),
         appearance: normalizeEnum(evidence?.appearance, BACKGROUND_APPEARANCE_VALUES, 'none')
     });
+
+    const isClearPresentEvidence = (evidence = {}) => (
+        evidence?.present === true
+        && evidence?.region_visibility === 'clear'
+    );
+
+    const isExactNegativeEvidence = (evidence = {}, fields = []) => (
+        evidence?.present === false
+        && evidence?.region_visibility === 'clear'
+        && fields.every(field => evidence?.[field] === 'none')
+    );
+
+    const isValidShinyEvidence = (evidence = {}) => (
+        isClearPresentEvidence(evidence)
+        && evidence?.position === 'cp_area'
+        && ['dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal'].includes(evidence?.color)
+        && evidence?.shape === 'multiple_four_point_sparkles'
+    );
+
+    const isValidLuckyEvidence = (evidence = {}) => (
+        isClearPresentEvidence(evidence)
+        && evidence?.position === 'behind_pokemon'
+        && evidence?.appearance === 'large_gold_shimmering_background'
+    );
+
+    const isValidFavoriteEvidence = (evidence = {}) => (
+        isClearPresentEvidence(evidence)
+        && evidence?.position === 'upper_right'
+        && evidence?.appearance === 'filled_yellow_five_point_star'
+    );
+
+    const deriveRocketStateFromEvidence = (evidence = {}) => {
+        if (isExactNegativeEvidence(evidence, ['position', 'color', 'shape'])) return 'normal';
+        if (!isClearPresentEvidence(evidence)) return 'uncertain';
+
+        const isPurified = (
+            ['lower_left', 'lower_side'].includes(evidence?.position)
+            && ['light_blue', 'light_cyan'].includes(evidence?.color)
+            && ['single_radial_sparkle', 'purification_starburst', 'flower_like_symbol'].includes(evidence?.shape)
+        );
+        if (isPurified) return 'purified';
+
+        const isShadow = (
+            ['lower_left', 'around_pokemon'].includes(evidence?.position)
+            && evidence?.color === 'purple'
+            && ['purple_flame', 'purple_smoke', 'shadow_aura'].includes(evidence?.shape)
+        );
+        return isShadow ? 'shadow' : 'uncertain';
+    };
+
+    const deriveBackgroundTypeFromEvidence = (evidence = {}) => {
+        if (isExactNegativeEvidence(evidence, ['position', 'badge_type', 'appearance'])) return 'none';
+        if (
+            !isClearPresentEvidence(evidence)
+            || evidence?.position !== 'near_pokemon_or_card_background'
+        ) return 'uncertain';
+        if (
+            evidence?.badge_type === 'commemorative_location_badge'
+            && evidence?.appearance === 'location_style_background'
+        ) return 'commemorative';
+        if (
+            evidence?.badge_type === 'special_background_badge'
+            && evidence?.appearance === 'event_special_background'
+        ) return 'special';
+        return 'uncertain';
+    };
 
     const normalizeRecognitionStatus = (value) => {
         const status = stringValue(value).toLowerCase();
@@ -283,12 +356,124 @@
 
     const isHundoReviewReason = (reason) => Object.prototype.hasOwnProperty.call(HUNDO_REVIEW_REASON_MESSAGES, reason);
 
+    const hasUsableRecognizedSpecies = (card = {}) => (
+        card?.recognition_status === 'recognized'
+        && stringValue(card?.official_name) !== ''
+        && Number(card?.species_confidence) >= SPECIES_CONFIDENCE_THRESHOLD
+    );
+
+    const deriveIndependentState = (rawState, confidence, evidence, positiveValidator, evidenceFields) => {
+        if (
+            rawState === 'yes'
+            && confidence >= STATE_YES_CONFIDENCE_THRESHOLD
+            && positiveValidator(evidence)
+        ) return 'yes';
+        if (
+            rawState === 'no'
+            && confidence >= STATE_NEGATIVE_CONFIDENCE_THRESHOLD
+            && isExactNegativeEvidence(evidence, evidenceFields)
+        ) return 'no';
+        return 'uncertain';
+    };
+
+    const deriveEffectiveRocketState = (rawState, confidence, evidence) => {
+        const evidenceState = deriveRocketStateFromEvidence(evidence);
+        if (
+            ['shadow', 'purified'].includes(rawState)
+            && confidence >= STATE_YES_CONFIDENCE_THRESHOLD
+            && evidenceState === rawState
+        ) return rawState;
+        if (
+            rawState === 'normal'
+            && confidence >= STATE_NEGATIVE_CONFIDENCE_THRESHOLD
+            && evidenceState === 'normal'
+        ) return 'normal';
+        return 'uncertain';
+    };
+
+    const deriveEffectiveBackgroundType = (rawType, confidence, evidence) => {
+        const evidenceType = deriveBackgroundTypeFromEvidence(evidence);
+        if (
+            ['commemorative', 'special'].includes(rawType)
+            && confidence >= STATE_YES_CONFIDENCE_THRESHOLD
+            && evidenceType === rawType
+        ) return rawType;
+        if (
+            rawType === 'none'
+            && confidence >= STATE_NEGATIVE_CONFIDENCE_THRESHOLD
+            && evidenceType === 'none'
+        ) return 'none';
+        return 'uncertain';
+    };
+
+    const validateHundoCardStates = (card = {}) => {
+        const effectiveStates = {
+            shiny: deriveIndependentState(
+                card?.shiny_state,
+                card?.shiny_confidence,
+                card?.shiny_evidence,
+                isValidShinyEvidence,
+                ['position', 'color', 'shape']
+            ),
+            lucky: deriveIndependentState(
+                card?.lucky_state,
+                card?.lucky_confidence,
+                card?.lucky_evidence,
+                isValidLuckyEvidence,
+                ['position', 'appearance']
+            ),
+            favorite: deriveIndependentState(
+                card?.favorite_state,
+                card?.favorite_confidence,
+                card?.favorite_evidence,
+                isValidFavoriteEvidence,
+                ['position', 'appearance']
+            ),
+            rocket: deriveEffectiveRocketState(
+                card?.rocket_state,
+                card?.rocket_confidence,
+                card?.rocket_evidence
+            ),
+            background: deriveEffectiveBackgroundType(
+                card?.background_type,
+                card?.background_confidence,
+                card?.background_evidence
+            )
+        };
+        const stateReasonByDimension = {
+            shiny: 'shiny_uncertain',
+            lucky: 'lucky_uncertain',
+            favorite: 'favorite_uncertain',
+            rocket: 'rocket_state_uncertain',
+            background: 'background_uncertain'
+        };
+        const derivedReasonCodes = new Set(['species_uncertain', ...Object.values(stateReasonByDimension)]);
+        const manualReviewReasons = (Array.isArray(card?.manual_review_reasons) ? card.manual_review_reasons : [])
+            .filter(reason => !derivedReasonCodes.has(reason));
+        const appendReasonOnce = (reason) => {
+            if (!manualReviewReasons.includes(reason)) manualReviewReasons.push(reason);
+        };
+        if (!hasUsableRecognizedSpecies(card)) appendReasonOnce('species_uncertain');
+        Object.entries(effectiveStates).forEach(([dimension, state]) => {
+            if (state === 'uncertain') appendReasonOnce(stateReasonByDimension[dimension]);
+        });
+
+        return {
+            ...card,
+            effective_shiny_state: effectiveStates.shiny,
+            effective_lucky_state: effectiveStates.lucky,
+            effective_favorite_state: effectiveStates.favorite,
+            effective_rocket_state: effectiveStates.rocket,
+            effective_background_type: effectiveStates.background,
+            manual_review_reasons: manualReviewReasons
+        };
+    };
+
     const reviewReasonCodes = (card = {}) => {
         const reasons = Array.isArray(card?.manual_review_reasons)
             ? card.manual_review_reasons.filter(isHundoReviewReason)
             : [];
-        const officialName = stringValue(card?.official_name);
-        if (card?.recognition_status !== 'recognized' || !officialName) reasons.push('species_uncertain');
+        if (!hasUsableRecognizedSpecies(card)) reasons.push('species_uncertain');
         if (card?.effective_shiny_state === 'uncertain') reasons.push('shiny_uncertain');
         if (card?.effective_lucky_state === 'uncertain') reasons.push('lucky_uncertain');
         if (card?.effective_favorite_state === 'uncertain') reasons.push('favorite_uncertain');
@@ -348,7 +533,7 @@
 
         (Array.isArray(cards) ? cards : []).forEach(card => {
             const officialName = normalizeWith(normalizeOfficialName, card?.official_name);
-            if (card?.recognition_status !== 'recognized' || !officialName) return;
+            if (!hasUsableRecognizedSpecies(card) || !officialName) return;
 
             const displayName = buildHundoDisplayName(card, normalizeOfficialName);
             displayGroups.set(displayName, (displayGroups.get(displayName) || 0) + 1);
@@ -422,6 +607,17 @@
         normalizeSmartHundoCard,
         normalizeSmartHundoResult,
         normalizeLegacySmartHundoResult,
+        HUNDO_COUNT_CONFIDENCE_THRESHOLD,
+        SPECIES_CONFIDENCE_THRESHOLD,
+        STATE_YES_CONFIDENCE_THRESHOLD,
+        STATE_NEGATIVE_CONFIDENCE_THRESHOLD,
+        ENUMERATION_CONFIDENCE_THRESHOLD,
+        isValidShinyEvidence,
+        isValidLuckyEvidence,
+        isValidFavoriteEvidence,
+        deriveRocketStateFromEvidence,
+        deriveBackgroundTypeFromEvidence,
+        validateHundoCardStates,
         HUNDO_REVIEW_REASON_MESSAGES,
         buildHundoDisplayName,
         smartHundoCardsToPokemonList,

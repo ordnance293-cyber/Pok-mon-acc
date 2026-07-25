@@ -142,6 +142,13 @@
         appearance: 'none',
         ...overrides
       });
+      const cyanPurificationEvidence = () => ({
+        present: true,
+        region_visibility: 'clear',
+        position: 'lower_left',
+        color: 'light_cyan',
+        shape: 'single_radial_sparkle'
+      });
       const card = (overrides = {}) => ({
         order: 1,
         row: 1,
@@ -226,9 +233,25 @@
           smartHundoCardsToPokemonList: effectiveSmartHundoCardsToPokemonList,
           summarizeHundoManualReview,
           HUNDO_REVIEW_REASON_MESSAGES,
-          mergeSmartHundoScanResults
+          mergeSmartHundoScanResults,
+          HUNDO_COUNT_CONFIDENCE_THRESHOLD,
+          SPECIES_CONFIDENCE_THRESHOLD,
+          STATE_YES_CONFIDENCE_THRESHOLD,
+          STATE_NEGATIVE_CONFIDENCE_THRESHOLD,
+          ENUMERATION_CONFIDENCE_THRESHOLD,
+          isValidShinyEvidence,
+          isValidLuckyEvidence,
+          isValidFavoriteEvidence,
+          deriveRocketStateFromEvidence,
+          deriveBackgroundTypeFromEvidence,
+          validateHundoCardStates
         } = helpers;
         const smartHundoCardsToPokemonList = legacySmartHundoCardsToPokemonList;
+        const normalizedCard = (overrides = {}) => normalizeSmartHundoCard(
+          card(overrides),
+          normalizeName,
+          { screenshotIndex: 0 }
+        );
 
         test('normalizes each required hundo query variant', () => {
           const canonical = '傳說的寶可夢,幻,究極異獸&4*';
@@ -313,6 +336,410 @@
           equal(normalized.raw.states.background, 'global');
           equal(normalized.background_type, 'uncertain');
           equal(normalized.effective_background_type, 'uncertain');
+        });
+
+        test('exports the centralized confidence thresholds', () => {
+          equal(HUNDO_COUNT_CONFIDENCE_THRESHOLD, 0.85);
+          equal(SPECIES_CONFIDENCE_THRESHOLD, 0.80);
+          equal(STATE_YES_CONFIDENCE_THRESHOLD, 0.85);
+          equal(STATE_NEGATIVE_CONFIDENCE_THRESHOLD, 0.75);
+          equal(ENUMERATION_CONFIDENCE_THRESHOLD, 0.85);
+        });
+
+        test('accepts only exact dedicated evidence for shiny, lucky, and favorite', () => {
+          ['dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal'].forEach(color => {
+            equal(isValidShinyEvidence(sparkleEvidence({
+              present: true,
+              position: 'cp_area',
+              color,
+              shape: 'multiple_four_point_sparkles'
+            })), true, `accepts ${color} CP-area shiny evidence`);
+          });
+          equal(isValidShinyEvidence(cyanPurificationEvidence()), false, 'purification sparkle is not shiny');
+          equal(isValidShinyEvidence(sparkleEvidence({
+            present: true,
+            position: 'around_pokemon',
+            color: 'dark_blue',
+            shape: 'multiple_four_point_sparkles'
+          })), false, 'sparkles outside the CP area are not shiny evidence');
+          equal(isValidLuckyEvidence(luckyEvidence({
+            present: true,
+            position: 'behind_pokemon',
+            appearance: 'large_gold_shimmering_background'
+          })), true);
+          equal(isValidLuckyEvidence(luckyEvidence({
+            present: true,
+            position: 'behind_pokemon',
+            appearance: 'other'
+          })), false, 'a generic gold appearance is not lucky evidence');
+          equal(isValidFavoriteEvidence(appearanceEvidence({
+            present: true,
+            position: 'upper_right',
+            appearance: 'filled_yellow_five_point_star'
+          })), true);
+          equal(isValidFavoriteEvidence(appearanceEvidence({
+            present: true,
+            position: 'upper_right',
+            appearance: 'other'
+          })), false, 'a generic upper-right mark is not favorite evidence');
+        });
+
+        test('derives only exact purified, shadow, commemorative, and special evidence', () => {
+          equal(deriveRocketStateFromEvidence(cyanPurificationEvidence()), 'purified');
+          equal(deriveRocketStateFromEvidence(rocketEvidence({
+            present: true,
+            position: 'lower_side',
+            color: 'light_blue',
+            shape: 'purification_starburst'
+          })), 'purified');
+          equal(deriveRocketStateFromEvidence(rocketEvidence({
+            present: true,
+            position: 'around_pokemon',
+            color: 'purple',
+            shape: 'shadow_aura'
+          })), 'shadow');
+          equal(deriveRocketStateFromEvidence(rocketEvidence({
+            present: true,
+            position: 'lower_left',
+            color: 'purple',
+            shape: 'purple_flame'
+          })), 'shadow');
+          equal(deriveRocketStateFromEvidence(rocketEvidence({
+            present: true,
+            position: 'lower_side',
+            color: 'purple',
+            shape: 'shadow_aura'
+          })), 'uncertain', 'lower-side shadow evidence is not an approved pattern');
+          equal(deriveRocketStateFromEvidence(rocketEvidence()), 'normal');
+
+          equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
+            present: true,
+            position: 'near_pokemon_or_card_background',
+            badge_type: 'commemorative_location_badge',
+            appearance: 'location_style_background'
+          })), 'commemorative');
+          equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
+            present: true,
+            position: 'near_pokemon_or_card_background',
+            badge_type: 'special_background_badge',
+            appearance: 'event_special_background'
+          })), 'special');
+          equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
+            present: true,
+            position: 'near_pokemon_or_card_background',
+            badge_type: 'commemorative_location_badge',
+            appearance: 'event_special_background'
+          })), 'uncertain', 'mixed background evidence cannot infer a type');
+          equal(deriveBackgroundTypeFromEvidence(backgroundEvidence()), 'none');
+        });
+
+        test('validates every positive state only at the yes confidence threshold', () => {
+          const positiveCases = [
+            {
+              field: 'effective_shiny_state',
+              expected: 'yes',
+              stateKey: 'shiny_state',
+              confidenceKey: 'shiny_confidence',
+              evidenceKey: 'shiny_evidence',
+              evidence: sparkleEvidence({
+                present: true,
+                position: 'cp_area',
+                color: 'dark_blue_teal',
+                shape: 'multiple_four_point_sparkles'
+              })
+            },
+            {
+              field: 'effective_lucky_state',
+              expected: 'yes',
+              stateKey: 'lucky_state',
+              confidenceKey: 'lucky_confidence',
+              evidenceKey: 'lucky_evidence',
+              evidence: luckyEvidence({
+                present: true,
+                position: 'behind_pokemon',
+                appearance: 'large_gold_shimmering_background'
+              })
+            },
+            {
+              field: 'effective_favorite_state',
+              expected: 'yes',
+              stateKey: 'favorite_state',
+              confidenceKey: 'favorite_confidence',
+              evidenceKey: 'favorite_evidence',
+              evidence: appearanceEvidence({
+                present: true,
+                position: 'upper_right',
+                appearance: 'filled_yellow_five_point_star'
+              })
+            },
+            {
+              field: 'effective_rocket_state',
+              expected: 'shadow',
+              stateKey: 'rocket_state',
+              confidenceKey: 'rocket_confidence',
+              evidenceKey: 'rocket_evidence',
+              evidence: rocketEvidence({
+                present: true,
+                position: 'around_pokemon',
+                color: 'purple',
+                shape: 'purple_smoke'
+              })
+            },
+            {
+              field: 'effective_background_type',
+              expected: 'special',
+              stateKey: 'background_type',
+              confidenceKey: 'background_confidence',
+              evidenceKey: 'background_evidence',
+              evidence: backgroundEvidence({
+                present: true,
+                position: 'near_pokemon_or_card_background',
+                badge_type: 'special_background_badge',
+                appearance: 'event_special_background'
+              })
+            }
+          ];
+
+          positiveCases.forEach(testCase => {
+            const atThreshold = validateHundoCardStates(normalizedCard({
+              [testCase.stateKey]: testCase.expected === 'yes' ? 'yes' : testCase.expected,
+              [testCase.confidenceKey]: 0.85,
+              [testCase.evidenceKey]: testCase.evidence
+            }));
+            equal(atThreshold[testCase.field], testCase.expected, `${testCase.field} accepts 0.85`);
+
+            const belowThreshold = validateHundoCardStates(normalizedCard({
+              [testCase.stateKey]: testCase.expected === 'yes' ? 'yes' : testCase.expected,
+              [testCase.confidenceKey]: 0.849,
+              [testCase.evidenceKey]: testCase.evidence
+            }));
+            equal(belowThreshold[testCase.field], 'uncertain', `${testCase.field} rejects confidence below 0.85`);
+          });
+        });
+
+        test('validates dark teal CP-area sparkles as shiny', () => {
+          const validated = validateHundoCardStates(normalizedCard({
+            shiny_state: 'yes',
+            shiny_confidence: 0.98,
+            shiny_evidence: {
+              present: true,
+              region_visibility: 'clear',
+              position: 'cp_area',
+              color: 'dark_blue_teal',
+              shape: 'multiple_four_point_sparkles'
+            }
+          }));
+          equal(validated.effective_shiny_state, 'yes');
+          equal(buildHundoDisplayName(validated, normalizeName), '色違超夢');
+        });
+
+        test('purified Groudon never becomes shiny from cyan radial evidence', () => {
+          const validated = validateHundoCardStates(normalizedCard({
+            official_name: '固拉多',
+            shiny_state: 'yes',
+            shiny_confidence: 0.98,
+            shiny_evidence: cyanPurificationEvidence(),
+            rocket_state: 'purified',
+            rocket_confidence: 0.98,
+            rocket_evidence: cyanPurificationEvidence()
+          }));
+          equal(validated.effective_shiny_state, 'uncertain');
+          equal(validated.effective_rocket_state, 'purified');
+          equal(buildHundoDisplayName(validated, normalizeName), '固拉多');
+        });
+
+        test('validates combined shiny and shadow evidence in fixed display order', () => {
+          const validated = validateHundoCardStates(normalizedCard({
+            official_name: '超夢',
+            shiny_state: 'yes',
+            shiny_confidence: 0.98,
+            shiny_evidence: sparkleEvidence({
+              present: true,
+              position: 'cp_area',
+              color: 'blue_black',
+              shape: 'multiple_four_point_sparkles'
+            }),
+            rocket_state: 'shadow',
+            rocket_confidence: 0.98,
+            rocket_evidence: rocketEvidence({
+              present: true,
+              position: 'around_pokemon',
+              color: 'purple',
+              shape: 'purple_flame'
+            })
+          }));
+          equal(validated.effective_shiny_state, 'yes');
+          equal(validated.effective_rocket_state, 'shadow');
+          equal(buildHundoDisplayName(validated, normalizeName), '色違暗影超夢');
+        });
+
+        test('rejects raw and positive-evidence contradictions without inferring alternatives', () => {
+          const contradictions = [
+            validateHundoCardStates(normalizedCard({
+              shiny_state: 'no',
+              shiny_evidence: sparkleEvidence({
+                present: true,
+                position: 'cp_area',
+                color: 'dark_blue',
+                shape: 'multiple_four_point_sparkles'
+              })
+            })).effective_shiny_state,
+            validateHundoCardStates(normalizedCard({
+              lucky_state: 'no',
+              lucky_evidence: luckyEvidence({
+                present: true,
+                position: 'behind_pokemon',
+                appearance: 'large_gold_shimmering_background'
+              })
+            })).effective_lucky_state,
+            validateHundoCardStates(normalizedCard({
+              favorite_state: 'no',
+              favorite_evidence: appearanceEvidence({
+                present: true,
+                position: 'upper_right',
+                appearance: 'filled_yellow_five_point_star'
+              })
+            })).effective_favorite_state,
+            validateHundoCardStates(normalizedCard({
+              rocket_state: 'shadow',
+              rocket_evidence: cyanPurificationEvidence()
+            })).effective_rocket_state,
+            validateHundoCardStates(normalizedCard({
+              background_type: 'commemorative',
+              background_evidence: backgroundEvidence({
+                present: true,
+                position: 'near_pokemon_or_card_background',
+                badge_type: 'special_background_badge',
+                appearance: 'event_special_background'
+              })
+            })).effective_background_type
+          ];
+          deepEqual(contradictions, ['uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain']);
+        });
+
+        test('requires exact clear all-none evidence for every negative state', () => {
+          const negativeCases = [
+            {
+              field: 'effective_shiny_state',
+              expected: 'no',
+              stateKey: 'shiny_state',
+              confidenceKey: 'shiny_confidence',
+              evidenceKey: 'shiny_evidence',
+              evidence: sparkleEvidence(),
+              nonNegativeEvidence: sparkleEvidence({ color: 'other' })
+            },
+            {
+              field: 'effective_lucky_state',
+              expected: 'no',
+              stateKey: 'lucky_state',
+              confidenceKey: 'lucky_confidence',
+              evidenceKey: 'lucky_evidence',
+              evidence: luckyEvidence(),
+              nonNegativeEvidence: luckyEvidence({ appearance: 'other' })
+            },
+            {
+              field: 'effective_favorite_state',
+              expected: 'no',
+              stateKey: 'favorite_state',
+              confidenceKey: 'favorite_confidence',
+              evidenceKey: 'favorite_evidence',
+              evidence: appearanceEvidence(),
+              nonNegativeEvidence: appearanceEvidence({ position: 'other' })
+            },
+            {
+              field: 'effective_rocket_state',
+              expected: 'normal',
+              stateKey: 'rocket_state',
+              confidenceKey: 'rocket_confidence',
+              evidenceKey: 'rocket_evidence',
+              evidence: rocketEvidence(),
+              nonNegativeEvidence: rocketEvidence({ shape: 'other' })
+            },
+            {
+              field: 'effective_background_type',
+              expected: 'none',
+              stateKey: 'background_type',
+              confidenceKey: 'background_confidence',
+              evidenceKey: 'background_evidence',
+              evidence: backgroundEvidence(),
+              nonNegativeEvidence: backgroundEvidence({ badge_type: 'other' })
+            }
+          ];
+
+          negativeCases.forEach(testCase => {
+            const build = (confidence, evidence) => validateHundoCardStates(normalizedCard({
+              [testCase.stateKey]: testCase.expected,
+              [testCase.confidenceKey]: confidence,
+              [testCase.evidenceKey]: evidence
+            }))[testCase.field];
+            equal(build(0.75, testCase.evidence), testCase.expected, `${testCase.field} accepts exact negative evidence at 0.75`);
+            equal(build(0.749, testCase.evidence), 'uncertain', `${testCase.field} rejects confidence below 0.75`);
+            equal(build(0.99, { ...testCase.evidence, present: true }), 'uncertain', `${testCase.field} rejects present evidence`);
+            equal(build(0.99, testCase.nonNegativeEvidence), 'uncertain', `${testCase.field} rejects non-none evidence`);
+            ['partially_occluded', 'cropped', 'not_visible', 'uncertain'].forEach(region_visibility => {
+              equal(
+                build(0.99, { ...testCase.evidence, region_visibility }),
+                'uncertain',
+                `${testCase.field} rejects ${region_visibility} as negative evidence`
+              );
+            });
+          });
+        });
+
+        test('keeps normalized raw data unchanged and appends each relevant reason once', () => {
+          const input = normalizedCard({
+            shiny_state: 'yes',
+            shiny_confidence: 0.99,
+            shiny_evidence: cyanPurificationEvidence()
+          });
+          input.manual_review_reasons = ['shiny_uncertain'];
+          const before = JSON.stringify(input);
+          const validated = validateHundoCardStates(validateHundoCardStates(input));
+          equal(JSON.stringify(input), before, 'validation is pure');
+          deepEqual(validated.raw, input.raw, 'raw audit fields are unchanged');
+          equal(validated.manual_review_reasons.filter(reason => reason === 'shiny_uncertain').length, 1);
+          equal(validated.manual_review_reasons.includes('lucky_uncertain'), false);
+          equal(validated.effective_lucky_state, 'no');
+          equal(validated.effective_favorite_state, 'no');
+          equal(validated.effective_rocket_state, 'normal');
+          equal(validated.effective_background_type, 'none');
+        });
+
+        test('keeps global uncertain through validation', () => {
+          const validated = validateHundoCardStates(normalizedCard({
+            background_type: 'global',
+            background_confidence: 0.99,
+            background_evidence: backgroundEvidence({
+              present: true,
+              position: 'near_pokemon_or_card_background',
+              badge_type: 'commemorative_location_badge',
+              appearance: 'location_style_background'
+            })
+          }));
+          equal(validated.raw.states.background, 'global');
+          equal(validated.background_type, 'uncertain');
+          equal(validated.effective_background_type, 'uncertain');
+          equal(validated.manual_review_reasons.includes('background_uncertain'), true);
+        });
+
+        test('uses species confidence in the downstream recognition gate without inventing a name', () => {
+          const belowThreshold = validateHundoCardStates(normalizedCard({
+            official_name: '固拉多',
+            recognition_status: 'recognized',
+            species_confidence: 0.799
+          }));
+          const atThreshold = validateHundoCardStates(normalizedCard({
+            official_name: '固拉多',
+            recognition_status: 'recognized',
+            species_confidence: 0.80
+          }));
+          const belowConversion = effectiveSmartHundoCardsToPokemonList([belowThreshold], normalizeName);
+          const atConversion = effectiveSmartHundoCardsToPokemonList([atThreshold], normalizeName);
+          equal(belowThreshold.official_name, '固拉多');
+          equal(belowThreshold.recognition_status, 'recognized');
+          equal(belowConversion.pokemon_list, '');
+          equal(belowConversion.review_reason_counts.species_uncertain, 1);
+          equal(atConversion.pokemon_list, '固拉多');
         });
 
         test('normalizes the five-dimension screenshot root without deduplicating coordinates', () => {
