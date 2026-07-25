@@ -2598,7 +2598,8 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             const totalFiles = files.length;
             let smartSessionId = 0;
             let trainerTeamScanId = 0;
-            let trainerTeamManualRevisionAtStart = trainerTeamManualRevision;
+            const trainerTeamContextIdAtStart = activeTrainerTeamScanId;
+            const trainerTeamManualRevisionAtStart = trainerTeamManualRevision;
             const writeRunStatus = (statusHtml) => {
                 if (!isCurrentAutoScanRun(scanRunId)) return false;
                 setAiActionButtonStatus(statusHtml);
@@ -2647,13 +2648,14 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 if (!isCurrentAutoScanRun(scanRunId)) return;
 
                 const { normalJobs, smartHundoJobs } = helpers.partitionImageJobs(classifiedJobs);
-                const trainerTeamJobs = normalJobs.filter(
-                    job => job.classification.image_type === 'TRAINER_PROFILE_SCREEN'
-                );
+                const trainerTeamJobs = activeTrainerTeamScanId === trainerTeamContextIdAtStart
+                    ? normalJobs.filter(
+                        job => job.classification.image_type === 'TRAINER_PROFILE_SCREEN'
+                    )
+                    : [];
                 if (smartHundoJobs.length > 0) smartSessionId = beginSmartHundoScanSession();
                 if (trainerTeamJobs.length > 0) {
                     trainerTeamScanId = beginTrainerTeamScan();
-                    trainerTeamManualRevisionAtStart = trainerTeamManualRevision;
                 }
                 const writeBatchStatus = smartSessionId
                     ? statusHtml => (

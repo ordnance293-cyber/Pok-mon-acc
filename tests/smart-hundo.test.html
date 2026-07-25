@@ -2791,6 +2791,9 @@
           TEAM_CURRENT_BLUE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_MANUAL_PENDING: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_EDIT_PENDING: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_CLASSIFICATION_MANUAL: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_CLASSIFICATION_SELECTION: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_CLASSIFICATION_RESET: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_SELECTION_INVALIDATED: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' },
           SHINY_LEGENDARY: { image_type: 'SHINY_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色' },
@@ -3230,6 +3233,85 @@
             equal(summary.name, 'Error');
             equal(summary.httpStatus, 503);
           });
+        });
+
+        await trainerContractAsyncTest('preserves a manual team revision made while profile classification is pending', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          delayedClassificationIdentity = 'TEAM_CLASSIFICATION_MANUAL';
+          setScanFiles(['TEAM_CLASSIFICATION_MANUAL']);
+          trainerTeamResultByImage.set('TEAM_CLASSIFICATION_MANUAL', trainerTeamEvidence('yellow'));
+          document.getElementById('g_team').value = '';
+          const classificationReached = new Promise(resolve => { notifyDelayedClassification = resolve; });
+          const pendingScan = autoScan();
+          await classificationReached;
+
+          document.getElementById('g_team').value = '紅隊';
+          document.getElementById('g_team').dispatchEvent(new Event('change'));
+          releaseDelayedClassification();
+          await pendingScan;
+
+          equal(document.getElementById('g_team').value, '紅隊');
+          equal(
+            routedRequests.filter(request => request.schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor').length,
+            1,
+            'unchanged image context still allows one dedicated evidence request'
+          );
+          equal(window.lastTrainerTeamDiagnostics.applied_to_form, false);
+          equal(document.getElementById('trainerTeamStatus').textContent, '隊伍已保留手動選擇');
+        });
+
+        await trainerContractAsyncTest('skips stale profile team work when selection or reset changes during classification', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          delayedClassificationIdentity = 'TEAM_CLASSIFICATION_SELECTION';
+          setScanFiles(['TEAM_CLASSIFICATION_SELECTION']);
+          trainerTeamResultByImage.set('TEAM_CLASSIFICATION_SELECTION', trainerTeamEvidence('yellow'));
+          document.getElementById('g_team').value = '';
+          const selectionClassificationReached = new Promise(resolve => { notifyDelayedClassification = resolve; });
+          const selectionScan = autoScan();
+          await selectionClassificationReached;
+
+          setScanFiles([]);
+          document.getElementById('imageInput').dispatchEvent(new Event('change'));
+          releaseDelayedClassification();
+          await selectionScan;
+
+          equal(
+            routedRequests.filter(request => request.schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor').length,
+            0,
+            'old selected files never start a dedicated team request'
+          );
+          equal(document.getElementById('g_team').value, '');
+          equal(document.getElementById('trainerTeamStatus').textContent, '');
+          equal(window.lastTrainerTeamDiagnostics, null);
+
+          resetScanScenario();
+          delayedClassificationIdentity = 'TEAM_CLASSIFICATION_RESET';
+          setScanFiles(['TEAM_CLASSIFICATION_RESET']);
+          trainerTeamResultByImage.set('TEAM_CLASSIFICATION_RESET', trainerTeamEvidence('yellow'));
+          const resetClassificationReached = new Promise(resolve => { notifyDelayedClassification = resolve; });
+          const resetScan = autoScan();
+          await resetClassificationReached;
+
+          const previousTogglePage = window.togglePage;
+          window.togglePage = () => {};
+          try {
+            window.resetForm();
+          } finally {
+            window.togglePage = previousTogglePage;
+          }
+          releaseDelayedClassification();
+          await resetScan;
+
+          equal(
+            routedRequests.filter(request => request.schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor').length,
+            0,
+            'reset invalidation also prevents the old dedicated team request'
+          );
+          equal(document.getElementById('g_team').value, '');
+          equal(document.getElementById('trainerTeamStatus').textContent, '');
+          equal(window.lastTrainerTeamDiagnostics, null);
         });
 
         await trainerContractAsyncTest('lets a manual team edit win while the current request is pending', async () => {
