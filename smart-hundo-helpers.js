@@ -3,7 +3,26 @@
 
     const HUNDO_LEGENDARY_QUERY = '傳說的寶可夢,幻,究極異獸&4*';
     const SMART_IMAGE_TYPE = 'HUNDO_LEGENDARY_SCREEN';
-    const STATE_VALUES = new Set(['yes', 'no', 'uncertain']);
+    const INDEPENDENT_STATE_VALUES = new Set(['yes', 'no', 'uncertain']);
+    const ROCKET_STATE_VALUES = new Set(['normal', 'shadow', 'purified', 'uncertain']);
+    const BACKGROUND_TYPE_VALUES = new Set(['none', 'commemorative', 'special', 'uncertain']);
+    const EFFECTIVE_STATE_DEFAULTS = Object.freeze({
+        shiny: 'uncertain',
+        lucky: 'uncertain',
+        favorite: 'uncertain',
+        rocket: 'uncertain',
+        background: 'uncertain'
+    });
+    const REGION_VISIBILITY_VALUES = new Set(['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain']);
+    const SPARKLE_POSITION_VALUES = new Set(['none', 'cp_area', 'upper_right', 'lower_left', 'background', 'uncertain']);
+    const SPARKLE_COLOR_VALUES = new Set(['none', 'dark_blue_teal', 'light_cyan', 'gold', 'yellow', 'purple', 'uncertain']);
+    const SPARKLE_SHAPE_VALUES = new Set(['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'uncertain']);
+    const APPEARANCE_POSITION_VALUES = new Set(['none', 'upper_right', 'uncertain']);
+    const APPEARANCE_VALUES = new Set(['none', 'filled_yellow_five_point_star', 'uncertain']);
+    const BACKGROUND_POSITION_VALUES = new Set(['none', 'background', 'uncertain']);
+    const BADGE_TYPE_VALUES = new Set(['none', 'commemorative', 'special', 'uncertain']);
+    const BACKGROUND_APPEARANCE_VALUES = new Set(['none', 'location_badge', 'event_badge', 'special_background', 'uncertain']);
+    const STATE_VALUES = INDEPENDENT_STATE_VALUES;
     const RECOGNITION_VALUES = new Set(['recognized', 'partial', 'uncertain']);
 
     const stringValue = (value) => value === undefined || value === null ? '' : String(value).trim();
@@ -46,6 +65,53 @@
         return STATE_VALUES.has(state) ? state : 'uncertain';
     };
 
+    const normalizeRawValue = (value, fallback = 'uncertain') => {
+        const normalized = stringValue(value).toLowerCase();
+        return normalized || fallback;
+    };
+
+    const normalizeEnum = (value, values, fallback = 'uncertain') => {
+        const normalized = normalizeRawValue(value, fallback);
+        return values.has(normalized) ? normalized : fallback;
+    };
+
+    const normalizeIndependentState = (value) => normalizeEnum(value, INDEPENDENT_STATE_VALUES);
+    const normalizeRocketState = (value) => normalizeEnum(value, ROCKET_STATE_VALUES);
+    const normalizeBackgroundType = (value) => normalizeEnum(value, BACKGROUND_TYPE_VALUES);
+
+    const adaptLegacyRocketState = (card = {}) => {
+        const shadow = stringValue(card?.shadow_state).toLowerCase();
+        const purified = stringValue(card?.purified_state).toLowerCase();
+        if (!['yes', 'no'].includes(shadow) || !['yes', 'no'].includes(purified)) return 'uncertain';
+        if (shadow === 'yes' && purified === 'no') return 'shadow';
+        if (shadow === 'no' && purified === 'yes') return 'purified';
+        if (shadow === 'no' && purified === 'no') return 'normal';
+        return 'uncertain';
+    };
+
+    const normalizeSparkleEvidence = (evidence = {}) => ({
+        present: evidence?.present === true,
+        region_visibility: normalizeEnum(evidence?.region_visibility, REGION_VISIBILITY_VALUES),
+        position: normalizeEnum(evidence?.position, SPARKLE_POSITION_VALUES, 'none'),
+        color: normalizeEnum(evidence?.color, SPARKLE_COLOR_VALUES, 'none'),
+        shape: normalizeEnum(evidence?.shape, SPARKLE_SHAPE_VALUES, 'none')
+    });
+
+    const normalizeAppearanceEvidence = (evidence = {}) => ({
+        present: evidence?.present === true,
+        region_visibility: normalizeEnum(evidence?.region_visibility, REGION_VISIBILITY_VALUES),
+        position: normalizeEnum(evidence?.position, APPEARANCE_POSITION_VALUES, 'none'),
+        appearance: normalizeEnum(evidence?.appearance, APPEARANCE_VALUES, 'none')
+    });
+
+    const normalizeBackgroundEvidence = (evidence = {}) => ({
+        present: evidence?.present === true,
+        region_visibility: normalizeEnum(evidence?.region_visibility, REGION_VISIBILITY_VALUES),
+        position: normalizeEnum(evidence?.position, BACKGROUND_POSITION_VALUES, 'none'),
+        badge_type: normalizeEnum(evidence?.badge_type, BADGE_TYPE_VALUES, 'none'),
+        appearance: normalizeEnum(evidence?.appearance, BACKGROUND_APPEARANCE_VALUES, 'none')
+    });
+
     const normalizeRecognitionStatus = (value) => {
         const status = stringValue(value).toLowerCase();
         return RECOGNITION_VALUES.has(status) ? status : 'uncertain';
@@ -55,6 +121,77 @@
         const normalized = typeof normalizer === 'function' ? normalizer(value) : value;
         return stringValue(normalized);
     };
+
+    const normalizeSmartHundoCard = (card = {}, normalizeOfficialName, options = {}) => {
+        const screenshotIndex = normalizeCoordinate(options?.screenshotIndex);
+        const hasRocketState = card?.rocket_state !== undefined && card?.rocket_state !== null;
+        const rawStates = {
+            shiny: normalizeRawValue(card?.shiny_state),
+            lucky: normalizeRawValue(card?.lucky_state),
+            favorite: normalizeRawValue(card?.favorite_state),
+            rocket: hasRocketState ? normalizeRawValue(card?.rocket_state) : adaptLegacyRocketState(card),
+            background: normalizeRawValue(card?.background_type)
+        };
+        const rawConfidences = {
+            shiny: card?.shiny_confidence,
+            lucky: card?.lucky_confidence,
+            favorite: card?.favorite_confidence,
+            rocket: card?.rocket_confidence,
+            background: card?.background_confidence
+        };
+        const rawEvidence = {
+            shiny: normalizeSparkleEvidence(card?.shiny_evidence),
+            lucky: normalizeSparkleEvidence(card?.lucky_evidence),
+            favorite: normalizeAppearanceEvidence(card?.favorite_evidence),
+            rocket: normalizeSparkleEvidence(card?.rocket_evidence),
+            background: normalizeBackgroundEvidence(card?.background_evidence)
+        };
+        const order = normalizeCoordinate(card?.order);
+        const row = normalizeCoordinate(card?.row);
+        const column = normalizeCoordinate(card?.column);
+
+        return {
+            screenshot_index: screenshotIndex,
+            card_id: `${screenshotIndex}:${order}:${row}:${column}`,
+            order,
+            row,
+            column,
+            visible_label: stringValue(card?.visible_label),
+            official_name: normalizeWith(normalizeOfficialName, card?.official_name),
+            recognition_status: normalizeRecognitionStatus(card?.recognition_status),
+            species_confidence: clampConfidence(card?.species_confidence),
+            cp: normalizeCount(card?.cp),
+            shiny_state: normalizeIndependentState(rawStates.shiny),
+            shiny_confidence: clampConfidence(rawConfidences.shiny),
+            lucky_state: normalizeIndependentState(rawStates.lucky),
+            lucky_confidence: clampConfidence(rawConfidences.lucky),
+            favorite_state: normalizeIndependentState(rawStates.favorite),
+            favorite_confidence: clampConfidence(rawConfidences.favorite),
+            rocket_state: normalizeRocketState(rawStates.rocket),
+            rocket_confidence: clampConfidence(rawConfidences.rocket),
+            background_type: normalizeBackgroundType(rawStates.background),
+            background_confidence: clampConfidence(rawConfidences.background),
+            effective_shiny_state: EFFECTIVE_STATE_DEFAULTS.shiny,
+            effective_lucky_state: EFFECTIVE_STATE_DEFAULTS.lucky,
+            effective_favorite_state: EFFECTIVE_STATE_DEFAULTS.favorite,
+            effective_rocket_state: EFFECTIVE_STATE_DEFAULTS.rocket,
+            effective_background_type: EFFECTIVE_STATE_DEFAULTS.background,
+            raw: {
+                states: rawStates,
+                confidences: rawConfidences,
+                evidence: rawEvidence
+            }
+        };
+    };
+
+    const normalizeSmartHundoResult = (result = {}, normalizeOfficialName, options = {}) => ({
+        detected_card_count: normalizeCount(result?.detected_card_count),
+        scan_complete: result?.scan_complete === true,
+        bottom_edge_checked: result?.bottom_edge_checked === true,
+        enumeration_confidence: clampConfidence(result?.enumeration_confidence),
+        cards: (Array.isArray(result?.cards) ? result.cards : [])
+            .map(card => normalizeSmartHundoCard(card, normalizeOfficialName, options))
+    });
 
     const normalizeCard = (card = {}, normalizeOfficialName) => ({
         order: normalizeCoordinate(card?.order),
@@ -92,14 +229,14 @@
             .sort(compareCards);
     };
 
-    const normalizeSmartHundoResult = (result = {}, normalizeNumber, normalizeOfficialName) => ({
+    const normalizeLegacySmartHundoResult = (result = {}, normalizeNumber, normalizeOfficialName) => ({
         hundo_leg: normalizeWith(normalizeNumber, result?.hundo_leg),
         hundo_leg_confidence: clampConfidence(result?.hundo_leg_confidence),
         detected_card_count: normalizeCount(result?.detected_card_count),
         cards: normalizeCards(result?.cards, normalizeOfficialName)
     });
 
-    const smartHundoCardsToPokemonList = (cards = [], normalizeOfficialName, normalizePokemonList) => {
+    const legacySmartHundoCardsToPokemonList = (cards = [], normalizeOfficialName, normalizePokemonList) => {
         const normalizedCards = (Array.isArray(cards) ? cards : [])
             .map(card => normalizeCard(card, normalizeOfficialName))
             .sort(compareCards);
@@ -133,10 +270,10 @@
 
     const mergeSmartHundoScanResults = (results = [], normalizeNumber, normalizeOfficialName, normalizePokemonList) => {
         const normalizedResults = (Array.isArray(results) ? results : [])
-            .map(result => normalizeSmartHundoResult(result, normalizeNumber, normalizeOfficialName));
+            .map(result => normalizeLegacySmartHundoResult(result, normalizeNumber, normalizeOfficialName));
         const hundoLegValues = normalizedResults.map(result => result.hundo_leg).filter(Boolean);
         const cards = normalizedResults.flatMap(result => result.cards);
-        const conversion = smartHundoCardsToPokemonList(cards, normalizeOfficialName, normalizePokemonList);
+        const conversion = legacySmartHundoCardsToPokemonList(cards, normalizeOfficialName, normalizePokemonList);
 
         return {
             hundo_leg: hundoLegValues[0] || '',
@@ -153,8 +290,11 @@
         normalizeSearchQuery,
         isSmartHundoClassification,
         partitionImageJobs,
+        adaptLegacyRocketState,
+        normalizeSmartHundoCard,
         normalizeSmartHundoResult,
-        smartHundoCardsToPokemonList,
+        normalizeLegacySmartHundoResult,
+        legacySmartHundoCardsToPokemonList,
         mergeSmartHundoScanResults
     };
 

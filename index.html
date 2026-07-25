@@ -693,7 +693,7 @@
             }
         };
 
-        const HUNDO_SMART_SCHEMA = {
+        const HUNDO_SMART_SCHEMA_V1 = {
             name: 'pokemon_go_hundo_smart_extractor',
             strict: true,
             schema: {
@@ -731,6 +731,111 @@
                     }
                 },
                 required: ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']
+            }
+        };
+
+        const HUNDO_SMART_SCHEMA = {
+            name: 'pokemon_go_hundo_smart_extractor_v2',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    detected_card_count: { type: 'integer', minimum: 0 },
+                    scan_complete: { type: 'boolean' },
+                    bottom_edge_checked: { type: 'boolean' },
+                    enumeration_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                    cards: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            properties: {
+                                order: { type: 'integer', minimum: 0 },
+                                row: { type: 'integer', minimum: 0 },
+                                column: { type: 'integer', minimum: 0 },
+                                visible_label: { type: 'string' },
+                                official_name: { type: 'string' },
+                                recognition_status: { type: 'string', enum: ['recognized', 'partial', 'uncertain'] },
+                                species_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                cp: { type: 'integer', minimum: 0 },
+                                shiny_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                shiny_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                shiny_evidence: {
+                                    type: 'object', additionalProperties: false,
+                                    properties: {
+                                        present: { type: 'boolean' },
+                                        region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
+                                        position: { type: 'string', enum: ['none', 'cp_area', 'upper_right', 'lower_left', 'background', 'uncertain'] },
+                                        color: { type: 'string', enum: ['none', 'dark_blue_teal', 'light_cyan', 'gold', 'yellow', 'purple', 'uncertain'] },
+                                        shape: { type: 'string', enum: ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'uncertain'] }
+                                    },
+                                    required: ['present', 'region_visibility', 'position', 'color', 'shape']
+                                },
+                                lucky_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                lucky_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                lucky_evidence: {
+                                    type: 'object', additionalProperties: false,
+                                    properties: {
+                                        present: { type: 'boolean' },
+                                        region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
+                                        position: { type: 'string', enum: ['none', 'cp_area', 'upper_right', 'lower_left', 'background', 'uncertain'] },
+                                        color: { type: 'string', enum: ['none', 'dark_blue_teal', 'light_cyan', 'gold', 'yellow', 'purple', 'uncertain'] },
+                                        shape: { type: 'string', enum: ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'uncertain'] }
+                                    },
+                                    required: ['present', 'region_visibility', 'position', 'color', 'shape']
+                                },
+                                favorite_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
+                                favorite_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                favorite_evidence: {
+                                    type: 'object', additionalProperties: false,
+                                    properties: {
+                                        present: { type: 'boolean' },
+                                        region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
+                                        position: { type: 'string', enum: ['none', 'upper_right', 'uncertain'] },
+                                        appearance: { type: 'string', enum: ['none', 'filled_yellow_five_point_star', 'uncertain'] }
+                                    },
+                                    required: ['present', 'region_visibility', 'position', 'appearance']
+                                },
+                                rocket_state: { type: 'string', enum: ['normal', 'shadow', 'purified', 'uncertain'] },
+                                rocket_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                rocket_evidence: {
+                                    type: 'object', additionalProperties: false,
+                                    properties: {
+                                        present: { type: 'boolean' },
+                                        region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
+                                        position: { type: 'string', enum: ['none', 'cp_area', 'upper_right', 'lower_left', 'background', 'uncertain'] },
+                                        color: { type: 'string', enum: ['none', 'dark_blue_teal', 'light_cyan', 'gold', 'yellow', 'purple', 'uncertain'] },
+                                        shape: { type: 'string', enum: ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'uncertain'] }
+                                    },
+                                    required: ['present', 'region_visibility', 'position', 'color', 'shape']
+                                },
+                                background_type: { type: 'string', enum: ['none', 'commemorative', 'special', 'uncertain'] },
+                                background_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                background_evidence: {
+                                    type: 'object', additionalProperties: false,
+                                    properties: {
+                                        present: { type: 'boolean' },
+                                        region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
+                                        position: { type: 'string', enum: ['none', 'background', 'uncertain'] },
+                                        badge_type: { type: 'string', enum: ['none', 'commemorative', 'special', 'uncertain'] },
+                                        appearance: { type: 'string', enum: ['none', 'location_badge', 'event_badge', 'special_background', 'uncertain'] }
+                                    },
+                                    required: ['present', 'region_visibility', 'position', 'badge_type', 'appearance']
+                                }
+                            },
+                            required: [
+                                'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence', 'cp',
+                                'shiny_state', 'shiny_confidence', 'shiny_evidence',
+                                'lucky_state', 'lucky_confidence', 'lucky_evidence',
+                                'favorite_state', 'favorite_confidence', 'favorite_evidence',
+                                'rocket_state', 'rocket_confidence', 'rocket_evidence',
+                                'background_type', 'background_confidence', 'background_evidence'
+                            ]
+                        }
+                    }
+                },
+                required: ['detected_card_count', 'scan_complete', 'bottom_edge_checked', 'enumeration_confidence', 'cards']
             }
         };
 
@@ -1680,11 +1785,11 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
             return {};
         };
 
-        const requestSmartHundoExtraction = async (apiKey, originalDataUrl, statusUpdater) => requestOpenAiJsonSchema(
+        const requestSmartHundoExtractionV1 = async (apiKey, originalDataUrl, statusUpdater) => requestOpenAiJsonSchema(
             apiKey,
             buildSmartHundoPrompt(),
             originalDataUrl,
-            HUNDO_SMART_SCHEMA,
+            HUNDO_SMART_SCHEMA_V1,
             statusUpdater,
             { imageDetail: HUNDO_SMART_IMAGE_DETAIL }
         );
@@ -1692,9 +1797,9 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
         const smartHundoScan = async ({ apiKey, originalDataUrl, imageIndex, statusUpdater } = {}) => {
             const helpers = globalThis.SmartHundoHelpers;
             if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
-            const rawResult = await requestSmartHundoExtraction(apiKey, originalDataUrl, statusUpdater);
-            const normalized = helpers.normalizeSmartHundoResult(rawResult, extractSingleNumber, normalizePokemonBaseName);
-            const conversion = helpers.smartHundoCardsToPokemonList(normalized.cards, normalizePokemonBaseName, normalizePokemonList);
+            const rawResult = await requestSmartHundoExtractionV1(apiKey, originalDataUrl, statusUpdater);
+            const normalized = helpers.normalizeLegacySmartHundoResult(rawResult, extractSingleNumber, normalizePokemonBaseName);
+            const conversion = helpers.legacySmartHundoCardsToPokemonList(normalized.cards, normalizePokemonBaseName, normalizePokemonList);
             return { ...normalized, ...conversion, imageIndex };
         };
 

@@ -104,6 +104,29 @@
         await callback();
         results.push(`PASS ${name}`);
       };
+      const sparkleEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        color: 'none',
+        shape: 'none',
+        ...overrides
+      });
+      const appearanceEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        appearance: 'none',
+        ...overrides
+      });
+      const backgroundEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        badge_type: 'none',
+        appearance: 'none',
+        ...overrides
+      });
       const card = (overrides = {}) => ({
         order: 1,
         row: 1,
@@ -112,8 +135,22 @@
         official_name: '超夢',
         recognition_status: 'recognized',
         species_confidence: 0.9,
+        cp: 1234,
         shiny_state: 'no',
         shiny_confidence: 0.9,
+        shiny_evidence: sparkleEvidence(),
+        lucky_state: 'no',
+        lucky_confidence: 0.9,
+        lucky_evidence: sparkleEvidence(),
+        favorite_state: 'no',
+        favorite_confidence: 0.9,
+        favorite_evidence: appearanceEvidence(),
+        rocket_state: 'normal',
+        rocket_confidence: 0.9,
+        rocket_evidence: sparkleEvidence(),
+        background_type: 'none',
+        background_confidence: 0.9,
+        background_evidence: backgroundEvidence(),
         purified_state: 'no',
         purified_confidence: 0.9,
         shadow_state: 'no',
@@ -153,10 +190,14 @@
           normalizeSearchQuery,
           isSmartHundoClassification,
           partitionImageJobs,
-          normalizeSmartHundoResult,
-          smartHundoCardsToPokemonList,
+          adaptLegacyRocketState,
+          normalizeSmartHundoCard,
+          normalizeSmartHundoResult: normalizeSmartHundoResultV2,
+          normalizeLegacySmartHundoResult,
+          legacySmartHundoCardsToPokemonList,
           mergeSmartHundoScanResults
         } = helpers;
+        const smartHundoCardsToPokemonList = legacySmartHundoCardsToPokemonList;
 
         test('normalizes each required hundo query variant', () => {
           const canonical = '傳說的寶可夢,幻,究極異獸&4*';
@@ -181,6 +222,54 @@
           equal(isSmartHundoClassification(jobs[0].classification), false);
         });
 
+        test('expresses seven features through five state dimensions', () => {
+          const normalized = normalizeSmartHundoCard(card({
+            shiny_state: 'yes',
+            lucky_state: 'yes',
+            favorite_state: 'yes',
+            rocket_state: 'purified',
+            background_type: 'special'
+          }), normalizeName, { screenshotIndex: 4 });
+          equal(normalized.shiny_state, 'yes');
+          equal(normalized.lucky_state, 'yes');
+          equal(normalized.favorite_state, 'yes');
+          equal(normalized.rocket_state, 'purified');
+          equal(normalized.background_type, 'special');
+          equal(normalized.effective_shiny_state, 'uncertain');
+          equal(normalized.card_id, '4:1:1:1');
+        });
+
+        test('adapts legacy shadow and purified into one rocket state', () => {
+          equal(adaptLegacyRocketState({ shadow_state: 'yes', purified_state: 'no' }), 'shadow');
+          equal(adaptLegacyRocketState({ shadow_state: 'no', purified_state: 'yes' }), 'purified');
+          equal(adaptLegacyRocketState({ shadow_state: 'yes', purified_state: 'yes' }), 'uncertain');
+          equal(adaptLegacyRocketState({ shadow_state: 'no', purified_state: 'no' }), 'normal');
+          equal(adaptLegacyRocketState({ shadow_state: 'yes' }), 'uncertain');
+        });
+
+        test('rejects global without converting it to commemorative', () => {
+          const normalized = normalizeSmartHundoCard(card({ background_type: 'global' }), normalizeName);
+          equal(normalized.raw.states.background, 'global');
+          equal(normalized.background_type, 'uncertain');
+          equal(normalized.effective_background_type, 'uncertain');
+        });
+
+        test('normalizes the five-dimension screenshot root without deduplicating coordinates', () => {
+          const normalized = normalizeSmartHundoResultV2({
+            detected_card_count: '2',
+            scan_complete: true,
+            bottom_edge_checked: true,
+            enumeration_confidence: 1.2,
+            cards: [card(), card()]
+          }, normalizeName, { screenshotIndex: 7 });
+          equal(normalized.detected_card_count, 2);
+          equal(normalized.scan_complete, true);
+          equal(normalized.bottom_edge_checked, true);
+          equal(normalized.enumeration_confidence, 1);
+          equal(normalized.cards.length, 2);
+          equal(normalized.cards[1].card_id, '7:1:1:1');
+        });
+
         test('converts purified, shiny, shadow, and duplicate cards without a purified prefix', () => {
           const cards = [
             card({ official_name: '超夢', purified_state: 'yes' }),
@@ -197,7 +286,7 @@
         });
 
         test('normalizes empty official names and only exact normalized duplicate positions', () => {
-          const normalized = normalizeSmartHundoResult({
+          const normalized = normalizeLegacySmartHundoResult({
             hundo_leg: '第 8 隻',
             hundo_leg_confidence: 1.7,
             detected_card_count: '3',
@@ -220,7 +309,7 @@
 
         test('deduplicates exact cards within one screenshot before conversion', () => {
           const duplicateWithinScreenshot = card({ official_name: '超夢', order: 1, row: 1, column: 1 });
-          const normalized = normalizeSmartHundoResult({
+          const normalized = normalizeLegacySmartHundoResult({
             detected_card_count: 2,
             cards: [duplicateWithinScreenshot, { ...duplicateWithinScreenshot }]
           }, normalizeNumber, normalizeName);
@@ -247,7 +336,7 @@
         });
 
         test('preserves partial recognition while excluding it from the usable list', () => {
-          const normalized = normalizeSmartHundoResult({
+          const normalized = normalizeLegacySmartHundoResult({
             cards: [card({ recognition_status: 'partial', official_name: '超夢' })]
           }, normalizeNumber, normalizeName);
           equal(normalized.cards[0].recognition_status, 'partial');
@@ -361,12 +450,12 @@
 
         const pageModule = moduleMatch[1]
           .replace(/^\s*import\s+[^;]+;\s*$/gm, '')
-          + '\nObject.assign(globalThis, { HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA, buildSmartHundoPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestSmartHundoExtraction, smartHundoScan });';
+          + '\nObject.assign(globalThis, { HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA_V1, HUNDO_SMART_SCHEMA, buildSmartHundoPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestSmartHundoExtractionV1, smartHundoScan });';
         (0, eval)(pageModule);
 
         equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
         equal(canvasCalls, 0);
-        await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA, null);
+        await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA_V1, null);
         equal(lastPayload.messages[0].content[1].image_url.detail, 'auto');
         await smartHundoScan({ apiKey: 'test-key', originalDataUrl, imageIndex: 2 });
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
@@ -374,23 +463,27 @@
         equal(smartRequestCount, 1);
         equal(JSON.stringify(lastPayload).includes('test-key'), false);
         equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
+        equal(HUNDO_SMART_SCHEMA_V1.strict, true);
+        equal(HUNDO_SMART_SCHEMA_V1.schema.additionalProperties, false);
         equal(HUNDO_SMART_SCHEMA.strict, true);
         equal(HUNDO_SMART_SCHEMA.schema.additionalProperties, false);
-        equal(HUNDO_SMART_SCHEMA.schema.properties.cards.items.additionalProperties, false);
-        deepEqual(Object.keys(HUNDO_SMART_SCHEMA.schema.properties), ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']);
-        deepEqual(HUNDO_SMART_SCHEMA.schema.required, ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']);
+        deepEqual(Object.keys(HUNDO_SMART_SCHEMA.schema.properties), [
+          'detected_card_count', 'scan_complete', 'bottom_edge_checked', 'enumeration_confidence', 'cards'
+        ]);
+        deepEqual(HUNDO_SMART_SCHEMA.schema.required, [
+          'detected_card_count', 'scan_complete', 'bottom_edge_checked', 'enumeration_confidence', 'cards'
+        ]);
         const smartCardSchema = HUNDO_SMART_SCHEMA.schema.properties.cards.items;
-        deepEqual(Object.keys(smartCardSchema.properties), [
-          'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
-          'shiny_state', 'shiny_confidence', 'purified_state', 'purified_confidence', 'shadow_state', 'shadow_confidence'
-        ]);
-        deepEqual(smartCardSchema.required, [
-          'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
-          'shiny_state', 'shiny_confidence', 'purified_state', 'purified_confidence', 'shadow_state', 'shadow_confidence'
-        ]);
-        deepEqual(smartCardSchema.properties.recognition_status.enum, ['recognized', 'partial', 'uncertain']);
-        ['shiny_state', 'purified_state', 'shadow_state'].forEach(field => {
-          deepEqual(smartCardSchema.properties[field].enum, ['yes', 'no', 'uncertain'], field);
+        equal(smartCardSchema.additionalProperties, false);
+        ['hundo_leg', 'shadow_state', 'purified_state'].forEach(field => {
+          equal(Object.hasOwn(smartCardSchema.properties, field), false, field);
+        });
+        equal(JSON.stringify(HUNDO_SMART_SCHEMA).includes('global'), false);
+        ['shiny_evidence', 'lucky_evidence', 'favorite_evidence', 'rocket_evidence', 'background_evidence'].forEach(field => {
+          const evidenceSchema = smartCardSchema.properties[field];
+          equal(evidenceSchema.additionalProperties, false, `${field} is strict`);
+          equal(evidenceSchema.required.includes('region_visibility'), true, `${field} requires visibility`);
+          deepEqual(evidenceSchema.required, Object.keys(evidenceSchema.properties), `${field} requires every property`);
         });
         const smartPrompt = buildSmartHundoPrompt();
         [
