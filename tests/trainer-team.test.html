@@ -13,7 +13,14 @@
   const includes = (values, expected, message = 'missing expected value') => {
     if (!Array.isArray(values) || !values.includes(expected)) fail(`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(values)}`);
   };
-  const test = (name, callback) => { callback(); results.push(`PASS ${name}`); };
+  const test = (name, callback) => {
+    try {
+      callback();
+      results.push(`PASS ${name}`);
+    } catch (error) {
+      results.push(`FAIL ${name}: ${error && error.message ? error.message : String(error)}`);
+    }
+  };
   const render = () => {
     const passed = results.filter(result => result.startsWith('PASS ')).length;
     const failed = results.filter(result => result.startsWith('FAIL ')).length;
@@ -36,10 +43,14 @@
     equal(actual.effective_team, team, 'effective trainer team');
     if (diagnostic) includes(actual.diagnostics, diagnostic, 'validator diagnostic');
   };
-  try {
-    const helpers = globalThis.TrainerTeamHelpers;
-    if (!helpers) fail('globalThis.TrainerTeamHelpers is absent');
-    const { normalizeTrainerTeamResult, validateTrainerTeamEvidence, mergeTrainerTeamResults, formatTrainerTeamStatus } = helpers;
+  const requireHelpers = () => {
+    if (!globalThis.TrainerTeamHelpers) fail('globalThis.TrainerTeamHelpers is absent');
+    return globalThis.TrainerTeamHelpers;
+  };
+  const normalizeTrainerTeamResult = (...args) => requireHelpers().normalizeTrainerTeamResult(...args);
+  const validateTrainerTeamEvidence = (...args) => requireHelpers().validateTrainerTeamEvidence(...args);
+  const mergeTrainerTeamResults = (...args) => requireHelpers().mergeTrainerTeamResults(...args);
+  const formatTrainerTeamStatus = (...args) => requireHelpers().formatTrainerTeamStatus(...args);
 
     test('normalizes malformed evidence to strict uncertain values', () => {
       const result = normalizeTrainerTeamResult({ model_team_candidate: 'green', model_confidence: 2, level_number: { visibility: 'visible', color: 'green' } });
@@ -89,9 +100,6 @@
       equal(formatTrainerTeamStatus({ effective_color: 'yellow', effective_team: '黃隊', diagnostics: [] }), '隊伍辨識完成：黃隊');
       equal(formatTrainerTeamStatus({ effective_color: 'uncertain', effective_team: '', diagnostics: [] }), '隊伍需人工確認：固定 UI 證據不足');
     });
-  } catch (error) {
-    results.push(`FAIL ${error && error.message ? error.message : String(error)}`);
-  }
   render();
 })();
 </script></body>
