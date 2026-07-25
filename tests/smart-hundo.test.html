@@ -2137,6 +2137,9 @@
           deepEqual(Object.keys(schema.schema.properties), propertyNames);
           deepEqual(schema.schema.required, propertyNames);
           deepEqual(schema.schema.properties.model_team_candidate.enum, colorEnum);
+          equal(schema.schema.properties.model_confidence.type, 'number');
+          equal(schema.schema.properties.model_confidence.minimum, 0);
+          equal(schema.schema.properties.model_confidence.maximum, 1);
           evidenceNames.forEach(name => {
             const evidenceSchema = schema.schema.properties[name];
             equal(evidenceSchema.type, 'object', `${name} is an object`);
@@ -3250,13 +3253,43 @@
             'validation_reasons',
             'conflicts'
           ]);
+          const requiredRootKeys = [
+            'screenshots',
+            'effective_color',
+            'effective_team',
+            'validation_reasons',
+            'conflicts',
+            'applied_to_form'
+          ];
+          const requiredScreenshotKeys = [
+            'model_team_candidate',
+            'model_confidence',
+            'fixed_ui_evidence',
+            'effective_color',
+            'effective_team',
+            'validation_reasons',
+            'conflicts'
+          ];
+          const rootRunIdKeys = ['scan_id', 'scan_run_id', 'run_id'].filter(key => Object.hasOwn(diagnostics, key));
           equal(Object.keys(diagnostics).every(key => allowedRootKeys.has(key)), true, 'root diagnostics use only public fields');
+          deepEqual(rootRunIdKeys.length, 1, 'root diagnostics contain exactly one safe run ID');
+          requiredRootKeys.forEach(key => {
+            equal(Object.hasOwn(diagnostics, key), true, `root diagnostics require ${key}`);
+          });
+          equal(Array.isArray(diagnostics.screenshots), true, 'diagnostics screenshots are an array');
+          equal(diagnostics.screenshots.length > 0, true, 'diagnostics retain per-screenshot evidence');
           equal(
             diagnostics.screenshots.every(screenshot => Object.keys(screenshot).every(key => allowedScreenshotKeys.has(key))),
             true,
             'per-screenshot diagnostics use only public fixed-evidence fields'
           );
-          equal(['scan_id', 'scan_run_id', 'run_id'].some(key => Object.hasOwn(diagnostics, key)), true, 'diagnostics expose a safe run ID');
+          diagnostics.screenshots.forEach((screenshot, index) => {
+            const screenshotIndexKeys = ['index', 'screenshot_index'].filter(key => Object.hasOwn(screenshot, key));
+            deepEqual(screenshotIndexKeys.length, 1, `screenshot ${index} contains exactly one safe index`);
+            requiredScreenshotKeys.forEach(key => {
+              equal(Object.hasOwn(screenshot, key), true, `screenshot ${index} requires ${key}`);
+            });
+          });
           const serialized = JSON.stringify({
             diagnostics,
             logs: loggedValues
@@ -3279,6 +3312,7 @@
         await asyncTest('canonically routes exactly two arbitrary-order smart jobs through independent V2 count and card operations', async () => {
           resetScanScenario();
           setScanFiles(['PROFILE', 'EXACT_A', 'RESOURCE', 'EXACT_B_RAW_OTHER', 'SHINY_LEGENDARY']);
+          trainerTeamResultByImage.set('PROFILE', trainerTeamEvidence('red'));
           countResultByImage.set('EXACT_A', validCount('(3)', '3'));
           countResultByImage.set('EXACT_B_RAW_OTHER', validCount('（3）', '3'));
           cardResultByImage.set('EXACT_A', completeCardResult([
@@ -3303,6 +3337,7 @@
 
           const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
           const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
+          const teamRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor');
           const countRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_count_extractor');
           const cardRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2');
           const firstExtractionStart = requestStageEvents.findIndex(event => event.event === 'start' && event.schemaName !== 'pokemon_go_image_classifier');
@@ -3326,7 +3361,12 @@
           equal(ordinaryRequests.every(request => request.imageUrl.startsWith('data:image/jpeg;base64,RESIZED_')), true, 'normal jobs use resized data');
           equal(ordinaryRequests.some(request => /EXACT_A|EXACT_B_RAW_OTHER/.test(request.imageUrl)), false, 'smart images never enter ordinary extraction');
           equal(ordinaryRequests.some(request => request.prompt.includes('allow_pokemon_list')), false, 'ordinary prompts do not expose the smart routing flag');
-          equal(fileReadCounts.get('PROFILE'), 1, 'profile is read only for resizing');
+          if (typeof globalThis.runTrainerTeamScan === 'function') {
+            equal(teamRequests.length, 1, 'profile gets exactly one dedicated trainer-team request');
+            equal(teamRequests[0].imageUrl, 'data:image/png;base64,TEAM_EVIDENCE_PROFILE');
+            equal(teamRequests[0].detail, 'high');
+            equal(fileReadCounts.get('PROFILE'), 2, 'profile is read once for resizing and once for original team evidence');
+          }
           equal(fileReadCounts.get('EXACT_A'), 2, 'exact A original is read exactly once after classification preparation');
           equal(fileReadCounts.get('EXACT_B_RAW_OTHER'), 2, 'raw OTHER exact original is read exactly once after classification preparation');
           equal(fileReadCounts.get('RESOURCE'), 1, 'resource is read only for resizing');
