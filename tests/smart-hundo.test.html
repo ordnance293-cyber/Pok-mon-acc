@@ -104,6 +104,51 @@
         await callback();
         results.push(`PASS ${name}`);
       };
+      const sparkleEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        color: 'none',
+        shape: 'none',
+        ...overrides
+      });
+      const appearanceEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        appearance: 'none',
+        ...overrides
+      });
+      const luckyEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        appearance: 'none',
+        ...overrides
+      });
+      const rocketEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        color: 'none',
+        shape: 'none',
+        ...overrides
+      });
+      const backgroundEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        badge_type: 'none',
+        appearance: 'none',
+        ...overrides
+      });
+      const cyanPurificationEvidence = () => ({
+        present: true,
+        region_visibility: 'clear',
+        position: 'lower_left',
+        color: 'light_cyan',
+        shape: 'single_radial_sparkle'
+      });
       const card = (overrides = {}) => ({
         order: 1,
         row: 1,
@@ -112,29 +157,41 @@
         official_name: '超夢',
         recognition_status: 'recognized',
         species_confidence: 0.9,
+        cp: 1234,
         shiny_state: 'no',
         shiny_confidence: 0.9,
+        shiny_evidence: sparkleEvidence(),
+        lucky_state: 'no',
+        lucky_confidence: 0.9,
+        lucky_evidence: luckyEvidence(),
+        favorite_state: 'no',
+        favorite_confidence: 0.9,
+        favorite_evidence: appearanceEvidence(),
+        rocket_state: 'normal',
+        rocket_confidence: 0.9,
+        rocket_evidence: rocketEvidence(),
+        background_type: 'none',
+        background_confidence: 0.9,
+        background_evidence: backgroundEvidence(),
         purified_state: 'no',
         purified_confidence: 0.9,
         shadow_state: 'no',
         shadow_confidence: 0.9,
         ...overrides
       });
-      const normalizeNumber = (value) => {
-        const match = String(value ?? '').match(/\d+/);
-        return match ? match[0] : '';
-      };
+      const validatedCard = (overrides = {}) => ({
+        ...card(),
+        screenshot_index: 0,
+        card_id: '0:1:1:1',
+        effective_shiny_state: 'no',
+        effective_lucky_state: 'no',
+        effective_favorite_state: 'no',
+        effective_rocket_state: 'normal',
+        effective_background_type: 'none',
+        manual_review_reasons: [],
+        ...overrides
+      });
       const normalizeName = (value) => String(value ?? '').trim().replace(/^官方:/, '');
-      const normalizeList = (value) => [...new Set(String(value ?? '').split(',').filter(Boolean))].join(',');
-      const normalizeCountingList = (value) => {
-        const counts = new Map();
-        const order = [];
-        String(value ?? '').split(',').filter(Boolean).forEach(name => {
-          if (!counts.has(name)) order.push(name);
-          counts.set(name, (counts.get(name) || 0) + 1);
-        });
-        return order.map(name => counts.get(name) > 1 ? `${name}*${counts.get(name)}` : name).join(',');
-      };
       const assertRejects = async (promise, expectedMessage, forbiddenValue) => {
         try {
           await promise;
@@ -153,10 +210,44 @@
           normalizeSearchQuery,
           isSmartHundoClassification,
           partitionImageJobs,
-          normalizeSmartHundoResult,
-          smartHundoCardsToPokemonList,
-          mergeSmartHundoScanResults
+          adaptLegacyRocketState,
+          normalizeSmartHundoCard,
+          normalizeSmartHundoResult: normalizeSmartHundoResultV2,
+          validateSmartHundoStructure,
+          buildHundoDisplayName,
+          smartHundoCardsToPokemonList: effectiveSmartHundoCardsToPokemonList,
+          summarizeHundoManualReview,
+          HUNDO_REVIEW_REASON_MESSAGES,
+          HUNDO_COUNT_CONFIDENCE_THRESHOLD,
+          SPECIES_CONFIDENCE_THRESHOLD,
+          STATE_YES_CONFIDENCE_THRESHOLD,
+          STATE_NEGATIVE_CONFIDENCE_THRESHOLD,
+          ENUMERATION_CONFIDENCE_THRESHOLD,
+          isValidShinyEvidence,
+          isValidLuckyEvidence,
+          isValidFavoriteEvidence,
+          deriveRocketStateFromEvidence,
+          deriveBackgroundTypeFromEvidence,
+          validateHundoCardStates,
+          normalizeHundoCountResult,
+          validateHundoCountEvidence,
+          mergeHundoCountResults,
+          normalizeVisibleLabel,
+          detectScreenshotOverlap,
+          mergeSmartHundoScreenshots,
+          shapeSmartHundoDiagnostics
         } = helpers;
+        const normalizedCard = (overrides = {}) => normalizeSmartHundoCard(
+          card(overrides),
+          normalizeName,
+          { screenshotIndex: 0 }
+        );
+        const makeCards = (count, overrides = {}) => Array.from({ length: count }, (_, index) => card({
+          order: index + 1,
+          row: Math.floor(index / 3) + 1,
+          column: (index % 3) + 1,
+          ...overrides
+        }));
 
         test('normalizes each required hundo query variant', () => {
           const canonical = '傳說的寶可夢,幻,究極異獸&4*';
@@ -181,105 +272,1563 @@
           equal(isSmartHundoClassification(jobs[0].classification), false);
         });
 
-        test('converts purified, shiny, shadow, and duplicate cards without a purified prefix', () => {
-          const cards = [
-            card({ official_name: '超夢', purified_state: 'yes' }),
-            card({ order: 2, official_name: '夢幻', shiny_state: 'yes', purified_state: 'yes' }),
-            card({ order: 3, official_name: '烈空坐', shadow_state: 'yes' }),
-            card({ order: 4, official_name: '超夢', shiny_state: 'yes', shadow_state: 'yes' }),
-            card({ order: 5, official_name: '超夢', shiny_state: 'yes', shadow_state: 'yes' })
+        test('expresses seven features through five state dimensions', () => {
+          const normalized = normalizeSmartHundoCard(card({
+            shiny_state: 'yes',
+            lucky_state: 'yes',
+            favorite_state: 'yes',
+            rocket_state: 'purified',
+            background_type: 'special'
+          }), normalizeName, { screenshotIndex: 4 });
+          equal(normalized.shiny_state, 'yes');
+          equal(normalized.lucky_state, 'yes');
+          equal(normalized.favorite_state, 'yes');
+          equal(normalized.rocket_state, 'purified');
+          equal(normalized.background_type, 'special');
+          equal(normalized.effective_shiny_state, 'uncertain');
+          equal(normalized.card_id, '4:1:1:1');
+        });
+
+        test('preserves dedicated evidence, CP text, and review fields on normalized cards', () => {
+          const normalized = normalizeSmartHundoCard(card({
+            cp: 3104,
+            shiny_evidence: sparkleEvidence({ position: 'around_pokemon', color: 'blue_black', shape: 'other' }),
+            lucky_evidence: luckyEvidence({ present: true, position: 'behind_pokemon', appearance: 'large_gold_shimmering_background' }),
+            favorite_evidence: appearanceEvidence({ present: true, position: 'upper_right', appearance: 'other' }),
+            rocket_evidence: rocketEvidence({ present: true, position: 'lower_side', color: 'light_blue', shape: 'purification_starburst' }),
+            background_evidence: backgroundEvidence({
+              present: true,
+              position: 'near_pokemon_or_card_background',
+              badge_type: 'special_background_badge',
+              appearance: 'event_special_background'
+            })
+          }), normalizeName, { screenshotIndex: 2 });
+          equal(normalized.cp, '3104');
+          deepEqual(normalized.shiny_evidence, sparkleEvidence({ position: 'around_pokemon', color: 'blue_black', shape: 'other' }));
+          deepEqual(normalized.lucky_evidence, luckyEvidence({ present: true, position: 'behind_pokemon', appearance: 'large_gold_shimmering_background' }));
+          deepEqual(normalized.favorite_evidence, appearanceEvidence({ present: true, position: 'upper_right', appearance: 'other' }));
+          deepEqual(normalized.rocket_evidence, rocketEvidence({ present: true, position: 'lower_side', color: 'light_blue', shape: 'purification_starburst' }));
+          deepEqual(normalized.background_evidence, backgroundEvidence({
+            present: true,
+            position: 'near_pokemon_or_card_background',
+            badge_type: 'special_background_badge',
+            appearance: 'event_special_background'
+          }));
+          deepEqual(normalized.manual_review_reasons, []);
+          deepEqual(normalized.raw.evidence.lucky, normalized.lucky_evidence);
+          equal(normalized.card_id, '2:1:1:1');
+        });
+
+        test('adapts legacy shadow and purified into one rocket state', () => {
+          equal(adaptLegacyRocketState({ shadow_state: 'yes', purified_state: 'no' }), 'shadow');
+          equal(adaptLegacyRocketState({ shadow_state: 'no', purified_state: 'yes' }), 'purified');
+          equal(adaptLegacyRocketState({ shadow_state: 'yes', purified_state: 'yes' }), 'uncertain');
+          equal(adaptLegacyRocketState({ shadow_state: 'no', purified_state: 'no' }), 'normal');
+          equal(adaptLegacyRocketState({ shadow_state: 'yes' }), 'uncertain');
+        });
+
+        test('rejects global without converting it to commemorative', () => {
+          const normalized = normalizeSmartHundoCard(card({ background_type: 'global' }), normalizeName);
+          equal(normalized.raw.states.background, 'global');
+          equal(normalized.background_type, 'uncertain');
+          equal(normalized.effective_background_type, 'uncertain');
+        });
+
+        test('exports the centralized confidence thresholds', () => {
+          equal(HUNDO_COUNT_CONFIDENCE_THRESHOLD, 0.85);
+          equal(SPECIES_CONFIDENCE_THRESHOLD, 0.80);
+          equal(STATE_YES_CONFIDENCE_THRESHOLD, 0.85);
+          equal(STATE_NEGATIVE_CONFIDENCE_THRESHOLD, 0.75);
+          equal(ENUMERATION_CONFIDENCE_THRESHOLD, 0.85);
+        });
+
+        test('accepts only exact dedicated evidence for shiny, lucky, and favorite', () => {
+          ['dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal'].forEach(color => {
+            equal(isValidShinyEvidence(sparkleEvidence({
+              present: true,
+              position: 'cp_area',
+              color,
+              shape: 'multiple_four_point_sparkles'
+            })), true, `accepts ${color} CP-area shiny evidence`);
+          });
+          equal(isValidShinyEvidence(cyanPurificationEvidence()), false, 'purification sparkle is not shiny');
+          equal(isValidShinyEvidence(sparkleEvidence({
+            present: true,
+            position: 'around_pokemon',
+            color: 'dark_blue',
+            shape: 'multiple_four_point_sparkles'
+          })), false, 'sparkles outside the CP area are not shiny evidence');
+          equal(isValidLuckyEvidence(luckyEvidence({
+            present: true,
+            position: 'behind_pokemon',
+            appearance: 'large_gold_shimmering_background'
+          })), true);
+          equal(isValidLuckyEvidence(luckyEvidence({
+            present: true,
+            position: 'behind_pokemon',
+            appearance: 'other'
+          })), false, 'a generic gold appearance is not lucky evidence');
+          equal(isValidFavoriteEvidence(appearanceEvidence({
+            present: true,
+            position: 'upper_right',
+            appearance: 'filled_yellow_five_point_star'
+          })), true);
+          equal(isValidFavoriteEvidence(appearanceEvidence({
+            present: true,
+            position: 'upper_right',
+            appearance: 'other'
+          })), false, 'a generic upper-right mark is not favorite evidence');
+        });
+
+        test('derives only exact purified, shadow, commemorative, and special evidence', () => {
+          equal(deriveRocketStateFromEvidence(cyanPurificationEvidence()), 'purified');
+          equal(deriveRocketStateFromEvidence(rocketEvidence({
+            present: true,
+            position: 'lower_side',
+            color: 'light_blue',
+            shape: 'purification_starburst'
+          })), 'purified');
+          equal(deriveRocketStateFromEvidence(rocketEvidence({
+            present: true,
+            position: 'around_pokemon',
+            color: 'purple',
+            shape: 'shadow_aura'
+          })), 'shadow');
+          equal(deriveRocketStateFromEvidence(rocketEvidence({
+            present: true,
+            position: 'lower_left',
+            color: 'purple',
+            shape: 'purple_flame'
+          })), 'shadow');
+          equal(deriveRocketStateFromEvidence(rocketEvidence({
+            present: true,
+            position: 'lower_side',
+            color: 'purple',
+            shape: 'shadow_aura'
+          })), 'uncertain', 'lower-side shadow evidence is not an approved pattern');
+          equal(deriveRocketStateFromEvidence(rocketEvidence()), 'normal');
+
+          equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
+            present: true,
+            position: 'near_pokemon_or_card_background',
+            badge_type: 'commemorative_location_badge',
+            appearance: 'location_style_background'
+          })), 'commemorative');
+          equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
+            present: true,
+            position: 'near_pokemon_or_card_background',
+            badge_type: 'special_background_badge',
+            appearance: 'event_special_background'
+          })), 'special');
+          equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
+            present: true,
+            position: 'near_pokemon_or_card_background',
+            badge_type: 'commemorative_location_badge',
+            appearance: 'event_special_background'
+          })), 'uncertain', 'mixed background evidence cannot infer a type');
+          equal(deriveBackgroundTypeFromEvidence(backgroundEvidence()), 'none');
+        });
+
+        test('validates every positive state only at the yes confidence threshold', () => {
+          const positiveCases = [
+            {
+              field: 'effective_shiny_state',
+              expected: 'yes',
+              stateKey: 'shiny_state',
+              confidenceKey: 'shiny_confidence',
+              evidenceKey: 'shiny_evidence',
+              evidence: sparkleEvidence({
+                present: true,
+                position: 'cp_area',
+                color: 'dark_blue_teal',
+                shape: 'multiple_four_point_sparkles'
+              })
+            },
+            {
+              field: 'effective_lucky_state',
+              expected: 'yes',
+              stateKey: 'lucky_state',
+              confidenceKey: 'lucky_confidence',
+              evidenceKey: 'lucky_evidence',
+              evidence: luckyEvidence({
+                present: true,
+                position: 'behind_pokemon',
+                appearance: 'large_gold_shimmering_background'
+              })
+            },
+            {
+              field: 'effective_favorite_state',
+              expected: 'yes',
+              stateKey: 'favorite_state',
+              confidenceKey: 'favorite_confidence',
+              evidenceKey: 'favorite_evidence',
+              evidence: appearanceEvidence({
+                present: true,
+                position: 'upper_right',
+                appearance: 'filled_yellow_five_point_star'
+              })
+            },
+            {
+              field: 'effective_rocket_state',
+              expected: 'shadow',
+              stateKey: 'rocket_state',
+              confidenceKey: 'rocket_confidence',
+              evidenceKey: 'rocket_evidence',
+              evidence: rocketEvidence({
+                present: true,
+                position: 'around_pokemon',
+                color: 'purple',
+                shape: 'purple_smoke'
+              })
+            },
+            {
+              field: 'effective_background_type',
+              expected: 'special',
+              stateKey: 'background_type',
+              confidenceKey: 'background_confidence',
+              evidenceKey: 'background_evidence',
+              evidence: backgroundEvidence({
+                present: true,
+                position: 'near_pokemon_or_card_background',
+                badge_type: 'special_background_badge',
+                appearance: 'event_special_background'
+              })
+            }
           ];
-          const conversion = smartHundoCardsToPokemonList(cards, normalizeName, normalizeList);
-          equal(conversion.pokemon_list, '超夢,色違夢幻,暗影烈空坐,色違暗影超夢');
-          equal(conversion.recognized_count, 5);
-          equal(conversion.uncertain_count, 0);
-          equal(smartHundoCardsToPokemonList([card({ shiny_state: 'yes', shadow_state: 'yes' })], normalizeName, normalizeList).pokemon_list, '色違暗影超夢');
+
+          positiveCases.forEach(testCase => {
+            const atThreshold = validateHundoCardStates(normalizedCard({
+              [testCase.stateKey]: testCase.expected === 'yes' ? 'yes' : testCase.expected,
+              [testCase.confidenceKey]: 0.85,
+              [testCase.evidenceKey]: testCase.evidence
+            }));
+            equal(atThreshold[testCase.field], testCase.expected, `${testCase.field} accepts 0.85`);
+
+            const belowThreshold = validateHundoCardStates(normalizedCard({
+              [testCase.stateKey]: testCase.expected === 'yes' ? 'yes' : testCase.expected,
+              [testCase.confidenceKey]: 0.849,
+              [testCase.evidenceKey]: testCase.evidence
+            }));
+            equal(belowThreshold[testCase.field], 'uncertain', `${testCase.field} rejects confidence below 0.85`);
+          });
         });
 
-        test('normalizes empty official names and only exact normalized duplicate positions', () => {
-          const normalized = normalizeSmartHundoResult({
-            hundo_leg: '第 8 隻',
-            hundo_leg_confidence: 1.7,
-            detected_card_count: '3',
-            cards: [
-              card({ order: '2', row: '1', column: '1', official_name: '  ', visible_label: '不可用', species_confidence: -2 }),
-              card({ order: '1', row: '1', column: '1', official_name: ' 超夢 ' }),
-              card({ order: '1', row: '1', column: '1', official_name: '超夢' }),
-              card({ order: '1', row: '1', column: '1', official_name: '夢幻' })
-            ]
-          }, normalizeNumber, normalizeName);
-          equal(normalized.cards[0].official_name, '超夢');
-          equal(normalized.cards[1].official_name, '夢幻');
-          equal(normalized.cards[2].official_name, '');
-          equal(normalized.cards.length, 3);
-          equal(normalized.cards[2].species_confidence, 0);
-          equal(normalized.hundo_leg_confidence, 1);
-          equal(normalized.hundo_leg, '8');
-          equal(normalized.detected_card_count, 3);
+        test('validates dark teal CP-area sparkles as shiny', () => {
+          const validated = validateHundoCardStates(normalizedCard({
+            shiny_state: 'yes',
+            shiny_confidence: 0.98,
+            shiny_evidence: {
+              present: true,
+              region_visibility: 'clear',
+              position: 'cp_area',
+              color: 'dark_blue_teal',
+              shape: 'multiple_four_point_sparkles'
+            }
+          }));
+          equal(validated.effective_shiny_state, 'yes');
+          equal(buildHundoDisplayName(validated, normalizeName), '色違超夢');
         });
 
-        test('deduplicates exact cards within one screenshot before conversion', () => {
-          const duplicateWithinScreenshot = card({ official_name: '超夢', order: 1, row: 1, column: 1 });
-          const normalized = normalizeSmartHundoResult({
-            detected_card_count: 2,
-            cards: [duplicateWithinScreenshot, { ...duplicateWithinScreenshot }]
-          }, normalizeNumber, normalizeName);
-          const conversion = smartHundoCardsToPokemonList(normalized.cards, normalizeName, normalizeCountingList);
+        test('purified Groudon never becomes shiny from cyan radial evidence', () => {
+          const validated = validateHundoCardStates(normalizedCard({
+            official_name: '固拉多',
+            shiny_state: 'yes',
+            shiny_confidence: 0.98,
+            shiny_evidence: cyanPurificationEvidence(),
+            rocket_state: 'purified',
+            rocket_confidence: 0.98,
+            rocket_evidence: cyanPurificationEvidence()
+          }));
+          equal(validated.effective_shiny_state, 'uncertain');
+          equal(validated.effective_rocket_state, 'purified');
+          equal(buildHundoDisplayName(validated, normalizeName), '固拉多');
+        });
+
+        test('validates combined shiny and shadow evidence in fixed display order', () => {
+          const validated = validateHundoCardStates(normalizedCard({
+            official_name: '超夢',
+            shiny_state: 'yes',
+            shiny_confidence: 0.98,
+            shiny_evidence: sparkleEvidence({
+              present: true,
+              position: 'cp_area',
+              color: 'blue_black',
+              shape: 'multiple_four_point_sparkles'
+            }),
+            rocket_state: 'shadow',
+            rocket_confidence: 0.98,
+            rocket_evidence: rocketEvidence({
+              present: true,
+              position: 'around_pokemon',
+              color: 'purple',
+              shape: 'purple_flame'
+            })
+          }));
+          equal(validated.effective_shiny_state, 'yes');
+          equal(validated.effective_rocket_state, 'shadow');
+          equal(buildHundoDisplayName(validated, normalizeName), '色違暗影超夢');
+        });
+
+        test('rejects raw and positive-evidence contradictions without inferring alternatives', () => {
+          const contradictions = [
+            validateHundoCardStates(normalizedCard({
+              shiny_state: 'no',
+              shiny_evidence: sparkleEvidence({
+                present: true,
+                position: 'cp_area',
+                color: 'dark_blue',
+                shape: 'multiple_four_point_sparkles'
+              })
+            })).effective_shiny_state,
+            validateHundoCardStates(normalizedCard({
+              lucky_state: 'no',
+              lucky_evidence: luckyEvidence({
+                present: true,
+                position: 'behind_pokemon',
+                appearance: 'large_gold_shimmering_background'
+              })
+            })).effective_lucky_state,
+            validateHundoCardStates(normalizedCard({
+              favorite_state: 'no',
+              favorite_evidence: appearanceEvidence({
+                present: true,
+                position: 'upper_right',
+                appearance: 'filled_yellow_five_point_star'
+              })
+            })).effective_favorite_state,
+            validateHundoCardStates(normalizedCard({
+              rocket_state: 'shadow',
+              rocket_evidence: cyanPurificationEvidence()
+            })).effective_rocket_state,
+            validateHundoCardStates(normalizedCard({
+              background_type: 'commemorative',
+              background_evidence: backgroundEvidence({
+                present: true,
+                position: 'near_pokemon_or_card_background',
+                badge_type: 'special_background_badge',
+                appearance: 'event_special_background'
+              })
+            })).effective_background_type
+          ];
+          deepEqual(contradictions, ['uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain']);
+        });
+
+        test('requires exact clear all-none evidence for every negative state', () => {
+          const negativeCases = [
+            {
+              field: 'effective_shiny_state',
+              expected: 'no',
+              stateKey: 'shiny_state',
+              confidenceKey: 'shiny_confidence',
+              evidenceKey: 'shiny_evidence',
+              evidence: sparkleEvidence(),
+              nonNegativeEvidence: sparkleEvidence({ color: 'other' })
+            },
+            {
+              field: 'effective_lucky_state',
+              expected: 'no',
+              stateKey: 'lucky_state',
+              confidenceKey: 'lucky_confidence',
+              evidenceKey: 'lucky_evidence',
+              evidence: luckyEvidence(),
+              nonNegativeEvidence: luckyEvidence({ appearance: 'other' })
+            },
+            {
+              field: 'effective_favorite_state',
+              expected: 'no',
+              stateKey: 'favorite_state',
+              confidenceKey: 'favorite_confidence',
+              evidenceKey: 'favorite_evidence',
+              evidence: appearanceEvidence(),
+              nonNegativeEvidence: appearanceEvidence({ position: 'other' })
+            },
+            {
+              field: 'effective_rocket_state',
+              expected: 'normal',
+              stateKey: 'rocket_state',
+              confidenceKey: 'rocket_confidence',
+              evidenceKey: 'rocket_evidence',
+              evidence: rocketEvidence(),
+              nonNegativeEvidence: rocketEvidence({ shape: 'other' })
+            },
+            {
+              field: 'effective_background_type',
+              expected: 'none',
+              stateKey: 'background_type',
+              confidenceKey: 'background_confidence',
+              evidenceKey: 'background_evidence',
+              evidence: backgroundEvidence(),
+              nonNegativeEvidence: backgroundEvidence({ badge_type: 'other' })
+            }
+          ];
+
+          negativeCases.forEach(testCase => {
+            const build = (confidence, evidence) => validateHundoCardStates(normalizedCard({
+              [testCase.stateKey]: testCase.expected,
+              [testCase.confidenceKey]: confidence,
+              [testCase.evidenceKey]: evidence
+            }))[testCase.field];
+            equal(build(0.75, testCase.evidence), testCase.expected, `${testCase.field} accepts exact negative evidence at 0.75`);
+            equal(build(0.749, testCase.evidence), 'uncertain', `${testCase.field} rejects confidence below 0.75`);
+            equal(build(0.99, { ...testCase.evidence, present: true }), 'uncertain', `${testCase.field} rejects present evidence`);
+            equal(build(0.99, testCase.nonNegativeEvidence), 'uncertain', `${testCase.field} rejects non-none evidence`);
+            ['partially_occluded', 'cropped', 'not_visible', 'uncertain'].forEach(region_visibility => {
+              equal(
+                build(0.99, { ...testCase.evidence, region_visibility }),
+                'uncertain',
+                `${testCase.field} rejects ${region_visibility} as negative evidence`
+              );
+            });
+          });
+        });
+
+        test('keeps normalized raw data unchanged and appends each relevant reason once', () => {
+          const input = normalizedCard({
+            shiny_state: 'yes',
+            shiny_confidence: 0.99,
+            shiny_evidence: cyanPurificationEvidence()
+          });
+          input.manual_review_reasons = ['shiny_uncertain'];
+          const before = JSON.stringify(input);
+          const validated = validateHundoCardStates(validateHundoCardStates(input));
+          equal(JSON.stringify(input), before, 'validation is pure');
+          deepEqual(validated.raw, input.raw, 'raw audit fields are unchanged');
+          equal(validated.manual_review_reasons.filter(reason => reason === 'shiny_uncertain').length, 1);
+          equal(validated.manual_review_reasons.includes('lucky_uncertain'), false);
+          equal(validated.effective_lucky_state, 'no');
+          equal(validated.effective_favorite_state, 'no');
+          equal(validated.effective_rocket_state, 'normal');
+          equal(validated.effective_background_type, 'none');
+        });
+
+        test('keeps global uncertain through validation', () => {
+          const validated = validateHundoCardStates(normalizedCard({
+            background_type: 'global',
+            background_confidence: 0.99,
+            background_evidence: backgroundEvidence({
+              present: true,
+              position: 'near_pokemon_or_card_background',
+              badge_type: 'commemorative_location_badge',
+              appearance: 'location_style_background'
+            })
+          }));
+          equal(validated.raw.states.background, 'global');
+          equal(validated.background_type, 'uncertain');
+          equal(validated.effective_background_type, 'uncertain');
+          equal(validated.manual_review_reasons.includes('background_uncertain'), true);
+        });
+
+        test('uses species confidence in the downstream recognition gate without inventing a name', () => {
+          const belowThreshold = validateHundoCardStates(normalizedCard({
+            official_name: '固拉多',
+            recognition_status: 'recognized',
+            species_confidence: 0.799
+          }));
+          const atThreshold = validateHundoCardStates(normalizedCard({
+            official_name: '固拉多',
+            recognition_status: 'recognized',
+            species_confidence: 0.80
+          }));
+          const belowConversion = effectiveSmartHundoCardsToPokemonList([belowThreshold], normalizeName);
+          const atConversion = effectiveSmartHundoCardsToPokemonList([atThreshold], normalizeName);
+          equal(belowThreshold.official_name, '固拉多');
+          equal(belowThreshold.recognition_status, 'recognized');
+          equal(belowConversion.pokemon_list, '');
+          equal(belowConversion.review_reason_counts.species_uncertain, 1);
+          equal(atConversion.pokemon_list, '固拉多');
+        });
+
+        test('normalizes the five-dimension screenshot root without deduplicating coordinates', () => {
+          const normalized = normalizeSmartHundoResultV2({
+            detected_card_count: '2',
+            scan_complete: true,
+            bottom_edge_checked: true,
+            enumeration_confidence: 1.2,
+            cards: [card(), card()]
+          }, normalizeName, { screenshotIndex: 7 });
+          equal(normalized.detected_card_count, 2);
+          equal(normalized.scan_complete, true);
+          equal(normalized.bottom_edge_checked, true);
+          equal(normalized.enumeration_confidence, 1);
+          equal(normalized.cards.length, 2);
+          equal(normalized.cards[1].card_id, '7:1:1:1');
+        });
+
+        test('preserves complete 12-card and 15-card enumerations during normalization', () => {
+          [12, 15].forEach(count => {
+            const normalized = normalizeSmartHundoResultV2({
+              detected_card_count: count,
+              scan_complete: true,
+              bottom_edge_checked: true,
+              enumeration_confidence: 0.99,
+              cards: makeCards(count)
+            }, normalizeName, { screenshotIndex: 4 });
+            equal(normalized.cards.length, count, `${count} cards survive`);
+            equal(normalized.detected_card_count, count, `${count} detected cards survive`);
+            equal(normalized.cards.at(-1).card_id.startsWith('4:'), true, `${count} cards receive screenshot identity`);
+          });
+        });
+
+        test('retains a partial visible card with no reliable official name', () => {
+          const normalized = normalizeSmartHundoResultV2({
+            detected_card_count: 1,
+            scan_complete: true,
+            bottom_edge_checked: true,
+            enumeration_confidence: 0.8,
+            cards: makeCards(1, {
+              visible_label: 'GLO蒼響151515',
+              official_name: '',
+              recognition_status: 'partial',
+              species_confidence: 0.2
+            })
+          }, normalizeName, { screenshotIndex: 5 });
           equal(normalized.cards.length, 1);
-          equal(conversion.pokemon_list, '超夢');
-          equal(conversion.recognized_count, 1);
-        });
-
-        test('counts uncertain species or independent states for manual review', () => {
-          const conversion = smartHundoCardsToPokemonList([
-            card({ official_name: '超夢', shiny_state: 'uncertain' })
-          ], normalizeName, normalizeList);
-          equal(conversion.pokemon_list, '超夢');
-          equal(conversion.recognized_count, 1);
-          equal(conversion.uncertain_count, 1);
-
-          const unknownSpecies = smartHundoCardsToPokemonList([
-            card({ official_name: '未知', recognition_status: 'uncertain' })
-          ], normalizeName, normalizeList);
-          equal(unknownSpecies.pokemon_list, '');
-          equal(unknownSpecies.recognized_count, 0);
-          equal(unknownSpecies.uncertain_count, 1);
-        });
-
-        test('preserves partial recognition while excluding it from the usable list', () => {
-          const normalized = normalizeSmartHundoResult({
-            cards: [card({ recognition_status: 'partial', official_name: '超夢' })]
-          }, normalizeNumber, normalizeName);
+          equal(normalized.cards[0].official_name, '');
           equal(normalized.cards[0].recognition_status, 'partial');
-          const conversion = smartHundoCardsToPokemonList(normalized.cards, normalizeName, normalizeList);
+          equal(normalized.cards[0].visible_label, 'GLO蒼響151515');
+        });
+
+        test('marks every structural incompleteness condition without using confidence or uncertainty', () => {
+          const complete = {
+            detected_card_count: 2,
+            scan_complete: true,
+            bottom_edge_checked: true,
+            enumeration_confidence: 0.01,
+            cards: makeCards(2, {
+              official_name: '',
+              recognition_status: 'uncertain',
+              shiny_state: 'uncertain'
+            })
+          };
+          deepEqual(validateSmartHundoStructure(complete, 'stop'), {
+            structurally_complete: true,
+            reasons: [],
+            detected_card_count: 2,
+            cards_length: 2,
+            scan_complete: true,
+            bottom_edge_checked: true,
+            finish_reason: 'stop'
+          });
+
+          const cases = [
+            [{ ...complete, detected_card_count: 15 }, 'stop', 'detected_card_count_mismatch'],
+            [{ ...complete, scan_complete: false }, 'stop', 'scan_incomplete'],
+            [{ ...complete, bottom_edge_checked: false }, 'stop', 'bottom_edge_not_checked'],
+            [{ ...complete, cards: [complete.cards[0], { ...complete.cards[1], order: 1, row: 1, column: 1 }] }, 'stop', 'duplicate_card_coordinates'],
+            [{ ...complete, cards: [{ ...complete.cards[0], order: 0 }, complete.cards[1]] }, 'stop', 'invalid_card_coordinates'],
+            [complete, 'length', 'finish_reason_length']
+          ];
+          cases.forEach(([result, finishReason, reason]) => {
+            const structure = validateSmartHundoStructure(result, finishReason);
+            equal(structure.structurally_complete, false, reason);
+            equal(structure.reasons.includes(reason), true, reason);
+          });
+        });
+
+        test('uses an explicit invalid-coordinate sentinel without inventing a card position', () => {
+          const normalized = normalizeSmartHundoCard(card({ order: -1, row: 1, column: 1 }), normalizeName, { screenshotIndex: 3 });
+          equal(normalized.order, 0);
+          equal(normalized.card_id, '3:0:1:1');
+        });
+
+        test('builds display names only from effective states', () => {
+          const modelYesButRejected = card({
+            official_name: '超夢',
+            shiny_state: 'yes',
+            effective_shiny_state: 'uncertain',
+            effective_rocket_state: 'purified',
+            effective_background_type: 'none'
+          });
+          equal(buildHundoDisplayName(modelYesButRejected, normalizeName), '超夢');
+        });
+
+        test('strips repeated model presentation labels before effective-state display conversion', () => {
+          const pollutedNames = [
+            '色違固拉多',
+            '異色固拉多',
+            '淨化固拉多',
+            '亮晶晶固拉多',
+            '我的最愛固拉多',
+            '暗影固拉多',
+            '紀念背卡固拉多',
+            '特別背卡固拉多',
+            '全球背卡固拉多',
+            'GLOBAL固拉多',
+            'Global_Background:固拉多',
+            ' 【色違】：暗影／特別背卡--固拉多 '
+          ];
+          pollutedNames.forEach(official_name => {
+            const normalized = normalizeSmartHundoCard(card({
+              official_name,
+              shiny_state: 'yes',
+              rocket_state: 'shadow',
+              background_type: 'special'
+            }), normalizeName);
+            equal(normalized.official_name, '固拉多', `${official_name} normalizes to species only`);
+            equal(
+              buildHundoDisplayName(validatedCard({
+                ...normalized,
+                effective_shiny_state: 'no',
+                effective_rocket_state: 'normal',
+                effective_background_type: 'none'
+              }), normalizeName),
+              '固拉多',
+              `${official_name} cannot bypass effective states`
+            );
+          });
+
+          const callbackReintroduced = normalizeSmartHundoCard(
+            card({ official_name: '固拉多' }),
+            value => `色違：${value}`
+          );
+          equal(callbackReintroduced.official_name, '固拉多', 'the alias callback cannot reintroduce a display label');
+        });
+
+        test('adds a validated visible prefix exactly once after sanitizing model labels', () => {
+          const normalized = normalizeSmartHundoCard(
+            card({ official_name: '特別背卡／特別背卡固拉多' }),
+            normalizeName
+          );
+          equal(buildHundoDisplayName(validatedCard({
+            ...normalized,
+            effective_background_type: 'special'
+          }), normalizeName), '特別背卡固拉多');
+        });
+
+        test('requires a usable recognized species before building any display name', () => {
+          const unusableCards = [
+            validatedCard({ official_name: '' }),
+            validatedCard({ recognition_status: 'partial' }),
+            validatedCard({ recognition_status: 'uncertain' }),
+            validatedCard({ species_confidence: SPECIES_CONFIDENCE_THRESHOLD - 0.001 })
+          ];
+          unusableCards.forEach((unusable, index) => {
+            equal(buildHundoDisplayName(unusable, normalizeName), '', `unusable species ${index + 1}`);
+          });
+        });
+
+        test('exposes the exact manual-review reason messages', () => {
+          deepEqual(HUNDO_REVIEW_REASON_MESSAGES, {
+            species_uncertain: '物種需人工確認',
+            shiny_uncertain: '色違狀態需人工確認',
+            lucky_uncertain: '亮晶晶狀態需人工確認',
+            favorite_uncertain: '我的最愛狀態需人工確認',
+            rocket_state_uncertain: '暗影／淨化狀態需人工確認',
+            background_uncertain: '背卡狀態需人工確認',
+            incomplete_card_enumeration: '卡片列舉不完整，需人工確認',
+            hundo_count_uncertain: '百神總數需人工確認',
+            hundo_count_conflict: '百神總數結果衝突',
+            screenshot_overlap_uncertain: '截圖重疊需人工確認',
+            smart_hundo_request_failed: '百神辨識請求失敗'
+          });
+        });
+
+        test('keeps hidden states internal and groups by display name', () => {
+          const cards = [
+            validatedCard({ official_name: '固拉多', effective_rocket_state: 'normal' }),
+            validatedCard({ official_name: '淨化固拉多', effective_rocket_state: 'purified' }),
+            validatedCard({ official_name: '亮晶晶固拉多', effective_lucky_state: 'yes' })
+          ];
+          equal(effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list, '固拉多*3');
+        });
+
+        test('separates visible states in fixed prefix order without one-count suffixes', () => {
+          const cards = [
+            validatedCard({ official_name: '固拉多' }),
+            validatedCard({ official_name: '固拉多', effective_shiny_state: 'yes' }),
+            validatedCard({ official_name: '固拉多', effective_background_type: 'special' })
+          ];
+          const pokemonList = effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list;
+          equal(pokemonList, '固拉多,色違固拉多,特別背卡固拉多');
+          equal(pokemonList.includes('*1'), false);
+          equal(buildHundoDisplayName(validatedCard({
+            official_name: '超夢',
+            effective_shiny_state: 'yes',
+            effective_rocket_state: 'shadow',
+            effective_background_type: 'special'
+          }), normalizeName), '色違暗影特別背卡超夢');
+        });
+
+        test('counts a reviewed card once while retaining every reason bucket', () => {
+          const summary = summarizeHundoManualReview([
+            validatedCard({
+              card_id: '0:1:1:1',
+              manual_review_reasons: ['shiny_uncertain', 'lucky_uncertain', 'background_uncertain']
+            })
+          ], []);
+          equal(summary.review_card_count, 1);
+          deepEqual(summary.review_reason_counts, {
+            shiny_uncertain: 1,
+            lucky_uncertain: 1,
+            background_uncertain: 1
+          });
+          deepEqual(summary.manual_review_reasons, [
+            HUNDO_REVIEW_REASON_MESSAGES.shiny_uncertain,
+            HUNDO_REVIEW_REASON_MESSAGES.lucky_uncertain,
+            HUNDO_REVIEW_REASON_MESSAGES.background_uncertain
+          ]);
+        });
+
+        test('retains repeated screenshot review reason occurrences without adding card reviews', () => {
+          const summary = summarizeHundoManualReview([], [
+            'incomplete_card_enumeration',
+            'incomplete_card_enumeration'
+          ]);
+          equal(summary.review_card_count, 0);
+          equal(summary.review_reason_counts.incomplete_card_enumeration, 2);
+        });
+
+        test('keeps recognized species visible with effective uncertainty review reasons', () => {
+          const conversion = effectiveSmartHundoCardsToPokemonList([
+            validatedCard({ official_name: '固拉多', effective_shiny_state: 'uncertain' })
+          ], normalizeName);
+          equal(conversion.pokemon_list, '固拉多');
+          equal(conversion.pokemon_list.includes('色違固拉多'), false);
+          equal(conversion.review_reason_counts.shiny_uncertain, 1);
+        });
+
+        test('excludes partial species without falling back to visible labels', () => {
+          const conversion = effectiveSmartHundoCardsToPokemonList([
+            validatedCard({
+              official_name: '',
+              visible_label: '畫面名稱',
+              recognition_status: 'partial'
+            })
+          ], normalizeName);
           equal(conversion.pokemon_list, '');
-          equal(conversion.recognized_count, 0);
-          equal(conversion.uncertain_count, 1);
+          equal(conversion.pokemon_list.includes('畫面名稱'), false);
+          equal(conversion.review_reason_counts.species_uncertain, 1);
         });
 
-        test('merges multiple results and reports hundo leg conflicts', () => {
-          const merged = mergeSmartHundoScanResults([
-            { hundo_leg: '8', detected_card_count: 2, cards: [card({ official_name: '超夢' })] },
-            { hundo_leg: '9', detected_card_count: 1, cards: [card({ official_name: '夢幻', order: 2, shiny_state: 'yes' })] }
-          ], normalizeNumber, normalizeName, normalizeList);
-          equal(merged.hundo_leg, '8');
-          equal(merged.hundo_leg_conflict, true);
-          equal(merged.detected_card_count, 3);
-          equal(merged.recognized_count, 2);
-          equal(merged.uncertain_count, 0);
-          equal(merged.pokemon_list, '超夢,色違夢幻');
+        const exactHundoClassification = () => ({
+          image_type: 'HUNDO_LEGENDARY_SCREEN',
+          search_query: '傳說的寶可夢,幻,究極異獸&4*'
+        });
+        const validCount = (rawCountText = '(3)', hundoLeg = '3') => ({
+          hundo_leg: hundoLeg,
+          raw_count_text: rawCountText,
+          active_tab: 'pokemon',
+          count_source: 'pokemon_search_result_summary',
+          relative_position: 'associated_with_active_pokemon_tab',
+          has_parentheses: true,
+          has_slash: false,
+          confidence: 0.99
+        });
+        const count = (hundoLeg, confidence) => ({
+          hundo_leg: hundoLeg,
+          confidence,
+          valid: true,
+          manual_review_reasons: []
         });
 
-        test('preserves identical same-position cards from different screenshots', () => {
-          const duplicateAcrossScreenshots = card({ official_name: '超夢', order: 1, row: 1, column: 1 });
-          const merged = mergeSmartHundoScanResults([
-            { hundo_leg: '8', detected_card_count: 1, cards: [duplicateAcrossScreenshots] },
-            { hundo_leg: '8', detected_card_count: 1, cards: [{ ...duplicateAcrossScreenshots }] }
-          ], normalizeNumber, normalizeName, normalizeCountingList);
-          equal(merged.pokemon_list, '超夢*2');
-          equal(merged.recognized_count, 2);
-          equal(merged.cards.length, 2);
-          equal(merged.detected_card_count, 2);
+        test('normalizes and validates only exact semantic hundo count evidence', () => {
+          deepEqual(normalizeHundoCountResult({
+            ...validCount('（ ３０ ）', '30'),
+            active_tab: 'POKEMON',
+            confidence: 2
+          }), {
+            hundo_leg: '30',
+            raw_count_text: '( 30 )',
+            active_tab: 'pokemon',
+            count_source: 'pokemon_search_result_summary',
+            relative_position: 'associated_with_active_pokemon_tab',
+            has_parentheses: true,
+            has_slash: false,
+            confidence: 1
+          });
+          equal(validateHundoCountEvidence(validCount('(3)', '3'), exactHundoClassification()).hundo_leg, '3');
+          equal(validateHundoCountEvidence(validCount('( 30 )', '30'), exactHundoClassification()).hundo_leg, '30');
+          equal(validateHundoCountEvidence(validCount('（００３）', '3'), exactHundoClassification()).hundo_leg, '3');
+
+          const rejected = [
+            { ...validCount(), raw_count_text: '9/12', has_slash: true },
+            { ...validCount(), raw_count_text: '142/450' },
+            { ...validCount(), raw_count_text: 'CP 3000' },
+            { ...validCount(), raw_count_text: '(3) nearby', hundo_leg: '3' },
+            { ...validCount(), hundo_leg: '03' },
+            { ...validCount(), confidence: 0.849 },
+            { ...validCount(), has_parentheses: false },
+            { ...validCount(), has_slash: true },
+            { ...validCount(), active_tab: 'egg' },
+            { ...validCount(), count_source: 'other' },
+            { ...validCount(), relative_position: 'other' }
+          ];
+          rejected.forEach((evidence, index) => {
+            const validated = validateHundoCountEvidence(evidence, exactHundoClassification());
+            equal(validated.hundo_leg, '', `rejects unsafe evidence ${index}`);
+            equal(validated.valid, false, `marks unsafe evidence invalid ${index}`);
+            deepEqual(validated.manual_review_reasons, ['hundo_count_uncertain']);
+          });
+
+          const wrongQuery = validateHundoCountEvidence(validCount(), {
+            image_type: 'HUNDO_LEGENDARY_SCREEN',
+            search_query: '傳說的寶可夢,幻,究極異獸'
+          });
+          equal(wrongQuery.hundo_leg, '');
+          deepEqual(wrongQuery.manual_review_reasons, ['hundo_count_uncertain']);
+
+          const missingUiContext = validateHundoCountEvidence({
+            ...validCount(),
+            active_tab: 'unknown',
+            count_source: 'uncertain',
+            relative_position: 'uncertain'
+          }, exactHundoClassification());
+          equal(missingUiContext.hundo_leg, '');
+          deepEqual(missingUiContext.manual_review_reasons, ['hundo_count_uncertain']);
+        });
+
+        test('merges only valid count evidence by frequency then confidence without order tie-breaking', () => {
+          const majority = mergeHundoCountResults([count('3', .90), count('3', .88), count('9', .99)]);
+          equal(majority.hundo_leg, '3');
+          equal(majority.conflict, true);
+          equal(majority.uncertain, false);
+          deepEqual(majority.candidates, [
+            { value: '3', votes: 2, confidence: .90 },
+            { value: '9', votes: 1, confidence: .99 }
+          ]);
+          deepEqual(majority.manual_review_reasons, []);
+
+          const confidenceWinner = mergeHundoCountResults([count('3', .94), count('9', .95)]);
+          equal(confidenceWinner.hundo_leg, '9');
+          equal(confidenceWinner.conflict, true);
+          equal(confidenceWinner.uncertain, false);
+          deepEqual(confidenceWinner.manual_review_reasons, []);
+
+          const unresolved = mergeHundoCountResults([count('3', .95), count('9', .95)]);
+          const unresolvedReordered = mergeHundoCountResults([count('9', .95), count('3', .95)]);
+          equal(unresolved.hundo_leg, '');
+          equal(unresolved.conflict, true);
+          equal(unresolved.uncertain, true);
+          deepEqual(unresolved.candidates, [
+            { value: '3', votes: 1, confidence: .95 },
+            { value: '9', votes: 1, confidence: .95 }
+          ]);
+          deepEqual(unresolved.manual_review_reasons, ['hundo_count_conflict', 'hundo_count_uncertain']);
+          deepEqual(unresolvedReordered, unresolved);
+          equal(mergeHundoCountResults([count('3', .91)]).hundo_leg, '3');
+          equal(mergeHundoCountResults([count('3', .91), count('3', .87)]).hundo_leg, '3');
+
+          const ignoresInvalid = mergeHundoCountResults([
+            count('3', .91),
+            { ...count('999', 1), valid: false, cards: Array(999).fill({}) },
+            { hundo_leg: '777', confidence: 1, detected_card_count: 777, visible_count: 777 }
+          ]);
+          equal(ignoresInvalid.hundo_leg, '3');
+          ['cards', 'cards_length', 'detected_card_count', 'visible_count', 'screenshot_index'].forEach(field => {
+            equal(Object.hasOwn(ignoresInvalid, field), false, `merge API excludes ${field}`);
+          });
+        });
+
+        test('normalizes overlap labels with NFKC and every Unicode whitespace removed', () => {
+          equal(normalizeVisibleLabel(' Ｐ I\u00a0K\nA\u3000'), 'PIKA');
+        });
+
+        test('normalizes canonical and model-polluted species names before two-card overlap signatures', () => {
+          const pollutedSuffix = [
+            normalizeSmartHundoCard(card({
+              order: 2,
+              row: 2,
+              cp: '100',
+              visible_label: 'GROUDON',
+              official_name: '色違：固拉多'
+            }), normalizeName, { screenshotIndex: 1 }),
+            normalizeSmartHundoCard(card({
+              order: 3,
+              row: 3,
+              cp: '200',
+              visible_label: 'MEWTWO',
+              official_name: 'GLOBAL_BACKGROUND／超夢'
+            }), normalizeName, { screenshotIndex: 1 })
+          ];
+          const canonical = [
+            normalizeSmartHundoCard(card({
+              order: 1,
+              cp: '100',
+              visible_label: 'GROUDON',
+              official_name: '固拉多'
+            }), normalizeName, { screenshotIndex: 2 }),
+            normalizeSmartHundoCard(card({
+              order: 2,
+              row: 2,
+              cp: '200',
+              visible_label: 'MEWTWO',
+              official_name: '超夢'
+            }), normalizeName, { screenshotIndex: 2 })
+          ];
+          pollutedSuffix.forEach((item, index) => {
+            Object.assign(item, {
+              effective_shiny_state: 'no',
+              effective_lucky_state: 'no',
+              effective_favorite_state: 'no',
+              effective_rocket_state: 'normal',
+              effective_background_type: 'none'
+            });
+            Object.assign(canonical[index], {
+              effective_shiny_state: 'no',
+              effective_lucky_state: 'no',
+              effective_favorite_state: 'no',
+              effective_rocket_state: 'normal',
+              effective_background_type: 'none'
+            });
+          });
+
+          const decision = detectScreenshotOverlap(
+            {
+              index: 1,
+              cards: [
+                validatedCard({ card_id: '1:1:1:1', order: 1, cp: '50', official_name: '鳳王', visible_label: 'LEAD' }),
+                ...pollutedSuffix
+              ]
+            },
+            {
+              index: 2,
+              cards: [
+                ...canonical,
+                validatedCard({ card_id: '2:3:3:1', order: 3, cp: '300', official_name: '炎帝', visible_label: 'TAIL' })
+              ]
+            }
+          );
+          equal(decision.overlap_count, 2);
+          equal(decision.direction, 'left_suffix_right_prefix');
+          equal(decision.ambiguous, false);
+        });
+
+        test('removes only a two-card suffix-prefix overlap and restores scroll order from reversed uploads', () => {
+          const firstScreenshot = {
+            index: 8,
+            cards: [
+              validatedCard({ card_id: '8:1:1:1', order: 1, cp: '50', official_name: 'Lead', visible_label: 'LEAD' }),
+              validatedCard({ card_id: '8:2:2:1', order: 2, cp: '100', official_name: 'Pikachu', visible_label: ' Ｐ I\u00a0K A ' }),
+              validatedCard({ card_id: '8:3:3:1', order: 3, cp: '200', official_name: 'Eevee', visible_label: 'EE VEE' })
+            ]
+          };
+          const secondScreenshot = {
+            index: 3,
+            cards: [
+              validatedCard({ card_id: '3:1:1:1', order: 1, cp: '100', official_name: 'Pikachu', visible_label: 'PIKA' }),
+              validatedCard({ card_id: '3:2:2:1', order: 2, cp: '200', official_name: 'Eevee', visible_label: 'ＥＥＶＥＥ' }),
+              validatedCard({ card_id: '3:3:3:1', order: 3, cp: '300', official_name: 'Tail', visible_label: 'TAIL' })
+            ]
+          };
+
+          deepEqual(detectScreenshotOverlap(firstScreenshot, secondScreenshot), {
+            direction: 'left_suffix_right_prefix',
+            overlap_count: 2,
+            ambiguous: false,
+            matched_card_ids: ['3:1:1:1', '3:2:2:1'],
+            manual_review_reasons: []
+          });
+
+          const merged = mergeSmartHundoScreenshots([secondScreenshot, firstScreenshot], normalizeName);
+          deepEqual(merged.cards.map(item => item.card_id), [
+            '8:1:1:1',
+            '8:2:2:1',
+            '8:3:3:1',
+            '3:3:3:1'
+          ], 'upload order cannot select the scroll direction');
+          equal(merged.overlap_decisions.length, 1);
+          equal(merged.overlap_decisions[0].direction, 'right_suffix_left_prefix');
+          deepEqual(merged.manual_review_reasons, []);
+        });
+
+        test('keeps a single matching boundary card and marks overlap uncertainty', () => {
+          const left = {
+            index: 0,
+            cards: [
+              validatedCard({ card_id: '0:1:1:1', order: 1, cp: '10', official_name: 'Lead', visible_label: 'LEAD' }),
+              validatedCard({ card_id: '0:2:2:1', order: 2, cp: '20', official_name: 'Same', visible_label: 'SAME' })
+            ]
+          };
+          const right = {
+            index: 1,
+            cards: [
+              validatedCard({ card_id: '1:1:1:1', order: 1, cp: '20', official_name: 'Same', visible_label: 'SAME' }),
+              validatedCard({ card_id: '1:2:2:1', order: 2, cp: '30', official_name: 'Tail', visible_label: 'TAIL' })
+            ]
+          };
+          const decision = detectScreenshotOverlap(left, right);
+          equal(decision.direction, 'none');
+          equal(decision.overlap_count, 1);
+          equal(decision.ambiguous, true);
+          deepEqual(decision.matched_card_ids, ['1:1:1:1']);
+          deepEqual(decision.manual_review_reasons, ['screenshot_overlap_uncertain']);
+
+          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          equal(merged.cards.length, 4);
+          deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
+        });
+
+        test('never treats consecutive empty partial cards as usable overlap identity', () => {
+          const blankPartial = (cardId, order) => validatedCard({
+            card_id: cardId,
+            order,
+            cp: '',
+            official_name: '',
+            visible_label: '',
+            recognition_status: 'partial',
+            species_confidence: 0,
+            effective_shiny_state: 'uncertain',
+            effective_lucky_state: 'uncertain',
+            effective_favorite_state: 'uncertain',
+            effective_rocket_state: 'uncertain',
+            effective_background_type: 'uncertain'
+          });
+          const left = {
+            index: 0,
+            cards: [
+              validatedCard({ card_id: '0:1:1:1', order: 1, cp: '1', official_name: 'Lead', visible_label: 'LEAD' }),
+              blankPartial('0:2:2:1', 2),
+              blankPartial('0:3:3:1', 3)
+            ]
+          };
+          const right = {
+            index: 1,
+            cards: [
+              blankPartial('1:1:1:1', 1),
+              blankPartial('1:2:2:1', 2),
+              validatedCard({ card_id: '1:3:3:1', order: 3, cp: '2', official_name: 'Tail', visible_label: 'TAIL' })
+            ]
+          };
+
+          deepEqual(detectScreenshotOverlap(left, right), {
+            direction: 'none',
+            overlap_count: 0,
+            ambiguous: false,
+            matched_card_ids: [],
+            manual_review_reasons: []
+          });
+          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          equal(merged.cards.length, 6);
+          deepEqual(merged.manual_review_reasons, []);
+        });
+
+        test('preserves one overlap uncertainty reason occurrence per uncertain decision', () => {
+          const weakCard = (screenshotIndex, order, cp, name) => validatedCard({
+            card_id: `${screenshotIndex}:${order}:${order}:1`,
+            order,
+            cp,
+            official_name: name,
+            visible_label: name
+          });
+          const merged = mergeSmartHundoScreenshots([
+            { index: 0, cards: [weakCard(0, 1, '10', 'LeadA'), weakCard(0, 2, '11', 'WeakA')] },
+            { index: 1, cards: [weakCard(1, 1, '11', 'WeakA'), weakCard(1, 2, '12', 'TailA')] },
+            { index: 2, cards: [weakCard(2, 1, '20', 'LeadB'), weakCard(2, 2, '21', 'WeakB')] },
+            { index: 3, cards: [weakCard(3, 1, '21', 'WeakB'), weakCard(3, 2, '22', 'TailB')] }
+          ], normalizeName);
+
+          equal(merged.cards.length, 8);
+          equal(merged.overlap_decisions.filter(decision => decision.ambiguous).length, 2);
+          deepEqual(merged.manual_review_reasons, [
+            'screenshot_overlap_uncertain',
+            'screenshot_overlap_uncertain'
+          ]);
+        });
+
+        test('never deduplicates identical non-boundary cards without a consecutive boundary sequence', () => {
+          const duplicate = {
+            cp: '99',
+            official_name: 'LegitimateDuplicate',
+            visible_label: 'SAME',
+            effective_shiny_state: 'yes'
+          };
+          const merged = mergeSmartHundoScreenshots([
+            {
+              index: 0,
+              cards: [
+                validatedCard({ card_id: '0:1:1:1', order: 1, official_name: 'A' }),
+                validatedCard({ card_id: '0:2:2:1', order: 2, ...duplicate }),
+                validatedCard({ card_id: '0:3:3:1', order: 3, official_name: 'B' })
+              ]
+            },
+            {
+              index: 1,
+              cards: [
+                validatedCard({ card_id: '1:1:1:1', order: 1, official_name: 'C' }),
+                validatedCard({ card_id: '1:2:2:1', order: 2, ...duplicate }),
+                validatedCard({ card_id: '1:3:3:1', order: 3, official_name: 'D' })
+              ]
+            }
+          ], normalizeName);
+          equal(merged.cards.length, 6);
+          equal(merged.cards.filter(item => item.official_name === 'LegitimateDuplicate').length, 2);
+          deepEqual(merged.manual_review_reasons, []);
+        });
+
+        test('requires CP, official name, normalized label, and all five effective states in every overlap signature', () => {
+          const signatureFields = [
+            ['cp', 'different-cp'],
+            ['official_name', 'DifferentName'],
+            ['visible_label', 'DIFFERENT_LABEL'],
+            ['effective_shiny_state', 'yes'],
+            ['effective_lucky_state', 'yes'],
+            ['effective_favorite_state', 'yes'],
+            ['effective_rocket_state', 'shadow'],
+            ['effective_background_type', 'special']
+          ];
+          signatureFields.forEach(([field, changedValue]) => {
+            const sharedFirst = validatedCard({
+              card_id: '0:2:2:1',
+              order: 2,
+              cp: '100',
+              official_name: 'First',
+              visible_label: 'FIRST'
+            });
+            const sharedSecond = validatedCard({
+              card_id: '0:3:3:1',
+              order: 3,
+              cp: '200',
+              official_name: 'Second',
+              visible_label: 'SECOND'
+            });
+            const merged = mergeSmartHundoScreenshots([
+              {
+                index: 0,
+                cards: [
+                  validatedCard({ card_id: '0:1:1:1', order: 1, official_name: 'Lead' }),
+                  sharedFirst,
+                  sharedSecond
+                ]
+              },
+              {
+                index: 1,
+                cards: [
+                  { ...sharedFirst, card_id: '1:1:1:1', order: 1 },
+                  { ...sharedSecond, card_id: '1:2:2:1', order: 2, [field]: changedValue },
+                  validatedCard({ card_id: '1:3:3:1', order: 3, official_name: 'Tail' })
+                ]
+              }
+            ], normalizeName);
+            equal(merged.cards.length, 6, `${field} mismatch prevents overlap removal`);
+            equal(merged.overlap_decisions[0].overlap_count, 0, `${field} remains in the signature`);
+          });
+        });
+
+        test('preserves all cards when both boundary directions have competing strong overlaps', () => {
+          const signatureCard = (cardId, order, name) => validatedCard({
+            card_id: cardId,
+            order,
+            cp: name,
+            official_name: name,
+            visible_label: name
+          });
+          const left = {
+            index: 0,
+            cards: [
+              signatureCard('0:1:1:1', 1, 'X'),
+              signatureCard('0:2:2:1', 2, 'Y'),
+              signatureCard('0:3:3:1', 3, 'Z'),
+              signatureCard('0:4:4:1', 4, 'W')
+            ]
+          };
+          const right = {
+            index: 1,
+            cards: [
+              signatureCard('1:1:1:1', 1, 'Z'),
+              signatureCard('1:2:2:1', 2, 'W'),
+              signatureCard('1:3:3:1', 3, 'X'),
+              signatureCard('1:4:4:1', 4, 'Y')
+            ]
+          };
+          const decision = detectScreenshotOverlap(left, right);
+          equal(decision.direction, 'none');
+          equal(decision.overlap_count, 2);
+          equal(decision.ambiguous, true);
+          deepEqual(decision.matched_card_ids, [
+            '1:1:1:1',
+            '1:2:2:1',
+            '0:1:1:1',
+            '0:2:2:1'
+          ]);
+          deepEqual(decision.manual_review_reasons, ['screenshot_overlap_uncertain']);
+          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          equal(merged.cards.length, 8);
+          deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
+        });
+
+        test('preserves all screenshots when multiple strong sequences compete for one boundary', () => {
+          const sequence = (screenshotIndex) => [
+            validatedCard({
+              card_id: `${screenshotIndex}:2:2:1`,
+              order: 2,
+              cp: '100',
+              official_name: 'First',
+              visible_label: 'FIRST'
+            }),
+            validatedCard({
+              card_id: `${screenshotIndex}:3:3:1`,
+              order: 3,
+              cp: '200',
+              official_name: 'Second',
+              visible_label: 'SECOND'
+            })
+          ];
+          const firstSequence = sequence(0);
+          const competingSequence = sequence(2);
+          const merged = mergeSmartHundoScreenshots([
+            {
+              index: 0,
+              cards: [
+                validatedCard({ card_id: '0:1:1:1', order: 1, official_name: 'LeadA' }),
+                ...firstSequence
+              ]
+            },
+            {
+              index: 1,
+              cards: [
+                { ...firstSequence[0], card_id: '1:1:1:1', order: 1 },
+                { ...firstSequence[1], card_id: '1:2:2:1', order: 2 },
+                validatedCard({ card_id: '1:3:3:1', order: 3, official_name: 'Tail' })
+              ]
+            },
+            {
+              index: 2,
+              cards: [
+                validatedCard({ card_id: '2:1:1:1', order: 1, official_name: 'LeadB' }),
+                ...competingSequence
+              ]
+            }
+          ], normalizeName);
+          equal(merged.cards.length, 9);
+          equal(merged.overlap_decisions.filter(decision => decision.ambiguous).length, 2);
+          deepEqual(merged.manual_review_reasons, [
+            'screenshot_overlap_uncertain',
+            'screenshot_overlap_uncertain'
+          ]);
+        });
+
+        test('constructs exact safe diagnostics by allowlist without serializing unknown session fields', () => {
+          const safeCard = validatedCard({
+            card_id: '4:1:1:1',
+            screenshot_index: 4,
+            order: 1,
+            row: 1,
+            column: 1,
+            cp: '1234',
+            visible_label: 'Safe Label',
+            official_name: 'SafeName',
+            recognition_status: 'recognized',
+            raw: {
+              states: { shiny: 'no', lucky: 'yes', favorite: 'no', rocket: 'purified', background: 'special' },
+              confidences: { shiny: .91, lucky: .92, favorite: .93, rocket: .94, background: .95 },
+              evidence: {
+                shiny: sparkleEvidence(),
+                lucky: luckyEvidence({ present: true, position: 'behind_pokemon', appearance: 'large_gold_shimmering_background' }),
+                favorite: appearanceEvidence(),
+                rocket: cyanPurificationEvidence(),
+                background: backgroundEvidence({
+                  present: true,
+                  position: 'near_pokemon_or_card_background',
+                  badge_type: 'special_background_badge',
+                  appearance: 'event_special_background'
+                })
+              },
+              originalDataUrl: 'data:image/png;base64,ORIGINAL_RAW'
+            },
+            effective_shiny_state: 'no',
+            effective_lucky_state: 'yes',
+            effective_favorite_state: 'no',
+            effective_rocket_state: 'purified',
+            effective_background_type: 'special',
+            manual_review_reasons: ['favorite_uncertain'],
+            classificationDataUrl: 'data:image/png;base64,COUNT_CROP_CARD'
+          });
+          const diagnostics = shapeSmartHundoDiagnostics({
+            scan_session_id: 'scan-17',
+            screenshots: [{
+              index: 4,
+              classification: {
+                image_type: 'HUNDO_LEGENDARY_SCREEN',
+                search_query: 'safe-query',
+                classificationDataUrl: 'data:image/png;base64,CLASSIFICATION'
+              },
+              normalized_search_query: 'safe-query',
+              raw_count_text: '(3)',
+              validated_count: '3',
+              count_source: 'pokemon_search_result_summary',
+              count_confidence: .98,
+              detected_card_count: 1,
+              cards_length: 1,
+              scan_complete: true,
+              bottom_edge_checked: true,
+              finish_reason: 'stop',
+              structural_retry_used: true,
+              structural_retry_reason: ['scan_incomplete'],
+              cards: [safeCard],
+              originalDataUrl: 'data:image/png;base64,ORIGINAL_SCREEN',
+              countCrop: 'data:image/png;base64,COUNT_CROP_SCREEN',
+              file: { name: 'File', secret: 'firebase-api-key' }
+            }],
+            count_candidates: [
+              { value: '3', votes: 2, confidence: .98, Authorization: 'Bearer test-key' }
+            ],
+            count_conflict: false,
+            overlap_decisions: [{
+              direction: 'left_suffix_right_prefix',
+              overlap_count: 2,
+              ambiguous: false,
+              matched_card_ids: ['4:1:1:1', '5:1:1:1'],
+              manual_review_reasons: []
+            }],
+            manual_review_reasons: ['favorite_uncertain'],
+            pokemon_list: 'SafeName',
+            apiKey: 'test-key',
+            Authorization: 'Bearer firebase-api-key',
+            credentials: 'gas-secret',
+            account: 'account;password',
+            request: { originalDataUrl: 'data:image/png;base64,ORIGINAL_REQUEST' }
+          });
+
+          deepEqual(Object.keys(diagnostics), [
+            'scan_session_id',
+            'screenshots',
+            'count_candidates',
+            'count_conflict',
+            'overlap_decisions',
+            'manual_review_reasons',
+            'pokemon_list'
+          ]);
+          deepEqual(diagnostics.screenshots[0].classification, {
+            image_type: 'HUNDO_LEGENDARY_SCREEN',
+            search_query: 'safe-query'
+          });
+          deepEqual(diagnostics.screenshots[0].cards[0].raw_states, {
+            shiny: 'no',
+            lucky: 'yes',
+            favorite: 'no',
+            rocket: 'purified',
+            background: 'special'
+          });
+          deepEqual(diagnostics.screenshots[0].cards[0].effective_states, {
+            shiny: 'no',
+            lucky: 'yes',
+            favorite: 'no',
+            rocket: 'purified',
+            background: 'special'
+          });
+          equal(diagnostics.screenshots[0].cards[0].raw_confidences.rocket, .94);
+          deepEqual(diagnostics.screenshots[0].cards[0].raw_evidence.rocket, {
+            present: true,
+            region_visibility: 'clear',
+            position: 'lower_left',
+            color: 'light_cyan',
+            shape: 'single_radial_sparkle'
+          });
+          deepEqual(diagnostics.count_candidates, [{ value: '3', votes: 2, confidence: .98 }]);
+          deepEqual(diagnostics.overlap_decisions, [{
+            direction: 'left_suffix_right_prefix',
+            overlap_count: 2,
+            ambiguous: false,
+            matched_card_ids: ['4:1:1:1', '5:1:1:1'],
+            manual_review_reasons: []
+          }]);
+          deepEqual(diagnostics.manual_review_reasons, ['favorite_uncertain']);
+          equal(diagnostics.screenshots[0].scan_complete, true);
+          equal(diagnostics.screenshots[0].finish_reason, 'stop');
+          equal(diagnostics.screenshots[0].structural_retry_used, true);
+          deepEqual(diagnostics.screenshots[0].structural_retry_reason, ['scan_incomplete']);
+          equal(diagnostics.pokemon_list, 'SafeName');
+
+          const serialized = JSON.stringify(diagnostics);
+          [
+            'test-key',
+            'Authorization',
+            'Bearer',
+            'data:image/',
+            'ORIGINAL_',
+            'COUNT_CROP_',
+            'classificationDataUrl',
+            'originalDataUrl',
+            'File',
+            'firebase-api-key',
+            'gas-secret',
+            'account;password'
+          ].forEach(sentinel => {
+            equal(serialized.includes(sentinel), false, `diagnostics excludes ${sentinel}`);
+          });
+        });
+
+        test('sanitizes model presentation labels in safe card diagnostics', () => {
+          const diagnostics = shapeSmartHundoDiagnostics({
+            screenshots: [{
+              cards: [validatedCard({ official_name: '全球背卡：色違固拉多' })]
+            }],
+            pokemon_list: '固拉多'
+          });
+          equal(diagnostics.screenshots[0].cards[0].official_name, '固拉多');
+          equal(diagnostics.pokemon_list, '固拉多');
+        });
+
+        test('validates allowed diagnostic values and redacts secrets injected into allowlisted fields', () => {
+          const diagnostics = shapeSmartHundoDiagnostics({
+            scan_session_id: 'scan-API_KEY-secret',
+            screenshots: [{
+              index: 6,
+              classification: {
+                image_type: 'HUNDO_LEGENDARY_SCREEN',
+                search_query: 'gas-secret'
+              },
+              normalized_search_query: 'Authorization: Bearer injected',
+              raw_count_text: 'data:image/png;base64,COUNT',
+              validated_count: '03',
+              count_source: 'unknown-source',
+              count_confidence: 9,
+              detected_card_count: 1,
+              cards_length: 1,
+              scan_complete: true,
+              bottom_edge_checked: true,
+              finish_reason: 'password=hunter2',
+              structural_retry_used: true,
+              structural_retry_reason: ['scan_incomplete', 'unknown-retry', 'gas-secret'],
+              cards: [validatedCard({
+                card_id: 'sk-proj-1234567890abcdef',
+                cp: 'data:image/png;base64,CARD',
+                visible_label: 'Authorization',
+                official_name: 'Bearer injected',
+                recognition_status: 'made-up',
+                raw: {
+                  states: {
+                    shiny: 'invalid-shiny',
+                    lucky: 'yes',
+                    favorite: 'no',
+                    rocket: 'invalid-rocket',
+                    background: 'global'
+                  },
+                  confidences: {
+                    shiny: 4,
+                    lucky: -2,
+                    favorite: .5,
+                    rocket: .6,
+                    background: .7
+                  },
+                  evidence: {
+                    shiny: {
+                      present: true,
+                      region_visibility: 'invalid-visibility',
+                      position: 'Authorization',
+                      color: 'invalid-color',
+                      shape: 'invalid-shape'
+                    },
+                    lucky: luckyEvidence(),
+                    favorite: appearanceEvidence(),
+                    rocket: rocketEvidence(),
+                    background: backgroundEvidence()
+                  }
+                },
+                effective_shiny_state: 'invalid-effective',
+                effective_lucky_state: 'yes',
+                effective_favorite_state: 'no',
+                effective_rocket_state: 'invalid-effective',
+                effective_background_type: 'invalid-effective',
+                manual_review_reasons: ['favorite_uncertain', 'unknown-reason', 'firebase-secret']
+              })]
+            }],
+            count_candidates: [
+              { value: '03', votes: 1, confidence: .8 },
+              { value: '3', votes: -1, confidence: .8 },
+              { value: '4', votes: 1.5, confidence: .8 },
+              { value: '6', votes: '2', confidence: .8 },
+              { value: '7', votes: null, confidence: .8 },
+              { value: '5', votes: 2, confidence: 4 }
+            ],
+            count_conflict: true,
+            overlap_decisions: [{
+              direction: 'none',
+              overlap_count: 1,
+              ambiguous: true,
+              matched_card_ids: ['data:image/png;base64,MATCH', 'test-key'],
+              manual_review_reasons: ['screenshot_overlap_uncertain', 'unknown-overlap', 'api-key']
+            }],
+            manual_review_reasons: ['favorite_uncertain', 'unknown-session', 'GAS secret'],
+            pokemon_list: 'firebase-api-key password sk-proj-abcdef123456'
+          });
+
+          equal(diagnostics.scan_session_id, '');
+          equal(diagnostics.screenshots[0].classification.search_query, '');
+          equal(diagnostics.screenshots[0].normalized_search_query, '');
+          equal(diagnostics.screenshots[0].raw_count_text, '');
+          equal(diagnostics.screenshots[0].validated_count, '');
+          equal(diagnostics.screenshots[0].count_source, 'uncertain');
+          equal(diagnostics.screenshots[0].count_confidence, 1);
+          equal(diagnostics.screenshots[0].finish_reason, '');
+          deepEqual(diagnostics.screenshots[0].structural_retry_reason, ['scan_incomplete']);
+          const safeCard = diagnostics.screenshots[0].cards[0];
+          equal(safeCard.card_id, '');
+          equal(safeCard.cp, '');
+          equal(safeCard.visible_label, '');
+          equal(safeCard.official_name, '');
+          equal(safeCard.recognition_status, 'uncertain');
+          deepEqual(safeCard.raw_states, {
+            shiny: 'uncertain',
+            lucky: 'yes',
+            favorite: 'no',
+            rocket: 'uncertain',
+            background: 'global'
+          });
+          equal(safeCard.raw_confidences.shiny, 1);
+          equal(safeCard.raw_confidences.lucky, 0);
+          deepEqual(safeCard.raw_evidence.shiny, {
+            present: true,
+            region_visibility: 'uncertain',
+            position: 'uncertain',
+            color: 'uncertain',
+            shape: 'uncertain'
+          });
+          deepEqual(safeCard.effective_states, {
+            shiny: 'uncertain',
+            lucky: 'yes',
+            favorite: 'no',
+            rocket: 'uncertain',
+            background: 'uncertain'
+          });
+          deepEqual(safeCard.manual_review_reasons, ['favorite_uncertain']);
+          deepEqual(diagnostics.count_candidates, [{ value: '5', votes: 2, confidence: 1 }]);
+          deepEqual(diagnostics.overlap_decisions[0].matched_card_ids, []);
+          deepEqual(diagnostics.overlap_decisions[0].manual_review_reasons, ['screenshot_overlap_uncertain']);
+          deepEqual(diagnostics.manual_review_reasons, ['favorite_uncertain']);
+          equal(diagnostics.pokemon_list, '');
+
+          const serialized = JSON.stringify(diagnostics);
+          [
+            'data:image/',
+            'Authorization',
+            'Bearer',
+            'test-key',
+            'API_KEY',
+            'api-key',
+            'password',
+            'firebase',
+            'gas-secret',
+            'GAS secret',
+            'sk-proj-'
+          ].forEach(sentinel => {
+            equal(serialized.toLowerCase().includes(sentinel.toLowerCase()), false, `allowed diagnostics redact ${sentinel}`);
+          });
+        });
+
+        test('redacts Firebase API keys and GAS deployment tokens from allowlisted diagnostic strings', () => {
+          const firebaseKey = 'AIzaSyA1b2C3d4E5f6G7h8I9j0K';
+          const gasDeploymentToken = 'AKfycbA1b2C3d4E5f6G7h8I9j0K';
+          const diagnostics = shapeSmartHundoDiagnostics({
+            scan_session_id: 'scan-safe',
+            screenshots: [{
+              index: 0,
+              classification: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: 'safe-query' },
+              cards: [validatedCard({
+                card_id: '0:1:1:1',
+                official_name: firebaseKey,
+                visible_label: gasDeploymentToken
+              })]
+            }],
+            pokemon_list: gasDeploymentToken
+          });
+
+          equal(diagnostics.screenshots[0].cards[0].official_name, '');
+          equal(diagnostics.screenshots[0].cards[0].visible_label, '');
+          equal(diagnostics.pokemon_list, '');
+          const serialized = JSON.stringify(diagnostics);
+          equal(serialized.includes(firebaseKey), false);
+          equal(serialized.includes(gasDeploymentToken), false);
         });
 
         const indexRequest = new XMLHttpRequest();
@@ -291,14 +1840,45 @@
         equal(indexHtml.includes('<script src="smart-hundo-helpers.js"><' + '/script>'), true);
 
         const nativeCreateElement = document.createElement.bind(document);
+        let inlineHundoInputCalls = 0;
+        ['g_hundos', 'st_hundo_leg', 'aiAutoStatus', 'aiAutoBtn'].forEach(id => {
+          const element = nativeCreateElement(id === 'g_hundos' ? 'textarea' : id === 'aiAutoStatus' ? 'p' : id === 'aiAutoBtn' ? 'button' : 'input');
+          element.id = id;
+          document.body.appendChild(element);
+        });
+        document.getElementById('g_hundos').oninput = () => { inlineHundoInputCalls += 1; };
         let canvasCalls = 0;
+        const canvasRecords = [];
         let lastPayload = null;
-        let smartRequestCount = 0;
+        let countRequestCount = 0;
         const fileReadCounts = new Map();
         const resizedByOriginal = new Map();
+        const countRegionByOriginal = new Map();
         const originalDataUrl = 'data:image/png;base64,SMART_ORIGINAL_DO_NOT_EXPOSE';
         const resizedUrl = 'data:image/jpeg;base64,RESIZED';
+        const countRegionUrl = 'data:image/png;base64,HUNDO_COUNT_REGION_SENTINEL';
         const pngFile = { type: 'image/png', dataUrl: originalDataUrl };
+        const expectedOpenAiUrl = 'https://api.openai.com/v1/chat/completions';
+        const allowedOpenAiSchemas = new Set([
+          'pokemon_go_image_classifier',
+          'pokemon_go_forced_field_extractor',
+          'pokemon_go_hundo_count_extractor',
+          'pokemon_go_hundo_smart_extractor_v2'
+        ]);
+        const installStrictOpenAiFetchMock = (responder) => {
+          globalThis.fetch = async (url, options = {}) => {
+            if (url !== expectedOpenAiUrl) throw new Error(`strict OpenAI mock rejected unknown URL: ${url}`);
+            const payload = JSON.parse(options.body);
+            const schemaName = payload?.response_format?.json_schema?.name;
+            if (!allowedOpenAiSchemas.has(schemaName)) {
+              throw new Error(`strict OpenAI mock rejected unknown schema: ${schemaName}`);
+            }
+            const response = await responder({ url, options, payload, schemaName });
+            if (!response) throw new Error(`strict OpenAI mock has no response for schema: ${schemaName}`);
+            return response;
+          };
+          return globalThis.fetch;
+        };
 
         class MockFileReader {
           readAsDataURL(file) {
@@ -330,10 +1910,31 @@
           if (String(tagName).toLowerCase() !== 'canvas') return nativeCreateElement(tagName, ...args);
           canvasCalls += 1;
           let drawnImage = null;
-          return {
-            getContext: () => ({ drawImage: (image) => { drawnImage = image; } }),
-            toDataURL: () => resizedByOriginal.get(drawnImage?.source) || resizedUrl
+          let drawArguments = [];
+          const canvas = {
+            width: 0,
+            height: 0,
+            getContext: () => ({
+              drawImage: (...drawArgs) => {
+                [drawnImage] = drawArgs;
+                drawArguments = drawArgs.slice(1);
+              }
+            }),
+            toDataURL: (type, quality) => {
+              canvasRecords.push({
+                width: canvas.width,
+                height: canvas.height,
+                source: drawnImage?.source,
+                drawArguments,
+                type,
+                quality
+              });
+              return type === 'image/png'
+                ? countRegionByOriginal.get(drawnImage?.source) || countRegionUrl
+                : resizedByOriginal.get(drawnImage?.source) || resizedUrl;
+            }
           };
+          return canvas;
         };
         globalThis.initializeApp = () => ({});
         globalThis.getDatabase = () => ({});
@@ -343,104 +1944,299 @@
         globalThis.onValue = () => {};
         globalThis.remove = async () => {};
         globalThis.update = async () => {};
-        globalThis.fetch = async (_url, options = {}) => {
-          lastPayload = JSON.parse(options.body);
-          if (lastPayload.messages[0].content[1].image_url.detail === 'high') smartRequestCount += 1;
+        installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
+          lastPayload = payload;
+          if (schemaName === 'pokemon_go_hundo_count_extractor') countRequestCount += 1;
+          const content = schemaName === 'pokemon_go_hundo_count_extractor'
+            ? validCount('(3)', '3')
+            : {
+              detected_card_count: 0,
+              scan_complete: true,
+              bottom_edge_checked: true,
+              enumeration_confidence: 0.99,
+              cards: []
+            };
           return {
             ok: true,
             json: async () => ({
-              choices: [{ message: { content: JSON.stringify({
-                hundo_leg: '8',
-                hundo_leg_confidence: 0.9,
-                detected_card_count: 0,
-                cards: []
-              }) } }]
+              choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
             })
           };
-        };
+        });
 
         const pageModule = moduleMatch[1]
           .replace(/^\s*import\s+[^;]+;\s*$/gm, '')
-          + '\nObject.assign(globalThis, { HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA, buildSmartHundoPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestSmartHundoExtraction, smartHundoScan });';
+          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV2, requestSmartHundoWithStructuralRetry, smartHundoScan, normalizeAiClassification, beginSmartHundoScanSession, markSmartHundoAiValue, handleSmartHundoManualEdit, isCurrentSmartHundoSession, publishSmartHundoDiagnostics, setSmartHundoStatus });';
         (0, eval)(pageModule);
 
         equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
         equal(canvasCalls, 0);
-        await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA, null);
+        equal(await fileToResizedDataUrl(pngFile), resizedUrl);
+        deepEqual(canvasRecords.at(-1), {
+          width: 1000,
+          height: 562.5,
+          source: originalDataUrl,
+          drawArguments: [0, 0, 1000, 562.5],
+          type: 'image/jpeg',
+          quality: 0.7
+        }, 'ordinary compressor retains its size, JPEG quality, and draw contract');
+        const ordinaryResult = await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA, null);
+        equal(ordinaryResult.detected_card_count, 0);
+        equal(Object.hasOwn(ordinaryResult, 'result'), false, 'ordinary callers retain parsed-object return');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'auto');
-        await smartHundoScan({ apiKey: 'test-key', originalDataUrl, imageIndex: 2 });
-        equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
-        equal(lastPayload.messages[0].content[1].image_url.url, originalDataUrl);
-        equal(smartRequestCount, 1);
         equal(JSON.stringify(lastPayload).includes('test-key'), false);
         equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
+        equal(OPENAI_CHAT_COMPLETIONS_URL, expectedOpenAiUrl);
+        equal(HUNDO_COUNT_SCHEMA.name, 'pokemon_go_hundo_count_extractor');
+        equal(HUNDO_COUNT_SCHEMA.strict, true);
+        equal(HUNDO_COUNT_SCHEMA.schema.additionalProperties, false);
+        deepEqual(Object.keys(HUNDO_COUNT_SCHEMA.schema.properties), [
+          'hundo_leg', 'raw_count_text', 'active_tab', 'count_source',
+          'relative_position', 'has_parentheses', 'has_slash', 'confidence'
+        ]);
+        deepEqual(HUNDO_COUNT_SCHEMA.schema.required, Object.keys(HUNDO_COUNT_SCHEMA.schema.properties));
+        deepEqual(HUNDO_COUNT_SCHEMA.schema.properties.active_tab.enum, ['pokemon', 'egg', 'unknown']);
+        deepEqual(HUNDO_COUNT_SCHEMA.schema.properties.count_source.enum, ['pokemon_search_result_summary', 'other', 'uncertain']);
+        deepEqual(HUNDO_COUNT_SCHEMA.schema.properties.relative_position.enum, ['associated_with_active_pokemon_tab', 'other', 'uncertain']);
+        const countPrompt = buildHundoCountPrompt();
+        [
+          'active Pokémon tab', 'Pokémon search-result summary', '語意關係與相對位置', 'parenthesized',
+          '顏色不是必要或決定性訊號', '不得依賴固定高度', 'egg 9/12', 'storage 142/450',
+          'CP', 'clock', 'battery', 'query 4*', 'cards.length', 'detected count',
+          'visible count', 'screenshot count', '上方 42% 裁切區只是聚焦輸入', 'uncertain', '排除 egg tab',
+          'result color 可能是 gray、orange、blue-green、white 或 another UI color',
+          'color is never required or decisive', '(3) 輸出 3', '（30）輸出 30'
+        ].forEach(fragment => equal(countPrompt.includes(fragment), true, `count prompt protects ${fragment}`));
+
+        const croppedCountRegion = await fileToHundoCountRegionDataUrl(originalDataUrl);
+        equal(croppedCountRegion, countRegionUrl);
+        deepEqual(canvasRecords.at(-1), {
+          width: 1600,
+          height: 378,
+          source: originalDataUrl,
+          drawArguments: [0, 0, 1600, 378, 0, 0, 1600, 378],
+          type: 'image/png',
+          quality: undefined
+        }, 'count crop retains native width, ceil 42% height, and lossless PNG');
+
+        const countResponse = await requestHundoCountExtraction('test-key', croppedCountRegion, null);
+        equal(countRequestCount, 1, 'count extraction sends one logical schema request');
+        equal(countResponse.result.hundo_leg, '3');
+        equal(countResponse.finish_reason, 'stop');
+        equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_count_extractor');
+        equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
+        equal(lastPayload.messages[0].content[1].image_url.url.startsWith('data:image/png'), true);
+        installStrictOpenAiFetchMock(async () => ({
+          ok: true,
+          json: async () => ({
+            choices: [{
+              finish_reason: 7,
+              message: {
+                content: JSON.stringify({
+                  hundo_leg: '',
+                  hundo_leg_confidence: 0,
+                  detected_card_count: 0,
+                  cards: []
+                })
+              }
+            }]
+          })
+        }));
+        const coercedMetadata = await requestOpenAiJsonSchema(
+          'test-key',
+          'metadata contract',
+          originalDataUrl,
+          HUNDO_SMART_SCHEMA,
+          null,
+          { includeMetadata: true }
+        );
+        equal(coercedMetadata.finish_reason, '7', 'metadata finish reason is always a safe string');
+        await assertRejects(globalThis.fetch('https://example.invalid/never', {
+          body: JSON.stringify({ response_format: { json_schema: HUNDO_COUNT_SCHEMA } })
+        }), 'unknown URL');
+        await assertRejects(globalThis.fetch(expectedOpenAiUrl, {
+          body: JSON.stringify({ response_format: { json_schema: { name: 'unknown_paid_schema' } } })
+        }), 'unknown schema');
         equal(HUNDO_SMART_SCHEMA.strict, true);
         equal(HUNDO_SMART_SCHEMA.schema.additionalProperties, false);
-        equal(HUNDO_SMART_SCHEMA.schema.properties.cards.items.additionalProperties, false);
-        deepEqual(Object.keys(HUNDO_SMART_SCHEMA.schema.properties), ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']);
-        deepEqual(HUNDO_SMART_SCHEMA.schema.required, ['hundo_leg', 'hundo_leg_confidence', 'detected_card_count', 'cards']);
+        deepEqual(Object.keys(HUNDO_SMART_SCHEMA.schema.properties), [
+          'detected_card_count', 'scan_complete', 'bottom_edge_checked', 'enumeration_confidence', 'cards'
+        ]);
+        deepEqual(HUNDO_SMART_SCHEMA.schema.required, [
+          'detected_card_count', 'scan_complete', 'bottom_edge_checked', 'enumeration_confidence', 'cards'
+        ]);
         const smartCardSchema = HUNDO_SMART_SCHEMA.schema.properties.cards.items;
-        deepEqual(Object.keys(smartCardSchema.properties), [
-          'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
-          'shiny_state', 'shiny_confidence', 'purified_state', 'purified_confidence', 'shadow_state', 'shadow_confidence'
-        ]);
-        deepEqual(smartCardSchema.required, [
-          'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
-          'shiny_state', 'shiny_confidence', 'purified_state', 'purified_confidence', 'shadow_state', 'shadow_confidence'
-        ]);
-        deepEqual(smartCardSchema.properties.recognition_status.enum, ['recognized', 'partial', 'uncertain']);
-        ['shiny_state', 'purified_state', 'shadow_state'].forEach(field => {
-          deepEqual(smartCardSchema.properties[field].enum, ['yes', 'no', 'uncertain'], field);
+        equal(smartCardSchema.additionalProperties, false);
+        ['order', 'row', 'column'].forEach(field => {
+          equal(smartCardSchema.properties[field].minimum, 1, `${field} is 1-based`);
         });
-        const smartPrompt = buildSmartHundoPrompt();
-        [
-          'HUNDO_LEGENDARY_SCREEN', '傳說的寶可夢,幻,究極異獸&4*', '禁止重新分類', '所有可見的寶可夢卡片',
-          '部分可見', '由上到下、由左到右', '官方繁體中文名稱', 'visible_label', '次要佐證', '不能取代視覺辨識',
-          'shiny、purified、shadow', '分別獨立判斷', 'uncertain', '搜尋欄', '非寶可夢卡片', '不可見卡片', '重複卡片',
-          'JSON Schema', '不得輸出 Markdown', '額外欄位'
-        ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt protects ${fragment}`));
-        [
-          'recognized：僅在實際物種與型態可可靠辨識時使用',
-          'partial：僅在卡片或證據只部分可見且辨識未完成時使用',
-          '除非物種本身仍可可靠辨識，否則 official_name 留空',
-          'uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用'
-        ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt defines ${fragment}`));
-        test('contains the complete A-G smart prompt contract', () => {
-          const requiredBySection = {
-            A: [
-              '【A. 卡片列舉與位置】', '完整可見或部分可見', '由上到下、由左到右', 'order 必須從 1 開始',
-              '不得依賴圖片上傳順序', '不得把相鄰卡片合併', '不得把相鄰卡片的符號或狀態指派給本卡'
-            ],
-            B: [
-              '【B. 物種與型態辨識】', '身體、頭部、四肢、翅膀、尾巴、角', '型態專屬特徵',
-              '傳說、幻與究極異獸的設計特徵', '顏色只能作為輔助證據', '自訂暱稱',
-              'IV、151515、100、百分比', '縮寫、背景、招式、使用者符號、前綴或後綴',
-              '絕對不得直接複製到 official_name', 'GLO蒼響151515 -> 蒼響', '官方繁體中文名稱與型態名稱',
-              '證據衝突', 'official_name 留空', '不得猜測或發明'
-            ],
-            C: [
-              '【C. 色違 shiny】', 'CP／狀態區附近的官方色違閃光或狀態圖示', '只靠身體顏色不足',
-              '背景閃光、最愛星號、夥伴徽章、按鈕、徽章及相鄰卡片符號', '不清楚時填 uncertain'
-            ],
-            D: [
-              '【D. 淨化 purified】', '只屬於該卡片的官方淨化符號或淨化效果',
-              '無關的藍色、季節、服裝、背景或相鄰卡片圖形', '只保留在內部結果', '絕不能轉成 shiny'
-            ],
-            E: [
-              '【E. 暗影 shadow】', '只屬於該卡片的官方紫色火焰或煙霧', '紫色身體或相鄰卡片效果都不足'
-            ],
-            F: [
-              '【F. 必須忽略的 UI 與裝飾】', '最愛、夥伴、搜尋、排序、儲存空間、背景、紀念、全域、服裝、季節、底部導覽、CP 排序'
-            ],
-            G: [
-              '【G. Schema 與一致性】', '只輸出符合提供 JSON Schema 的 JSON', '不得遺漏可見卡片',
-              '不得發明隱藏或畫面外卡片', '不得輸出重複卡片', '位置與 order 必須一致'
-            ]
-          };
-          Object.entries(requiredBySection).forEach(([section, fragments]) => {
-            fragments.forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt section ${section} includes ${fragment}`));
+        deepEqual(smartCardSchema.properties.cp, { type: 'string' });
+        ['hundo_leg', 'shadow_state', 'purified_state'].forEach(field => {
+          equal(Object.hasOwn(smartCardSchema.properties, field), false, field);
+        });
+        equal(JSON.stringify(HUNDO_SMART_SCHEMA).includes('global'), false);
+        ['shiny_evidence', 'lucky_evidence', 'favorite_evidence', 'rocket_evidence', 'background_evidence'].forEach(field => {
+          const evidenceSchema = smartCardSchema.properties[field];
+          equal(evidenceSchema.additionalProperties, false, `${field} is strict`);
+          equal(evidenceSchema.required.includes('region_visibility'), true, `${field} requires visibility`);
+          deepEqual(evidenceSchema.required, Object.keys(evidenceSchema.properties), `${field} requires every property`);
+        });
+        deepEqual(smartCardSchema.properties.shiny_evidence.properties.position.enum, ['none', 'cp_area', 'lower_left', 'upper_right', 'around_pokemon', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.shiny_evidence.properties.color.enum, ['none', 'dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal', 'light_cyan', 'yellow', 'purple', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.shiny_evidence.properties.shape.enum, ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'five_point_star', 'flame_or_smoke', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.lucky_evidence.properties.position.enum, ['none', 'behind_pokemon', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.lucky_evidence.properties.appearance.enum, ['none', 'large_gold_shimmering_background', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.favorite_evidence.properties.position.enum, ['none', 'upper_right', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.favorite_evidence.properties.appearance.enum, ['none', 'filled_yellow_five_point_star', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.rocket_evidence.properties.position.enum, ['none', 'lower_left', 'lower_side', 'around_pokemon', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.rocket_evidence.properties.color.enum, ['none', 'light_blue', 'light_cyan', 'purple', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.rocket_evidence.properties.shape.enum, ['none', 'single_radial_sparkle', 'purification_starburst', 'flower_like_symbol', 'purple_flame', 'purple_smoke', 'shadow_aura', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.background_evidence.properties.position.enum, ['none', 'near_pokemon_or_card_background', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.background_evidence.properties.badge_type.enum, ['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.background_evidence.properties.appearance.enum, ['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
+        test('stages the complete V2 enumeration, species, and five-evidence prompt', () => {
+          const smartPrompt = buildSmartHundoPrompt();
+          [
+            '全圖由上到下、每列由左到右', '超過 10 張仍必須繼續掃描到底部邊緣',
+            '完整可見與部分可見', '每一張都各自輸出', '不得把相鄰卡片的符號或狀態轉移',
+            '合法重複的寶可夢仍是不同卡片', '不得發明',
+            '身體輪廓、頭部、四肢、翅膀、尾巴、角、裝甲', 'visible_label 只能作為次要證據',
+            'GLO蒼響151515', 'official_name 留空', 'recognition_status 填 uncertain',
+            '焰白酋雷姆', '闇黑酋雷姆', '蒼響劍王', '藏瑪然特盾王', '起源型態', '融合型態',
+            'dark-blue／teal 的 multiple_four_point_sparkles', 'CP area',
+            'large_gold_shimmering_background', 'filled_yellow_five_point_star', 'upper-right',
+            'light-cyan 的 radial／starburst', 'purple flame／smoke／aura',
+            'commemorative／location badge', 'event-special badge／background',
+            'position=cp_area', 'color=dark_blue／blue_black／teal_blue／dark_blue_teal',
+            'position=behind_pokemon', 'position=upper_right',
+            'color=light_blue／light_cyan', 'shape=purple_flame／purple_smoke／shadow_aura',
+            'badge_type=commemorative_location_badge', 'badge_type=special_background_badge',
+            'region_visibility', 'clear', 'partially_occluded', 'cropped',
+            '顏色或身體顏色本身永遠不足'
+          ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `V2 smart prompt protects ${fragment}`));
+        });
+        const v2Result = (count, officialName, overrides = {}) => ({
+          detected_card_count: count,
+          scan_complete: true,
+          bottom_edge_checked: true,
+          enumeration_confidence: 0.99,
+          cards: makeCards(count, { official_name: officialName }),
+          ...overrides
+        });
+        await asyncTest('retries one structurally incomplete V2 extraction and replaces every first-attempt field', async () => {
+          const attempts = [];
+          const canvasCallsBeforeV2 = canvasCalls;
+          installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
+            attempts.push({ payload, schemaName });
+            const content = attempts.length === 1
+              ? v2Result(15, '第一次卡片', {
+                enumeration_confidence: 0.91,
+                cards: makeCards(10, { official_name: '第一次卡片' })
+              })
+              : v2Result(15, '夢幻', { enumeration_confidence: 0.97 });
+            return {
+              ok: true,
+              json: async () => ({
+                choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
+              })
+            };
           });
-          equal(smartPrompt.includes('所有狀態證據都必須屬於同一張正在判定的卡片'), true, 'same-card evidence ownership is explicit');
+
+          const retried = await requestSmartHundoWithStructuralRetry({
+            apiKey: 'test-key',
+            originalDataUrl,
+            imageIndex: 9
+          });
+          equal(attempts.length, 2, 'one logical retry makes exactly two extraction calls');
+          attempts.forEach(({ payload, schemaName }) => {
+            equal(schemaName, 'pokemon_go_hundo_smart_extractor_v2');
+            equal(payload.messages[0].content[1].image_url.url, originalDataUrl);
+            equal(payload.messages[0].content[1].image_url.detail, 'high');
+          });
+          equal(attempts[0].payload.messages[0].content[0].text, buildSmartHundoPrompt());
+          equal(attempts[1].payload.messages[0].content[0].text.includes('結構重試'), true);
+          equal(canvasCalls, canvasCallsBeforeV2, 'V2 never resizes or JPEG-compresses the original');
+          equal(retried.result.detected_card_count, 15);
+          equal(retried.result.enumeration_confidence, 0.97);
+          equal(retried.result.cards.length, 15);
+          equal(retried.result.cards.every(item => item.official_name === '夢幻'), true);
+          equal(retried.result.cards.some(item => item.official_name === '第一次卡片'), false);
+          equal(retried.result.cards.every(item => item.card_id.startsWith('9:')), true);
+          equal(retried.finish_reason, 'stop');
+          equal(retried.structure.structurally_complete, true);
+          equal(retried.structural_retry_used, true);
+          deepEqual(retried.structural_retry_reason, ['detected_card_count_mismatch']);
+          equal(retried.attempt_count, 2);
+        });
+
+        await asyncTest('does not structurally retry low-confidence uncertain cards', async () => {
+          let attempts = 0;
+          installStrictOpenAiFetchMock(async () => {
+            attempts += 1;
+            const content = v2Result(1, '', {
+              enumeration_confidence: 0.05,
+              cards: makeCards(1, {
+                official_name: '',
+                recognition_status: 'uncertain',
+                species_confidence: 0.05,
+                shiny_state: 'uncertain',
+                shiny_confidence: 0.01
+              })
+            });
+            return {
+              ok: true,
+              json: async () => ({
+                choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
+              })
+            };
+          });
+          const uncertain = await requestSmartHundoWithStructuralRetry({
+            apiKey: 'test-key',
+            originalDataUrl,
+            imageIndex: 10
+          });
+          equal(attempts, 1);
+          equal(uncertain.result.enumeration_confidence, 0.05);
+          equal(uncertain.result.cards[0].recognition_status, 'uncertain');
+          equal(uncertain.structure.structurally_complete, true);
+          equal(uncertain.structural_retry_used, false);
+          deepEqual(uncertain.structural_retry_reason, []);
+          equal(uncertain.attempt_count, 1);
+        });
+
+        await asyncTest('uses an incomplete second V2 result as the sole replacement result', async () => {
+          let attempts = 0;
+          installStrictOpenAiFetchMock(async () => {
+            attempts += 1;
+            const content = attempts === 1
+              ? v2Result(2, '第一次完整名稱', { scan_complete: false })
+              : v2Result(4, '第二次不完整名稱', {
+                bottom_edge_checked: false,
+                enumeration_confidence: 0.22,
+                cards: makeCards(3, { official_name: '第二次不完整名稱' })
+              });
+            return {
+              ok: true,
+              json: async () => ({
+                choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
+              })
+            };
+          });
+          const replaced = await requestSmartHundoWithStructuralRetry({
+            apiKey: 'test-key',
+            originalDataUrl,
+            imageIndex: 11
+          });
+          equal(attempts, 2);
+          equal(replaced.result.detected_card_count, 4);
+          equal(replaced.result.bottom_edge_checked, false);
+          equal(replaced.result.enumeration_confidence, 0.22);
+          equal(replaced.result.cards.length, 3);
+          equal(replaced.result.cards.every(item => item.official_name === '第二次不完整名稱'), true);
+          equal(replaced.result.cards.some(item => item.official_name === '第一次完整名稱'), false);
+          equal(replaced.structure.structurally_complete, false);
+          deepEqual(replaced.structural_retry_reason, ['scan_incomplete']);
+          equal(replaced.attempt_count, 2);
         });
         test('harness error channels serialize Error details and force failure', () => {
           const diagnostics = [];
@@ -474,7 +2270,7 @@
         const fixtureIds = [
           'openaiApiKey', 'imageInput', 'aiAutoBtn', 'aiAutoStatus', 'g_hundos',
           'g_level', 'g_team', 'g_xp', 'g_stardust',
-          'st_hundo_leg', 'st_shiny', 'st_coin', 'st_poke_bag', 'st_item_bag',
+          'st_hundo_leg', 'st_shiny', 'st_shiny_leg', 'st_coin', 'st_poke_bag', 'st_item_bag',
           'st_rarecandy', 'st_greenpass', 'st_masterball', 'st_old_poke',
           ...Array.from({ length: 11 }, (_, index) => `chk_sp_${index + 1}`),
           'chk_kyurem', 'sel_kyurem', 'chk_zamazenta', 'sel_dogs',
@@ -493,6 +2289,70 @@
         });
         document.getElementById('openaiApiKey').value = 'test-key';
 
+        test('clears only unchanged AI-owned hundo values when a new session begins', () => {
+          document.getElementById('g_hundos').value = '';
+          document.getElementById('st_hundo_leg').value = '';
+          const firstSession = beginSmartHundoScanSession();
+          equal(markSmartHundoAiValue('g_hundos', '舊 AI 百神', firstSession), true);
+          equal(markSmartHundoAiValue('st_hundo_leg', '3', firstSession), true);
+          equal(document.getElementById('g_hundos').value, '舊 AI 百神');
+          equal(document.getElementById('st_hundo_leg').value, '3');
+
+          const secondSession = beginSmartHundoScanSession();
+          equal(secondSession > firstSession, true, 'session IDs are monotonic');
+          equal(document.getElementById('g_hundos').value, '');
+          equal(document.getElementById('st_hundo_leg').value, '');
+          equal(isCurrentSmartHundoSession(secondSession), true);
+          equal(isCurrentSmartHundoSession(firstSession), false);
+        });
+
+        test('preserves manual hundo edits and keeps count and list ownership independent', () => {
+          document.getElementById('g_hundos').value = '';
+          document.getElementById('st_hundo_leg').value = '';
+          const session = beginSmartHundoScanSession();
+          markSmartHundoAiValue('g_hundos', 'AI 清單', session);
+          markSmartHundoAiValue('st_hundo_leg', '6', session);
+
+          document.getElementById('g_hundos').value = '未觸發 listener 的使用者值';
+          const nextSession = beginSmartHundoScanSession();
+          equal(document.getElementById('g_hundos').value, '未觸發 listener 的使用者值', 'a marker mismatch is never cleared');
+          equal(document.getElementById('st_hundo_leg').value, '', 'unchanged AI count is cleared independently');
+
+          markSmartHundoAiValue('g_hundos', '下一輪 AI 清單', nextSession);
+          document.getElementById('g_hundos').value = '使用者手動清單';
+          equal(handleSmartHundoManualEdit('g_hundos'), true);
+          beginSmartHundoScanSession();
+
+          equal(document.getElementById('g_hundos').value, '使用者手動清單');
+        });
+
+        test('rejects stale and unrelated smart-hundo ownership writes', () => {
+          document.getElementById('g_hundos').value = '目前清單';
+          document.getElementById('g_level').value = '47';
+          const staleSession = beginSmartHundoScanSession();
+          const currentSession = beginSmartHundoScanSession();
+
+          equal(markSmartHundoAiValue('g_hundos', '晚到的舊結果', staleSession), false);
+          equal(document.getElementById('g_hundos').value, '目前清單');
+          equal(markSmartHundoAiValue('g_level', '50', currentSession), false);
+          equal(handleSmartHundoManualEdit('g_level'), false);
+          equal(document.getElementById('g_level').value, '47', 'unrelated fields are never owned or changed');
+        });
+
+        test('rejects stale smart-hundo status and diagnostic writes', () => {
+          const staleSession = beginSmartHundoScanSession();
+          const currentSession = beginSmartHundoScanSession();
+          const currentDiagnostics = { scan_session_id: String(currentSession) };
+          const staleDiagnostics = { scan_session_id: String(staleSession) };
+          equal(publishSmartHundoDiagnostics(currentSession, currentDiagnostics), true);
+          equal(setSmartHundoStatus(currentSession, '目前 session 狀態'), true);
+          equal(publishSmartHundoDiagnostics(staleSession, staleDiagnostics), false);
+          equal(setSmartHundoStatus(staleSession, '晚到的舊狀態'), false);
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(window.lastSmartHundoScanResult, currentDiagnostics);
+          equal(document.getElementById('aiAutoStatus').textContent, '目前 session 狀態');
+        });
+
         const makeFile = (id) => ({
           id,
           type: 'image/png',
@@ -500,81 +2360,107 @@
         });
         const setScanFiles = (ids) => {
           const files = ids.map(makeFile);
-          files.forEach(file => resizedByOriginal.set(file.dataUrl, `data:image/jpeg;base64,RESIZED_${file.id}`));
+          files.forEach(file => {
+            resizedByOriginal.set(file.dataUrl, `data:image/jpeg;base64,RESIZED_${file.id}`);
+            countRegionByOriginal.set(file.dataUrl, `data:image/png;base64,HUNDO_COUNT_REGION_${file.id}`);
+          });
           Object.defineProperty(document.getElementById('imageInput'), 'files', {
             configurable: true,
             value: files
           });
           return files;
         };
-        const openAiResponse = (content, onJson) => ({
+        const openAiResponse = (content, onJson, finishReason = 'stop') => ({
           ok: true,
           json: async () => {
             onJson?.();
-            return { choices: [{ message: { content: JSON.stringify(content) } }] };
+            return { choices: [{ finish_reason: finishReason, message: { content: JSON.stringify(content) } }] };
           }
         });
         const classificationByImage = {
           PROFILE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
-          HUNDO: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
-          HUNDO_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢，幻，究極異獸＆4＊' },
-          HUNDO_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: ' 傳說的寶可夢, 幻, 究極異獸 & 4* ' },
-          RAW_OTHER_HUNDO: { image_type: 'OTHER', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
-          CONFLICT_HUNDO: { image_type: 'SHINY_CATEGORY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
-          RAW_HUNDO_FULL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '　傳說的寶可夢， 幻， 究極異獸 ＆ ４＊ ' },
-          RAW_OTHER_OLD: { image_type: 'OTHER', search_query: ' 年１６-２０ ' },
-          SHINY: { image_type: 'SHINY_CATEGORY_SCREEN', search_query: '' },
-          RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' }
+          RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' },
+          SHINY_LEGENDARY: { image_type: 'SHINY_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色' },
+          EXACT_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '　傳說的寶可夢， 幻， 究極異獸 ＆ ４＊ ' },
+          EXACT_B_RAW_OTHER: { image_type: 'OTHER', search_query: ' 傳說的寶可夢, 幻, 究極異獸 & 4* ' },
+          SIMILAR_HUNDO: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色&4*' },
+          COUNT_3_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          COUNT_3_B: { image_type: 'OTHER', search_query: '傳說的寶可夢，幻，究極異獸＆４＊' },
+          COUNT_9: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          TIE_3: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          TIE_9: { image_type: 'OTHER', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          COUNT_UNRESOLVED: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          STATE_REVIEW: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          INCOMPLETE: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          OVERLAP_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          OVERLAP_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          COUNT_FAIL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          CARD_FAIL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          PROFILE_DELAY: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          STALE_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          CURRENT_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          LATE_CLASSIFICATION_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          STALE_CLASSIFICATION_FAIL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          CURRENT_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          OLD_ORDINARY_ONLY: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          CURRENT_DELAYED_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          COVERAGE_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          REPEATED_INCOMPLETE_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          REPEATED_INCOMPLETE_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          MULTI_REVIEW: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          VALID_EMPTY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          INCOMPLETE_EMPTY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          UNRECOGNIZED_ONLY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          POLLUTED_NAME: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
         };
         const extractionForPrompt = (prompt) => {
           if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) return { level: '50', team: '紅隊', xp: '3500000' };
           if (prompt.includes('image_type = SHINY_CATEGORY_SCREEN')) return { shiny: '77' };
+          if (prompt.includes('image_type = SHINY_LEGENDARY_SCREEN')) return { shiny_leg: '12' };
           if (prompt.includes('image_type = OLD_POKEMON_SCREEN')) return { old_poke: '42' };
           if (prompt.includes('image_type = RESOURCE_SCREEN')) {
             return { coin: '123', poke_bag: '7800', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' };
           }
           fail(`unexpected ordinary extraction prompt: ${prompt.slice(0, 120)}`);
         };
-        const smartResult = {
-          hundo_leg: '8',
-          hundo_leg_confidence: 0.93,
-          detected_card_count: 3,
-          cards: [
-            card({ official_name: '超夢' }),
-            card({ order: 2, row: 1, column: 2, official_name: '夢幻', shiny_state: 'yes' }),
-            card({ order: 3, row: 2, column: 1, official_name: '', recognition_status: 'uncertain', species_confidence: 0.2 })
-          ]
+        const v2Card = (overrides = {}) => {
+          const normalized = card(overrides);
+          delete normalized.purified_state;
+          delete normalized.purified_confidence;
+          delete normalized.shadow_state;
+          delete normalized.shadow_confidence;
+          return normalized;
         };
-        const smartResultByImage = {
-          HUNDO: smartResult,
-          HUNDO_A: {
-            hundo_leg: '8',
-            hundo_leg_confidence: 0.91,
-            detected_card_count: 1,
-            cards: [card({ official_name: ' 超夢 ' })]
-          },
-          HUNDO_B: {
-            hundo_leg: '9',
-            hundo_leg_confidence: 0.89,
-            detected_card_count: 1,
-            cards: [card({ official_name: '夢幻', shiny_state: 'uncertain' })]
-          },
-          RAW_HUNDO_FULL: {
-            hundo_leg: '8',
-            hundo_leg_confidence: 0.95,
-            detected_card_count: 1,
-            cards: [card({ official_name: '蒼響' })]
-          }
-        };
+        const completeCardResult = (cards, overrides = {}) => ({
+          detected_card_count: cards.length,
+          scan_complete: true,
+          bottom_edge_checked: true,
+          enumeration_confidence: 0.99,
+          cards,
+          ...overrides
+        });
+        let countResultByImage = new Map();
+        let cardResultByImage = new Map();
         let routedRequests = [];
         let requestStageEvents = [];
-        let failSmartRequests = false;
-        let failedSmartIdentities = new Set();
-        globalThis.alert = () => {};
+        let failedOperations = new Set();
+        let failedOperationErrorNames = new Map();
+        let failedClassificationIdentities = new Set();
+        let delayedClassificationIdentity = '';
+        let releaseDelayedClassification = null;
+        let notifyDelayedClassification = null;
+        let delayedClassificationReleased = false;
+        let delayedOrdinaryIdentity = '';
+        let releaseDelayedOrdinary = null;
+        let notifyDelayedOrdinary = null;
+        let delayedCardIdentity = '';
+        let releaseDelayedCard = null;
+        let notifyDelayedCard = null;
+        let delayedCardReleased = false;
+        let alertMessages = [];
+        globalThis.alert = (message) => alertMessages.push(String(message));
         globalThis.setTimeout = (callback) => { callback(); return 0; };
-        globalThis.fetch = async (_url, options = {}) => {
-          const payload = JSON.parse(options.body);
-          const schemaName = payload.response_format.json_schema.name;
+        installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
           const prompt = payload.messages[0].content[0].text;
           const imageUrl = payload.messages[0].content[1].image_url.url;
           const detail = payload.messages[0].content[1].image_url.detail;
@@ -582,198 +2468,772 @@
           requestStageEvents.push({ event: 'start', schemaName });
           if (schemaName === 'pokemon_go_image_classifier') {
             const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
+            if (identity === delayedClassificationIdentity && !delayedClassificationReleased) {
+              await new Promise(resolve => {
+                releaseDelayedClassification = () => {
+                  delayedClassificationReleased = true;
+                  resolve();
+                };
+                notifyDelayedClassification?.();
+              });
+            }
+            if (failedClassificationIdentities.has(identity)) {
+              const error = new Error('STALE_CLASSIFICATION_SECRET');
+              error.httpStatus = 500;
+              throw error;
+            }
             return openAiResponse(classificationByImage[identity], () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
-          if (schemaName === 'pokemon_go_hundo_smart_extractor') {
+          if (schemaName === 'pokemon_go_hundo_count_extractor') {
+            const identity = imageUrl.match(/HUNDO_COUNT_REGION_(.+)$/)?.[1];
+            if (failedOperations.has(`count:${identity}`)) {
+              const error = new Error('COUNT_FAIL_SECRET test-key data:image/png;base64,COUNT_RESPONSE_BODY');
+              error.name = failedOperationErrorNames.get(`count:${identity}`) || 'Error';
+              error.httpStatus = 503;
+              throw error;
+            }
+            return openAiResponse(
+              countResultByImage.get(identity) || validCount('(3)', '3'),
+              () => requestStageEvents.push({ event: 'finish', schemaName })
+            );
+          }
+          if (schemaName === 'pokemon_go_hundo_smart_extractor_v2') {
             const identity = imageUrl.match(/ORIGINAL_(.+)$/)?.[1];
-            if (failSmartRequests || failedSmartIdentities.has(identity)) throw new Error('mock smart network failure');
-            return openAiResponse(smartResultByImage[identity], () => requestStageEvents.push({ event: 'finish', schemaName }));
+            if (identity === delayedCardIdentity && !delayedCardReleased) {
+              await new Promise(resolve => {
+                releaseDelayedCard = () => {
+                  delayedCardReleased = true;
+                  resolve();
+                };
+                notifyDelayedCard?.();
+              });
+            }
+            if (failedOperations.has(`cards:${identity}`)) {
+              const error = new Error('CARD_FAIL_SECRET test-key data:image/png;base64,CARD_RESPONSE_BODY');
+              error.name = failedOperationErrorNames.get(`cards:${identity}`) || 'Error';
+              error.httpStatus = 502;
+              throw error;
+            }
+            const configured = cardResultByImage.get(identity) || completeCardResult([]);
+            const content = Array.isArray(configured)
+              ? configured[prompt.includes('【結構重試】') ? 1 : 0]
+              : configured;
+            return openAiResponse(content, () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           if (schemaName === 'pokemon_go_forced_field_extractor') {
+            const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
+            if (identity === delayedOrdinaryIdentity) {
+              await new Promise(resolve => {
+                releaseDelayedOrdinary = resolve;
+                notifyDelayedOrdinary?.();
+              });
+            }
             return openAiResponse(extractionForPrompt(prompt), () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           fail(`unexpected schema ${schemaName}`);
+        });
+        const resetScanScenario = () => {
+          fileReadCounts.clear();
+          routedRequests = [];
+          requestStageEvents = [];
+          countResultByImage = new Map();
+          cardResultByImage = new Map();
+          failedOperations = new Set();
+          failedOperationErrorNames = new Map();
+          failedClassificationIdentities = new Set();
+          delayedClassificationIdentity = '';
+          releaseDelayedClassification = null;
+          notifyDelayedClassification = null;
+          delayedClassificationReleased = false;
+          delayedOrdinaryIdentity = '';
+          releaseDelayedOrdinary = null;
+          notifyDelayedOrdinary = null;
+          delayedCardIdentity = '';
+          releaseDelayedCard = null;
+          notifyDelayedCard = null;
+          delayedCardReleased = false;
+          alertMessages = [];
         };
 
-        await asyncTest('routes arbitrary-order jobs after classification and merges smart cards safely', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = false;
-          failedSmartIdentities = new Set();
-          setScanFiles(['PROFILE', 'HUNDO', 'SHINY', 'RESOURCE']);
-          document.getElementById('g_hundos').value = '使用者舊值';
+        await asyncTest('canonically routes exactly two arbitrary-order smart jobs through independent V2 count and card operations', async () => {
+          resetScanScenario();
+          setScanFiles(['PROFILE', 'EXACT_A', 'RESOURCE', 'EXACT_B_RAW_OTHER', 'SHINY_LEGENDARY']);
+          countResultByImage.set('EXACT_A', validCount('(3)', '3'));
+          countResultByImage.set('EXACT_B_RAW_OTHER', validCount('（3）', '3'));
+          cardResultByImage.set('EXACT_A', completeCardResult([
+            v2Card({ order: 1, row: 1, column: 1, cp: '3123', visible_label: '鳳王100', official_name: '鳳王' }),
+            v2Card({ order: 2, row: 1, column: 2, cp: '2871', visible_label: '哲爾尼亞斯', official_name: '哲爾尼亞斯' })
+          ]));
+          cardResultByImage.set('EXACT_B_RAW_OTHER', completeCardResult([
+            v2Card({
+              order: 1,
+              row: 1,
+              column: 1,
+              cp: '4268',
+              visible_label: '淨化雷吉奇卡斯',
+              official_name: '雷吉奇卡斯',
+              rocket_state: 'purified',
+              rocket_confidence: 0.98,
+              rocket_evidence: cyanPurificationEvidence()
+            })
+          ]));
 
           await autoScan();
 
           const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
           const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
-          equal(classifierRequests.length, 4, 'classifies every stable job first');
-          equal(ordinaryRequests.length, 3, 'only normal jobs use ordinary extraction');
-          equal(smartRequests.length, 1, 'one logical smart job request');
-          equal(smartRequests[0].imageUrl, 'data:image/png;base64,ORIGINAL_HUNDO', 'smart extraction uses its original');
-          equal(smartRequests[0].detail, 'high', 'smart extraction requests high detail');
-          equal(ordinaryRequests.every(request => request.imageUrl.startsWith('data:image/jpeg;base64,RESIZED_')), true, 'normal jobs use resized data');
-          equal(ordinaryRequests.some(request => request.imageUrl.includes('HUNDO')), false, 'smart image cannot enter ordinary extraction or validation');
-          equal(ordinaryRequests.some(request => request.prompt.includes('allow_pokemon_list')), false, 'ordinary prompts do not expose the smart routing flag');
-          equal(fileReadCounts.get('PROFILE'), 1, 'profile is read only for resizing');
-          equal(fileReadCounts.get('HUNDO'), 2, 'hundo is read once for resizing and once as original');
-          equal(fileReadCounts.get('SHINY'), 1, 'shiny is read only for resizing');
-          equal(fileReadCounts.get('RESOURCE'), 1, 'resource is read only for resizing');
-          equal(document.getElementById('g_level').value, '50');
-          equal(document.getElementById('g_team').value, '紅隊');
-          equal(document.getElementById('g_xp').value, '350');
-          equal(document.getElementById('st_shiny').value, '77');
-          equal(document.getElementById('st_coin').value, '123');
-          equal(document.getElementById('g_hundos').value, '超夢,色違夢幻', 'pokemon list comes only from normalized smart cards');
-          equal(document.getElementById('st_hundo_leg').value, '8');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [1]);
-          deepEqual(window.lastSmartHundoScanResult.failedIndexes, []);
-          equal(window.lastSmartHundoScanResult.detectedCardCount, 3);
-          equal(window.lastSmartHundoScanResult.recognizedCount, 2);
-          equal(window.lastSmartHundoScanResult.uncertainCount, 1);
-          equal(window.lastSmartHundoScanResult.cards[2].recognition_status, 'uncertain');
-          equal(window.lastSmartHundoScanResult.screenshots[0].index, 1, 'audit keeps cards associated with their screenshot');
-          equal(window.lastSmartHundoScanResult.screenshots[0].cards.length, 3);
-          equal(window.lastSmartHundoScanResult.hundoLegConflict, false);
-          equal(document.getElementById('aiAutoStatus').textContent.includes('1'), true, 'status shows manual-review count');
-          equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
-        });
-
-        await asyncTest('requires both the raw hundo type and normalized exact query for smart routing', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = false;
-          failedSmartIdentities = new Set();
-          setScanFiles(['RAW_OTHER_HUNDO', 'CONFLICT_HUNDO', 'RAW_HUNDO_FULL', 'RAW_OTHER_OLD']);
-          document.getElementById('g_hundos').value = '舊百神';
-
-          await autoScan();
-
-          const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
-          const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
-          equal(classifierRequests.length, 4, 'all raw classifier results are exercised end to end');
-          equal(ordinaryRequests.length, 1, 'ordinary non-hundo query inference remains enabled');
-          equal(ordinaryRequests[0].prompt.includes('image_type = OLD_POKEMON_SCREEN'), true);
-          equal(ordinaryRequests[0].imageUrl, 'data:image/jpeg;base64,RESIZED_RAW_OTHER_OLD');
-          deepEqual(smartRequests.map(request => request.imageUrl), [
-            'data:image/png;base64,ORIGINAL_RAW_HUNDO_FULL'
-          ], 'query-only inference never creates a smart request');
-          equal(fileReadCounts.get('RAW_OTHER_HUNDO'), 1, 'raw OTHER never reads the original image');
-          equal(fileReadCounts.get('CONFLICT_HUNDO'), 1, 'conflicting non-hundo type never reads the original image');
-          equal(fileReadCounts.get('RAW_HUNDO_FULL'), 2, 'raw hundo with normalized exact query uses its original image');
-          equal(fileReadCounts.get('RAW_OTHER_OLD'), 1, 'ordinary inferred search type remains on the resized path');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [2]);
-          equal(document.getElementById('g_hundos').value, '蒼響');
-        });
-
-        await asyncTest('normalizes full-width routing and merges multiple smart screenshots conservatively', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = false;
-          failedSmartIdentities = new Set();
-          setScanFiles(['HUNDO_A', 'PROFILE', 'HUNDO_B']);
-          document.getElementById('g_hundos').value = '舊百神';
-          document.getElementById('st_hundo_leg').value = '';
-          document.getElementById('g_level').value = '';
-
-          await autoScan();
-
-          const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
-          const extractionRequests = routedRequests.filter(request => request.schemaName !== 'pokemon_go_image_classifier');
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
+          const countRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_count_extractor');
+          const cardRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2');
           const firstExtractionStart = requestStageEvents.findIndex(event => event.event === 'start' && event.schemaName !== 'pokemon_go_image_classifier');
           const lastClassificationFinish = requestStageEvents.reduce((lastIndex, event, index) => (
             event.event === 'finish' && event.schemaName === 'pokemon_go_image_classifier' ? index : lastIndex
           ), -1);
-          equal(classifierRequests.length, 3);
-          equal(lastClassificationFinish < firstExtractionStart, true, 'all classification responses finish before extraction starts');
-          equal(extractionRequests.length, 3, 'one ordinary and two smart extractions run');
-          deepEqual(smartRequests.map(request => request.imageUrl), [
-            'data:image/png;base64,ORIGINAL_HUNDO_A',
-            'data:image/png;base64,ORIGINAL_HUNDO_B'
-          ], 'each smart job reads its own exact original');
-          equal(smartRequests.every(request => request.detail === 'high'), true);
-          equal(fileReadCounts.get('HUNDO_A'), 2);
-          equal(fileReadCounts.get('HUNDO_B'), 2);
-          equal(document.getElementById('st_hundo_leg').value, '8', 'first valid hundo count is kept instead of summed');
-          equal(document.getElementById('st_hundo_leg').value === '17', false, 'conflicting hundo counts are never summed');
-          equal(document.getElementById('g_hundos').value, '超夢,夢幻');
+          equal(classifierRequests.length, 5, 'classifies every stable job first');
+          equal(lastClassificationFinish < firstExtractionStart, true, 'all classifications finish before any extraction starts');
+          equal(ordinaryRequests.length, 3, 'only non-smart jobs use ordinary extraction');
+          equal(countRequests.length, 2, 'each exact job gets one logical count operation');
+          equal(cardRequests.length, 2, 'each exact job gets one logical full-image card operation');
+          deepEqual(cardRequests.map(request => request.imageUrl), [
+            'data:image/png;base64,ORIGINAL_EXACT_A',
+            'data:image/png;base64,ORIGINAL_EXACT_B_RAW_OTHER'
+          ]);
+          deepEqual(countRequests.map(request => request.imageUrl), [
+            'data:image/png;base64,HUNDO_COUNT_REGION_EXACT_A',
+            'data:image/png;base64,HUNDO_COUNT_REGION_EXACT_B_RAW_OTHER'
+          ]);
+          equal([...countRequests, ...cardRequests].every(request => request.detail === 'high'), true);
+          equal(ordinaryRequests.every(request => request.imageUrl.startsWith('data:image/jpeg;base64,RESIZED_')), true, 'normal jobs use resized data');
+          equal(ordinaryRequests.some(request => /EXACT_A|EXACT_B_RAW_OTHER/.test(request.imageUrl)), false, 'smart images never enter ordinary extraction');
+          equal(ordinaryRequests.some(request => request.prompt.includes('allow_pokemon_list')), false, 'ordinary prompts do not expose the smart routing flag');
+          equal(fileReadCounts.get('PROFILE'), 1, 'profile is read only for resizing');
+          equal(fileReadCounts.get('EXACT_A'), 2, 'exact A original is read exactly once after classification preparation');
+          equal(fileReadCounts.get('EXACT_B_RAW_OTHER'), 2, 'raw OTHER exact original is read exactly once after classification preparation');
+          equal(fileReadCounts.get('RESOURCE'), 1, 'resource is read only for resizing');
+          equal(fileReadCounts.get('SHINY_LEGENDARY'), 1, 'similar shiny query remains ordinary');
           equal(document.getElementById('g_level').value, '50');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('百神數有衝突'), true, 'status reports hundo conflict');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('1 張卡片需人工確認'), true, 'status also reports manual-review count');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [0, 2]);
-          deepEqual(window.lastSmartHundoScanResult.screenshots.map(screenshot => screenshot.index), [0, 2]);
-          equal(window.lastSmartHundoScanResult.screenshots[0].cards[0].official_name, '超夢');
-          equal(window.lastSmartHundoScanResult.screenshots[1].cards[0].official_name, '夢幻');
-          equal(window.lastSmartHundoScanResult.hundoLeg, '8');
-          equal(window.lastSmartHundoScanResult.hundoLegConflict, true);
-          equal(window.lastSmartHundoScanResult.uncertainCount, 1);
+          equal(document.getElementById('g_team').value, '紅隊');
+          equal(document.getElementById('g_xp').value, '350');
+          equal(document.getElementById('st_coin').value, '123');
+          equal(document.getElementById('st_shiny_leg').value, '12');
+          equal(document.getElementById('st_hundo_leg').value, '3', 'count comes only from dedicated count evidence');
+          equal(document.getElementById('g_hundos').value, '鳳王,哲爾尼亞斯,雷吉奇卡斯');
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識3張卡片');
+          equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult, 'both diagnostic aliases share one safe object');
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots.map(screenshot => screenshot.index), [1, 3]);
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots.map(screenshot => screenshot.classification.image_type), [
+            'HUNDO_LEGENDARY_SCREEN',
+            'HUNDO_LEGENDARY_SCREEN'
+          ], 'raw OTHER exact query is canonicalized before partition');
+          equal(window.lastSmartHundoDiagnostics.screenshots[1].cards[0].effective_states.rocket, 'purified');
+          equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
+          equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
+          equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
         });
 
-        await asyncTest('keeps successful smart audit and edited list when another smart job fails', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = false;
-          failedSmartIdentities = new Set(['HUNDO_B']);
-          setScanFiles(['HUNDO_A', 'PROFILE', 'HUNDO_B']);
-          document.getElementById('g_hundos').value = '手動保留百神';
-          document.getElementById('g_level').value = '';
+        await asyncTest('sanitizes model-polluted species names before production list and diagnostics', async () => {
+          resetScanScenario();
+          setScanFiles(['POLLUTED_NAME']);
+          countResultByImage.set('POLLUTED_NAME', validCount('(1)', '1'));
+          cardResultByImage.set('POLLUTED_NAME', completeCardResult([
+            v2Card({
+              official_name: '色違：GLOBAL_BACKGROUND／固拉多',
+              visible_label: '固拉多100',
+              shiny_state: 'yes',
+              shiny_confidence: 0.98,
+              shiny_evidence: cyanPurificationEvidence(),
+              background_type: 'none'
+            })
+          ]));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '固拉多');
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[0].official_name, '固拉多');
+          equal(window.lastSmartHundoDiagnostics.pokemon_list, '固拉多');
+        });
+
+        await asyncTest('keeps a newer completed smart run authoritative when an older classification resumes late', async () => {
+          resetScanScenario();
+          delayedClassificationIdentity = 'LATE_CLASSIFICATION_A';
+          setScanFiles(['LATE_CLASSIFICATION_A']);
+          countResultByImage.set('LATE_CLASSIFICATION_A', validCount('(8)', '8'));
+          cardResultByImage.set('LATE_CLASSIFICATION_A', completeCardResult([
+            v2Card({ cp: '8000', visible_label: '晚到舊批次', official_name: '夢幻' })
+          ]));
+          const lateClassificationReached = new Promise(resolve => { notifyDelayedClassification = resolve; });
+          const lateScan = autoScan();
+          await lateClassificationReached;
+
+          setScanFiles(['CURRENT_B']);
+          countResultByImage.set('CURRENT_B', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_B', completeCardResult([
+            v2Card({ cp: '3000', visible_label: '目前批次', official_name: '鳳王' })
+          ]));
+          await autoScan();
+          const currentDiagnostics = window.lastSmartHundoDiagnostics;
+          const currentStatus = document.getElementById('aiAutoStatus').textContent;
+
+          releaseDelayedClassification();
+          await lateScan;
+
+          equal(document.getElementById('st_hundo_leg').value, '3');
+          equal(document.getElementById('g_hundos').value, '鳳王');
+          equal(document.getElementById('aiAutoStatus').textContent, currentStatus);
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(window.lastSmartHundoScanResult, currentDiagnostics);
+          equal(document.getElementById('aiAutoBtn').disabled, false);
+        });
+
+        await asyncTest('suppresses stale catch alerts logs and status after a newer smart run completes', async () => {
+          resetScanScenario();
+          delayedClassificationIdentity = 'STALE_CLASSIFICATION_FAIL';
+          failedClassificationIdentities.add('STALE_CLASSIFICATION_FAIL');
+          setScanFiles(['STALE_CLASSIFICATION_FAIL']);
+          const staleFailureReached = new Promise(resolve => { notifyDelayedClassification = resolve; });
+          const staleFailureScan = autoScan();
+          await staleFailureReached;
+
+          setScanFiles(['CURRENT_B']);
+          countResultByImage.set('CURRENT_B', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_B', completeCardResult([
+            v2Card({ cp: '3000', visible_label: '目前批次', official_name: '鳳王' })
+          ]));
+          await autoScan();
+          const currentDiagnostics = window.lastSmartHundoDiagnostics;
+          const currentStatus = document.getElementById('aiAutoStatus').textContent;
+          const alertCount = alertMessages.length;
+          const logCount = loggedValues.length;
+
+          releaseDelayedClassification();
+          await staleFailureScan;
+
+          equal(alertMessages.length, alertCount, 'stale catch does not alert');
+          equal(loggedValues.length, logCount, 'stale catch does not log');
+          equal(document.getElementById('aiAutoStatus').textContent, currentStatus);
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(document.getElementById('aiAutoBtn').disabled, false);
+        });
+
+        await asyncTest('suppresses stale smart operation warnings after delayed count and card failures settle', async () => {
+          resetScanScenario();
+          delayedCardIdentity = 'STALE_SMART';
+          failedOperations.add('count:STALE_SMART');
+          failedOperations.add('cards:STALE_SMART');
+          setScanFiles(['STALE_SMART']);
+          const staleCardReached = new Promise(resolve => { notifyDelayedCard = resolve; });
+          const staleScan = autoScan();
+          await staleCardReached;
+
+          setScanFiles(['CURRENT_B']);
+          countResultByImage.set('CURRENT_B', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_B', completeCardResult([
+            v2Card({ cp: '3000', visible_label: '目前批次', official_name: '鳳王' })
+          ]));
+          await autoScan();
+          const logCount = loggedValues.length;
+          const currentDiagnostics = window.lastSmartHundoDiagnostics;
+          const currentStatus = document.getElementById('aiAutoStatus').textContent;
+
+          releaseDelayedCard();
+          await staleScan;
+
+          equal(loggedValues.length, logCount, 'stale operation failures do not emit warnings');
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(document.getElementById('aiAutoStatus').textContent, currentStatus);
+        });
+
+        await asyncTest('blocks a stale ordinary-only completion from mutating or unlocking a newer pending smart run', async () => {
+          resetScanScenario();
+          document.getElementById('g_level').value = '40';
+          delayedOrdinaryIdentity = 'OLD_ORDINARY_ONLY';
+          setScanFiles(['OLD_ORDINARY_ONLY']);
+          const oldOrdinaryReached = new Promise(resolve => { notifyDelayedOrdinary = resolve; });
+          const oldOrdinaryScan = autoScan();
+          await oldOrdinaryReached;
+
+          delayedCardIdentity = 'CURRENT_DELAYED_SMART';
+          setScanFiles(['CURRENT_DELAYED_SMART']);
+          countResultByImage.set('CURRENT_DELAYED_SMART', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_DELAYED_SMART', completeCardResult([
+            v2Card({ cp: '3001', visible_label: '目前待完成', official_name: '哲爾尼亞斯' })
+          ]));
+          const currentCardReached = new Promise(resolve => { notifyDelayedCard = resolve; });
+          const currentSmartScan = autoScan();
+          await currentCardReached;
+
+          releaseDelayedOrdinary();
+          await oldOrdinaryScan;
+
+          equal(document.getElementById('g_level').value, '40', 'stale ordinary form output is ignored');
+          equal(document.getElementById('aiAutoStatus').textContent === '合併完成', false, 'stale ordinary success status is ignored');
+          equal(document.getElementById('aiAutoBtn').disabled, true, 'stale finally cannot unlock the active run');
+
+          releaseDelayedCard();
+          await currentSmartScan;
+          equal(document.getElementById('g_level').value, '40');
+          equal(document.getElementById('g_hundos').value, '哲爾尼亞斯');
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識1張卡片');
+          equal(document.getElementById('aiAutoBtn').disabled, false);
+        });
+
+        await asyncTest('excludes a resolved exact smart count from final missing-field alerts', async () => {
+          resetScanScenario();
+          setScanFiles(['COVERAGE_SMART']);
+          countResultByImage.set('COVERAGE_SMART', validCount('(3)', '3'));
+          cardResultByImage.set('COVERAGE_SMART', completeCardResult([
+            v2Card({ cp: '3333', visible_label: '完整百神', official_name: '鳳王' })
+          ]));
+
+          await autoScan();
+
+          const alertText = alertMessages.join('\n');
+          equal(alertText.includes('百神數'), false, 'validated smart count is covered');
+          equal(routedRequests.some(request => (
+            request.schemaName === 'pokemon_go_forced_field_extractor'
+            && request.imageUrl.includes('COVERAGE_SMART')
+          )), false, 'coverage does not route smart input into ordinary validation');
+        });
+
+        await asyncTest('merges three independent counts 3, 3, and 9 by votes while retaining conflict diagnostics', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_9', 'COUNT_3_A', 'COUNT_3_B']);
+          countResultByImage.set('COUNT_9', { ...validCount('(9)', '9'), confidence: 0.99 });
+          countResultByImage.set('COUNT_3_A', { ...validCount('(3)', '3'), confidence: 0.90 });
+          countResultByImage.set('COUNT_3_B', { ...validCount('(3)', '3'), confidence: 0.88 });
+          ['COUNT_9', 'COUNT_3_A', 'COUNT_3_B'].forEach((identity, index) => {
+            cardResultByImage.set(identity, completeCardResult([
+              v2Card({ cp: String(4000 + index), visible_label: identity, official_name: ['夢幻', '超夢', '鳳王'][index] })
+            ]));
+          });
+
+          await autoScan();
+
+          equal(document.getElementById('st_hundo_leg').value, '3');
+          equal(window.lastSmartHundoDiagnostics.count_conflict, true);
+          deepEqual(window.lastSmartHundoDiagnostics.count_candidates, [
+            { value: '3', votes: 2, confidence: 0.9 },
+            { value: '9', votes: 1, confidence: 0.99 }
+          ]);
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.hundo_count_conflict), true);
+        });
+
+        await asyncTest('leaves an exact-confidence count tie unresolved without order or card fallback', async () => {
+          resetScanScenario();
+          setScanFiles(['TIE_9', 'TIE_3']);
+          countResultByImage.set('TIE_9', { ...validCount('(9)', '9'), confidence: 0.95 });
+          countResultByImage.set('TIE_3', { ...validCount('(3)', '3'), confidence: 0.95 });
+          cardResultByImage.set('TIE_9', completeCardResult([
+            v2Card({ cp: '9001', visible_label: '九一', official_name: '夢幻' })
+          ]));
+          cardResultByImage.set('TIE_3', completeCardResult([
+            v2Card({ cp: '3001', visible_label: '三一', official_name: '超夢' }),
+            v2Card({ order: 2, column: 2, cp: '3002', visible_label: '三二', official_name: '鳳王' })
+          ]));
           document.getElementById('st_hundo_leg').value = '';
 
           await autoScan();
 
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
-          equal(smartRequests.filter(request => request.imageUrl.endsWith('ORIGINAL_HUNDO_A')).length, 1, 'successful smart job has one logical request');
-          equal(smartRequests.filter(request => request.imageUrl.endsWith('ORIGINAL_HUNDO_B')).length, 3, 'failed smart job exhausts bounded wrapper retries');
-          equal(document.getElementById('g_level').value, '50', 'ordinary fields survive partial smart failure');
-          equal(document.getElementById('st_hundo_leg').value, '8', 'successful smart hundo count remains usable');
-          equal(document.getElementById('g_hundos').value, '手動保留百神', 'any smart failure preserves edited list');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [0, 2]);
-          deepEqual(window.lastSmartHundoScanResult.failedIndexes, [2]);
-          deepEqual(window.lastSmartHundoScanResult.screenshots.map(screenshot => screenshot.index), [0]);
-          equal(window.lastSmartHundoScanResult.cards[0].official_name, '超夢');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('智慧百神辨識失敗'), true);
-          const serializedAudit = JSON.stringify(window.lastSmartHundoScanResult);
-          ['test-key', 'Authorization', 'ORIGINAL_', 'RESIZED_', 'data:image/', 'classificationDataUrl', 'file'].forEach(secret => {
+          equal(document.getElementById('st_hundo_leg').value, '');
+          equal(window.lastSmartHundoDiagnostics.count_conflict, true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('hundo_count_conflict'), true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('hundo_count_uncertain'), true);
+          equal(document.getElementById('g_hundos').value, '夢幻,超夢,鳳王', 'cards never supply a count fallback');
+        });
+
+        await asyncTest('renders the exact unresolved-count status while applying a validated three-card list', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_UNRESOLVED']);
+          countResultByImage.set('COUNT_UNRESOLVED', {
+            ...validCount('9/12', '9'),
+            active_tab: 'egg',
+            count_source: 'other',
+            relative_position: 'other',
+            has_parentheses: false,
+            has_slash: true
+          });
+          cardResultByImage.set('COUNT_UNRESOLVED', completeCardResult([
+            v2Card({ cp: '1', visible_label: '一', official_name: '鳳王' }),
+            v2Card({ order: 2, column: 2, cp: '2', visible_label: '二', official_name: '哲爾尼亞斯' }),
+            v2Card({ order: 3, row: 2, cp: '3', visible_label: '三', official_name: '雷吉奇卡斯' })
+          ]));
+          document.getElementById('st_hundo_leg').value = '';
+
+          await autoScan();
+
+          equal(document.getElementById('st_hundo_leg').value, '');
+          equal(document.getElementById('g_hundos').value, '鳳王,哲爾尼亞斯,雷吉奇卡斯');
+          equal(document.getElementById('aiAutoStatus').textContent, '百神清單辨識完成：辨識3張卡片；百神總數需人工確認');
+        });
+
+        await asyncTest('renders exact card-state review detail from centralized reason messages', async () => {
+          resetScanScenario();
+          setScanFiles(['STATE_REVIEW']);
+          countResultByImage.set('STATE_REVIEW', validCount('(3)', '3'));
+          cardResultByImage.set('STATE_REVIEW', completeCardResult([
+            v2Card({ cp: '1', visible_label: '一', official_name: '鳳王' }),
+            v2Card({
+              order: 2,
+              column: 2,
+              cp: '2',
+              visible_label: '二',
+              official_name: '哲爾尼亞斯',
+              background_type: 'uncertain',
+              background_confidence: 0.99
+            }),
+            v2Card({ order: 3, row: 2, cp: '3', visible_label: '三', official_name: '雷吉奇卡斯' })
+          ]));
+
+          await autoScan();
+
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，偵測3張卡片，辨識3張；1張背卡狀態需人工確認');
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('background_uncertain'), true);
+        });
+
+        await asyncTest('shows deduplicated reviewed-card total alongside multiple per-reason buckets', async () => {
+          resetScanScenario();
+          setScanFiles(['MULTI_REVIEW']);
+          countResultByImage.set('MULTI_REVIEW', validCount('(1)', '1'));
+          cardResultByImage.set('MULTI_REVIEW', completeCardResult([
+            v2Card({
+              cp: '1001',
+              visible_label: '雙重確認',
+              official_name: '超夢',
+              shiny_state: 'uncertain',
+              shiny_confidence: 0.99,
+              background_type: 'uncertain',
+              background_confidence: 0.99
+            })
+          ]));
+
+          await autoScan();
+
+          equal(
+            document.getElementById('aiAutoStatus').textContent,
+            '百神掃描完成：總數1，偵測1張卡片，辨識1張；共1張卡片需人工確認；1張色違狀態需人工確認；1張背卡狀態需人工確認'
+          );
+          deepEqual(window.lastSmartHundoDiagnostics.manual_review_reasons, [
+            'shiny_uncertain',
+            'background_uncertain'
+          ]);
+        });
+
+        await asyncTest('retains repeated screenshot review occurrences in diagnostics and visible status', async () => {
+          resetScanScenario();
+          setScanFiles(['REPEATED_INCOMPLETE_A', 'REPEATED_INCOMPLETE_B']);
+          ['REPEATED_INCOMPLETE_A', 'REPEATED_INCOMPLETE_B'].forEach((identity, index) => {
+            countResultByImage.set(identity, validCount('(2)', '2'));
+            const result = completeCardResult([
+              v2Card({
+                cp: String(2000 + index),
+                visible_label: identity,
+                official_name: index === 0 ? '鳳王' : '超夢'
+              })
+            ], { scan_complete: false });
+            cardResultByImage.set(identity, [result, result]);
+          });
+
+          await autoScan();
+
+          equal(
+            document.getElementById('aiAutoStatus').textContent,
+            '百神掃描完成：總數2，辨識2張卡片；2次卡片列舉不完整，需人工確認'
+          );
+          deepEqual(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.filter(
+              reason => reason === 'incomplete_card_enumeration'
+            ),
+            ['incomplete_card_enumeration', 'incomplete_card_enumeration']
+          );
+        });
+
+        await asyncTest('uses one structural retry replacement and reports incomplete enumeration', async () => {
+          resetScanScenario();
+          setScanFiles(['INCOMPLETE']);
+          countResultByImage.set('INCOMPLETE', validCount('(3)', '3'));
+          cardResultByImage.set('INCOMPLETE', [
+            completeCardResult([
+              v2Card({ cp: '1', visible_label: 'first', official_name: '第一次卡片' })
+            ], { detected_card_count: 2, scan_complete: false }),
+            completeCardResult([
+              v2Card({ cp: '2', visible_label: 'second', official_name: '第二次卡片' })
+            ], { detected_card_count: 2, bottom_edge_checked: false })
+          ]);
+
+          await autoScan();
+
+          const cardRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2');
+          equal(cardRequests.length, 2, 'structural retry is attempted at most once');
+          equal(document.getElementById('g_hundos').value, '第二次卡片', 'attempt two fully replaces attempt one');
+          equal(document.getElementById('g_hundos').value.includes('第一次卡片'), false);
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.incomplete_card_enumeration), true);
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].structural_retry_used, true);
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots[0].structural_retry_reason, [
+            'detected_card_count_mismatch',
+            'scan_incomplete'
+          ]);
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[0].official_name, '第二次卡片');
+        });
+
+        await asyncTest('keeps a one-card overlap and reports overlap uncertainty', async () => {
+          resetScanScenario();
+          setScanFiles(['OVERLAP_A', 'OVERLAP_B']);
+          const overlapCard = v2Card({ cp: '4444', visible_label: '同卡', official_name: '超夢' });
+          countResultByImage.set('OVERLAP_A', validCount('(2)', '2'));
+          countResultByImage.set('OVERLAP_B', validCount('(2)', '2'));
+          cardResultByImage.set('OVERLAP_A', completeCardResult([overlapCard]));
+          cardResultByImage.set('OVERLAP_B', completeCardResult([{ ...overlapCard }]));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '超夢*2');
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.screenshot_overlap_uncertain), true);
+          equal(window.lastSmartHundoDiagnostics.overlap_decisions[0].ambiguous, true);
+        });
+
+        await asyncTest('keeps count and list replacements independent across request failures and redacts errors', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_FAIL']);
+          failedOperations.add('count:COUNT_FAIL');
+          cardResultByImage.set('COUNT_FAIL', completeCardResult([
+            v2Card({ cp: '10', visible_label: '成功清單', official_name: '鳳王' })
+          ]));
+          document.getElementById('st_hundo_leg').value = '77';
+          document.getElementById('st_hundo_leg').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('st_hundo_leg').value, '77', 'failed count never overwrites a manual count');
+          equal(document.getElementById('g_hundos').value, '鳳王', 'validated cards replace independently');
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_request_failed), true);
+
+          resetScanScenario();
+          setScanFiles(['CARD_FAIL']);
+          failedOperations.add('cards:CARD_FAIL');
+          countResultByImage.set('CARD_FAIL', validCount('(3)', '3'));
+          document.getElementById('g_hundos').value = '手動保留清單';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+          failedOperationErrorNames.set('cards:CARD_FAIL', 'SECRET_ERROR_NAME_test-key-Bearer');
+          const errorLogStart = loggedValues.length;
+
+          await autoScan();
+
+          equal(document.getElementById('st_hundo_leg').value, '3', 'validated count replaces independently');
+          equal(document.getElementById('g_hundos').value, '手動保留清單', 'failed card scan never promotes an old or partial AI list');
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_request_failed), true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'), true);
+          equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult);
+          const serializedFailureLogs = JSON.stringify(loggedValues.slice(errorLogStart));
+          equal(serializedFailureLogs.includes('SECRET_ERROR_NAME'), false, 'secret-shaped error names never reach logs');
+          const cardFailureSummary = loggedValues
+            .slice(errorLogStart)
+            .flat(2)
+            .find(value => value && typeof value === 'object' && value.stage === 'hundo_cards');
+          equal(cardFailureSummary.name, 'Error', 'unknown error names fall back to Error');
+          const serializedAudit = JSON.stringify(window.lastSmartHundoDiagnostics);
+          ['test-key', 'Authorization', 'ORIGINAL_', 'RESIZED_', 'data:image/', 'classificationDataUrl', 'file', 'CARD_FAIL_SECRET', 'COUNT_FAIL_SECRET'].forEach(secret => {
             equal(serializedAudit.includes(secret), false, `audit excludes ${secret}`);
           });
         });
 
-        await asyncTest('preserves ordinary output and edited hundo list when smart retries fail', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = true;
-          failedSmartIdentities = new Set();
-          setScanFiles(['PROFILE', 'HUNDO']);
-          document.getElementById('g_hundos').value = '手動編輯百神';
-          document.getElementById('g_level').value = '';
-          document.getElementById('aiAutoStatus').textContent = '';
+        await asyncTest('preserves a manual hundo list when validated nonzero count contradicts a complete empty extraction', async () => {
+          resetScanScenario();
+          setScanFiles(['VALID_EMPTY']);
+          countResultByImage.set('VALID_EMPTY', validCount('(3)', '3'));
+          cardResultByImage.set('VALID_EMPTY', completeCardResult([]));
+          document.getElementById('g_hundos').value = '非零總數矛盾時保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
 
           await autoScan();
 
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
-          equal(smartRequests.length, 3, 'shared wrapper performs its bounded smart retries');
-          equal(document.getElementById('g_level').value, '50', 'completed ordinary fields remain applied');
-          equal(document.getElementById('g_hundos').value, '手動編輯百神', 'failed smart work preserves edited list');
-          equal(document.getElementById('aiAutoBtn').disabled, false, 'failure restores button');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('智慧百神辨識失敗'), true, 'failure status is explicit');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('合併完成'), false, 'failure status is not success');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [1]);
-          deepEqual(window.lastSmartHundoScanResult.failedIndexes, [1]);
-          equal(window.lastSmartHundoScanResult.cards.length, 0);
-          equal(window.lastSmartHundoScanResult.screenshots.length, 0);
+          equal(document.getElementById('g_hundos').value, '非零總數矛盾時保留');
+          equal(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.includes('incomplete_card_enumeration'),
+            true,
+            'contradictory empty extraction is not reported as a validated empty list'
+          );
+          equal(
+            document.getElementById('aiAutoStatus').textContent.includes(
+              HUNDO_REVIEW_REASON_MESSAGES.incomplete_card_enumeration
+            ),
+            true,
+            'visible status does not imply full success'
+          );
+        });
+
+        await asyncTest('does not clear a manual hundo list from a conflicted count resolved to zero', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_3_A', 'COUNT_3_B', 'COUNT_9']);
+          countResultByImage.set('COUNT_3_A', { ...validCount('(0)', '0'), confidence: 0.91 });
+          countResultByImage.set('COUNT_3_B', { ...validCount('(0)', '0'), confidence: 0.89 });
+          countResultByImage.set('COUNT_9', { ...validCount('(3)', '3'), confidence: 0.99 });
+          ['COUNT_3_A', 'COUNT_3_B', 'COUNT_9'].forEach(identity => {
+            cardResultByImage.set(identity, completeCardResult([]));
+          });
+          document.getElementById('g_hundos').value = '衝突零值須保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '衝突零值須保留');
+          equal(window.lastSmartHundoDiagnostics.count_conflict, true);
+          equal(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.includes('incomplete_card_enumeration'),
+            true
+          );
+        });
+
+        await asyncTest('allows a complete confident empty card result when the count operation fails independently', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_FAIL']);
+          failedOperations.add('count:COUNT_FAIL');
+          cardResultByImage.set('COUNT_FAIL', completeCardResult([]));
+          document.getElementById('g_hundos').value = '計數失敗仍由獨立空清單清除';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '');
+          equal(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'),
+            true
+          );
+        });
+
+        await asyncTest('clears only a fully validated empty smart list and preserves all unresolved empty outcomes', async () => {
+          resetScanScenario();
+          setScanFiles(['VALID_EMPTY']);
+          countResultByImage.set('VALID_EMPTY', validCount('(0)', '0'));
+          cardResultByImage.set('VALID_EMPTY', completeCardResult([]));
+          document.getElementById('g_hundos').value = '應由有效空結果清除';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '', 'complete zero-card result is an AI-owned empty replacement');
+
+          resetScanScenario();
+          setScanFiles(['INCOMPLETE_EMPTY']);
+          countResultByImage.set('INCOMPLETE_EMPTY', validCount('(0)', '0'));
+          const incompleteEmpty = completeCardResult([], { scan_complete: false });
+          cardResultByImage.set('INCOMPLETE_EMPTY', [incompleteEmpty, incompleteEmpty]);
+          document.getElementById('g_hundos').value = '不完整空結果須保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '不完整空結果須保留');
+
+          resetScanScenario();
+          setScanFiles(['UNRECOGNIZED_ONLY']);
+          countResultByImage.set('UNRECOGNIZED_ONLY', validCount('(1)', '1'));
+          cardResultByImage.set('UNRECOGNIZED_ONLY', completeCardResult([
+            v2Card({
+              cp: '1111',
+              visible_label: '無法辨識',
+              official_name: '',
+              recognition_status: 'uncertain',
+              species_confidence: 0.1
+            })
+          ]));
+          document.getElementById('g_hundos').value = '未辨識非空須保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '未辨識非空須保留');
+
+          resetScanScenario();
+          setScanFiles(['CARD_FAIL']);
+          failedOperations.add('cards:CARD_FAIL');
+          document.getElementById('g_hundos').value = '請求失敗須保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '請求失敗須保留');
+        });
+
+        await asyncTest('prevents every delayed mixed-batch status and diagnostic write from replacing the current smart session', async () => {
+          resetScanScenario();
+          setScanFiles(['PROFILE_DELAY', 'STALE_SMART']);
+          delayedOrdinaryIdentity = 'PROFILE_DELAY';
+          countResultByImage.set('STALE_SMART', validCount('(8)', '8'));
+          cardResultByImage.set('STALE_SMART', completeCardResult([
+            v2Card({ cp: '8000', visible_label: '舊批次', official_name: '夢幻' })
+          ]));
+          const staleScan = autoScan();
+          await new Promise(resolve => {
+            const waitForDelayedRequest = () => {
+              if (releaseDelayedOrdinary) resolve();
+              else nativeSetTimeout(waitForDelayedRequest, 0);
+            };
+            waitForDelayedRequest();
+          });
+
+          setScanFiles(['CURRENT_SMART']);
+          countResultByImage.set('CURRENT_SMART', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_SMART', completeCardResult([
+            v2Card({ cp: '3000', visible_label: '目前批次', official_name: '鳳王' })
+          ]));
+          await autoScan();
+          const currentDiagnostics = window.lastSmartHundoDiagnostics;
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識1張卡片');
+          equal(document.getElementById('g_hundos').value, '鳳王');
+          equal(document.getElementById('st_hundo_leg').value, '3');
+
+          releaseDelayedOrdinary();
+          await staleScan;
+
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識1張卡片');
+          equal(document.getElementById('g_hundos').value, '鳳王');
+          equal(document.getElementById('st_hundo_leg').value, '3');
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(window.lastSmartHundoScanResult, currentDiagnostics);
+        });
+
+        test('production listeners preserve inline behavior and clear AI ownership on manual input', () => {
+          document.getElementById('g_hundos').value = '';
+          document.getElementById('st_hundo_leg').value = '';
+          const session = beginSmartHundoScanSession();
+          markSmartHundoAiValue('g_hundos', 'AI 清單', session);
+          markSmartHundoAiValue('st_hundo_leg', '6', session);
+          document.getElementById('g_hundos').value = '手動清單';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+          document.getElementById('st_hundo_leg').value = '8';
+          document.getElementById('st_hundo_leg').dispatchEvent(new Event('input'));
+          beginSmartHundoScanSession();
+          equal(document.getElementById('g_hundos').value, '手動清單');
+          equal(document.getElementById('st_hundo_leg').value, '8');
+          equal(inlineHundoInputCalls > 0, true, 'addEventListener does not replace the existing inline handler');
+        });
+
+        await asyncTest('does not begin a smart session or overwrite diagnostics for an ordinary-only batch', async () => {
+          resetScanScenario();
+          setScanFiles(['PROFILE']);
+          const sentinel = { ordinary_only: true };
+          window.lastSmartHundoDiagnostics = sentinel;
+          window.lastSmartHundoScanResult = sentinel;
+          await autoScan();
+          equal(window.lastSmartHundoDiagnostics, sentinel);
+          equal(window.lastSmartHundoScanResult, sentinel);
+          equal(alertMessages.join('\n').includes('百神清單'), false, 'ordinary coverage contract does not add smart-list alerts');
         });
 
         const serializedLogs = JSON.stringify(loggedValues);
         equal(serializedLogs.includes('test-key'), false, 'logs omit the API key');
         equal(serializedLogs.includes('data:image/'), false, 'logs omit image data URLs');
+        equal(serializedLogs.includes('CARD_FAIL_SECRET'), false, 'logs omit thrown response details');
+        equal(serializedLogs.includes('COUNT_FAIL_SECRET'), false, 'logs omit thrown response details');
+        const safeErrorSummaries = loggedValues
+          .flat(2)
+          .filter(value => value && typeof value === 'object' && value.reasonCode === 'smart_hundo_request_failed');
+        equal(safeErrorSummaries.length >= 2, true, 'each failed logical operation emits a safe summary');
+        safeErrorSummaries.forEach(summary => {
+          deepEqual(Object.keys(summary), ['stage', 'name', 'httpStatus', 'reasonCode']);
+          equal(['hundo_count', 'hundo_cards'].includes(summary.stage), true);
+          equal(['Error'].includes(summary.name), true);
+          equal([502, 503].includes(summary.httpStatus), true);
+        });
 
         executionStatus = 'pass';
       } catch (error) {
