@@ -191,21 +191,7 @@
         manual_review_reasons: [],
         ...overrides
       });
-      const normalizeNumber = (value) => {
-        const match = String(value ?? '').match(/\d+/);
-        return match ? match[0] : '';
-      };
       const normalizeName = (value) => String(value ?? '').trim().replace(/^官方:/, '');
-      const normalizeList = (value) => [...new Set(String(value ?? '').split(',').filter(Boolean))].join(',');
-      const normalizeCountingList = (value) => {
-        const counts = new Map();
-        const order = [];
-        String(value ?? '').split(',').filter(Boolean).forEach(name => {
-          if (!counts.has(name)) order.push(name);
-          counts.set(name, (counts.get(name) || 0) + 1);
-        });
-        return order.map(name => counts.get(name) > 1 ? `${name}*${counts.get(name)}` : name).join(',');
-      };
       const assertRejects = async (promise, expectedMessage, forbiddenValue) => {
         try {
           await promise;
@@ -228,13 +214,10 @@
           normalizeSmartHundoCard,
           normalizeSmartHundoResult: normalizeSmartHundoResultV2,
           validateSmartHundoStructure,
-          normalizeLegacySmartHundoResult,
-          legacySmartHundoCardsToPokemonList,
           buildHundoDisplayName,
           smartHundoCardsToPokemonList: effectiveSmartHundoCardsToPokemonList,
           summarizeHundoManualReview,
           HUNDO_REVIEW_REASON_MESSAGES,
-          mergeSmartHundoScanResults,
           HUNDO_COUNT_CONFIDENCE_THRESHOLD,
           SPECIES_CONFIDENCE_THRESHOLD,
           STATE_YES_CONFIDENCE_THRESHOLD,
@@ -254,7 +237,6 @@
           mergeSmartHundoScreenshots,
           shapeSmartHundoDiagnostics
         } = helpers;
-        const smartHundoCardsToPokemonList = legacySmartHundoCardsToPokemonList;
         const normalizedCard = (overrides = {}) => normalizeSmartHundoCard(
           card(overrides),
           normalizeName,
@@ -951,107 +933,6 @@
           equal(conversion.pokemon_list, '');
           equal(conversion.pokemon_list.includes('畫面名稱'), false);
           equal(conversion.review_reason_counts.species_uncertain, 1);
-        });
-
-        test('converts purified, shiny, shadow, and duplicate cards without a purified prefix', () => {
-          const cards = [
-            card({ official_name: '超夢', purified_state: 'yes' }),
-            card({ order: 2, official_name: '夢幻', shiny_state: 'yes', purified_state: 'yes' }),
-            card({ order: 3, official_name: '烈空坐', shadow_state: 'yes' }),
-            card({ order: 4, official_name: '超夢', shiny_state: 'yes', shadow_state: 'yes' }),
-            card({ order: 5, official_name: '超夢', shiny_state: 'yes', shadow_state: 'yes' })
-          ];
-          const conversion = smartHundoCardsToPokemonList(cards, normalizeName, normalizeList);
-          equal(conversion.pokemon_list, '超夢,色違夢幻,暗影烈空坐,色違暗影超夢');
-          equal(conversion.recognized_count, 5);
-          equal(conversion.uncertain_count, 0);
-          equal(smartHundoCardsToPokemonList([card({ shiny_state: 'yes', shadow_state: 'yes' })], normalizeName, normalizeList).pokemon_list, '色違暗影超夢');
-        });
-
-        test('normalizes empty official names and only exact normalized duplicate positions', () => {
-          const normalized = normalizeLegacySmartHundoResult({
-            hundo_leg: '第 8 隻',
-            hundo_leg_confidence: 1.7,
-            detected_card_count: '3',
-            cards: [
-              card({ order: '2', row: '1', column: '1', official_name: '  ', visible_label: '不可用', species_confidence: -2 }),
-              card({ order: '1', row: '1', column: '1', official_name: ' 超夢 ' }),
-              card({ order: '1', row: '1', column: '1', official_name: '超夢' }),
-              card({ order: '1', row: '1', column: '1', official_name: '夢幻' })
-            ]
-          }, normalizeNumber, normalizeName);
-          equal(normalized.cards[0].official_name, '超夢');
-          equal(normalized.cards[1].official_name, '夢幻');
-          equal(normalized.cards[2].official_name, '');
-          equal(normalized.cards.length, 3);
-          equal(normalized.cards[2].species_confidence, 0);
-          equal(normalized.hundo_leg_confidence, 1);
-          equal(normalized.hundo_leg, '8');
-          equal(normalized.detected_card_count, 3);
-        });
-
-        test('deduplicates exact cards within one screenshot before conversion', () => {
-          const duplicateWithinScreenshot = card({ official_name: '超夢', order: 1, row: 1, column: 1 });
-          const normalized = normalizeLegacySmartHundoResult({
-            detected_card_count: 2,
-            cards: [duplicateWithinScreenshot, { ...duplicateWithinScreenshot }]
-          }, normalizeNumber, normalizeName);
-          const conversion = smartHundoCardsToPokemonList(normalized.cards, normalizeName, normalizeCountingList);
-          equal(normalized.cards.length, 1);
-          equal(conversion.pokemon_list, '超夢');
-          equal(conversion.recognized_count, 1);
-        });
-
-        test('counts uncertain species or independent states for manual review', () => {
-          const conversion = smartHundoCardsToPokemonList([
-            card({ official_name: '超夢', shiny_state: 'uncertain' })
-          ], normalizeName, normalizeList);
-          equal(conversion.pokemon_list, '超夢');
-          equal(conversion.recognized_count, 1);
-          equal(conversion.uncertain_count, 1);
-
-          const unknownSpecies = smartHundoCardsToPokemonList([
-            card({ official_name: '未知', recognition_status: 'uncertain' })
-          ], normalizeName, normalizeList);
-          equal(unknownSpecies.pokemon_list, '');
-          equal(unknownSpecies.recognized_count, 0);
-          equal(unknownSpecies.uncertain_count, 1);
-        });
-
-        test('preserves partial recognition while excluding it from the usable list', () => {
-          const normalized = normalizeLegacySmartHundoResult({
-            cards: [card({ recognition_status: 'partial', official_name: '超夢' })]
-          }, normalizeNumber, normalizeName);
-          equal(normalized.cards[0].recognition_status, 'partial');
-          const conversion = smartHundoCardsToPokemonList(normalized.cards, normalizeName, normalizeList);
-          equal(conversion.pokemon_list, '');
-          equal(conversion.recognized_count, 0);
-          equal(conversion.uncertain_count, 1);
-        });
-
-        test('merges multiple results and reports hundo leg conflicts', () => {
-          const merged = mergeSmartHundoScanResults([
-            { hundo_leg: '8', detected_card_count: 2, cards: [card({ official_name: '超夢' })] },
-            { hundo_leg: '9', detected_card_count: 1, cards: [card({ official_name: '夢幻', order: 2, shiny_state: 'yes' })] }
-          ], normalizeNumber, normalizeName, normalizeList);
-          equal(merged.hundo_leg, '8');
-          equal(merged.hundo_leg_conflict, true);
-          equal(merged.detected_card_count, 3);
-          equal(merged.recognized_count, 2);
-          equal(merged.uncertain_count, 0);
-          equal(merged.pokemon_list, '超夢,色違夢幻');
-        });
-
-        test('preserves identical same-position cards from different screenshots', () => {
-          const duplicateAcrossScreenshots = card({ official_name: '超夢', order: 1, row: 1, column: 1 });
-          const merged = mergeSmartHundoScanResults([
-            { hundo_leg: '8', detected_card_count: 1, cards: [duplicateAcrossScreenshots] },
-            { hundo_leg: '8', detected_card_count: 1, cards: [{ ...duplicateAcrossScreenshots }] }
-          ], normalizeNumber, normalizeName, normalizeCountingList);
-          equal(merged.pokemon_list, '超夢*2');
-          equal(merged.recognized_count, 2);
-          equal(merged.cards.length, 2);
-          equal(merged.detected_card_count, 2);
         });
 
         const exactHundoClassification = () => ({
@@ -1813,13 +1694,20 @@
         equal(indexHtml.includes('<script src="smart-hundo-helpers.js"><' + '/script>'), true);
 
         const nativeCreateElement = document.createElement.bind(document);
+        let inlineHundoInputCalls = 0;
+        ['g_hundos', 'st_hundo_leg', 'aiAutoStatus', 'aiAutoBtn'].forEach(id => {
+          const element = nativeCreateElement(id === 'g_hundos' ? 'textarea' : id === 'aiAutoStatus' ? 'p' : id === 'aiAutoBtn' ? 'button' : 'input');
+          element.id = id;
+          document.body.appendChild(element);
+        });
+        document.getElementById('g_hundos').oninput = () => { inlineHundoInputCalls += 1; };
         let canvasCalls = 0;
         const canvasRecords = [];
         let lastPayload = null;
-        let smartRequestCount = 0;
         let countRequestCount = 0;
         const fileReadCounts = new Map();
         const resizedByOriginal = new Map();
+        const countRegionByOriginal = new Map();
         const originalDataUrl = 'data:image/png;base64,SMART_ORIGINAL_DO_NOT_EXPOSE';
         const resizedUrl = 'data:image/jpeg;base64,RESIZED';
         const countRegionUrl = 'data:image/png;base64,HUNDO_COUNT_REGION_SENTINEL';
@@ -1828,7 +1716,6 @@
         const allowedOpenAiSchemas = new Set([
           'pokemon_go_image_classifier',
           'pokemon_go_forced_field_extractor',
-          'pokemon_go_hundo_smart_extractor',
           'pokemon_go_hundo_count_extractor',
           'pokemon_go_hundo_smart_extractor_v2'
         ]);
@@ -1897,7 +1784,7 @@
                 quality
               });
               return type === 'image/png'
-                ? countRegionUrl
+                ? countRegionByOriginal.get(drawnImage?.source) || countRegionUrl
                 : resizedByOriginal.get(drawnImage?.source) || resizedUrl;
             }
           };
@@ -1913,14 +1800,14 @@
         globalThis.update = async () => {};
         installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
           lastPayload = payload;
-          if (lastPayload.messages[0].content[1].image_url.detail === 'high') smartRequestCount += 1;
           if (schemaName === 'pokemon_go_hundo_count_extractor') countRequestCount += 1;
           const content = schemaName === 'pokemon_go_hundo_count_extractor'
             ? validCount('(3)', '3')
             : {
-              hundo_leg: '8',
-              hundo_leg_confidence: 0.9,
               detected_card_count: 0,
+              scan_complete: true,
+              bottom_edge_checked: true,
+              enumeration_confidence: 0.99,
               cards: []
             };
           return {
@@ -1933,7 +1820,7 @@
 
         const pageModule = moduleMatch[1]
           .replace(/^\s*import\s+[^;]+;\s*$/gm, '')
-          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA_V1, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPromptV1, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV1, requestSmartHundoExtractionV2, requestSmartHundoWithStructuralRetry, smartHundoScan, beginSmartHundoScanSession, markSmartHundoAiValue, handleSmartHundoManualEdit, isCurrentSmartHundoSession });';
+          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV2, requestSmartHundoWithStructuralRetry, smartHundoScan, normalizeAiClassification, beginSmartHundoScanSession, markSmartHundoAiValue, handleSmartHundoManualEdit, isCurrentSmartHundoSession, publishSmartHundoDiagnostics, setSmartHundoStatus });';
         (0, eval)(pageModule);
 
         equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
@@ -1947,16 +1834,10 @@
           type: 'image/jpeg',
           quality: 0.7
         }, 'ordinary compressor retains its size, JPEG quality, and draw contract');
-        const ordinaryResult = await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA_V1, null);
-        equal(ordinaryResult.hundo_leg, '8');
+        const ordinaryResult = await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA, null);
+        equal(ordinaryResult.detected_card_count, 0);
         equal(Object.hasOwn(ordinaryResult, 'result'), false, 'ordinary callers retain parsed-object return');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'auto');
-        await smartHundoScan({ apiKey: 'test-key', originalDataUrl, imageIndex: 2 });
-        equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
-        equal(lastPayload.messages[0].content[1].image_url.url, originalDataUrl);
-        equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_smart_extractor');
-        equal(lastPayload.messages[0].content[0].text, buildSmartHundoPromptV1(), 'production smart scan remains on the V1 prompt');
-        equal(smartRequestCount, 1);
         equal(JSON.stringify(lastPayload).includes('test-key'), false);
         equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
         equal(OPENAI_CHAT_COMPLETIONS_URL, expectedOpenAiUrl);
@@ -2019,7 +1900,7 @@
           'test-key',
           'metadata contract',
           originalDataUrl,
-          HUNDO_SMART_SCHEMA_V1,
+          HUNDO_SMART_SCHEMA,
           null,
           { includeMetadata: true }
         );
@@ -2030,8 +1911,6 @@
         await assertRejects(globalThis.fetch(expectedOpenAiUrl, {
           body: JSON.stringify({ response_format: { json_schema: { name: 'unknown_paid_schema' } } })
         }), 'unknown schema');
-        equal(HUNDO_SMART_SCHEMA_V1.strict, true);
-        equal(HUNDO_SMART_SCHEMA_V1.schema.additionalProperties, false);
         equal(HUNDO_SMART_SCHEMA.strict, true);
         equal(HUNDO_SMART_SCHEMA.schema.additionalProperties, false);
         deepEqual(Object.keys(HUNDO_SMART_SCHEMA.schema.properties), [
@@ -2069,56 +1948,6 @@
         deepEqual(smartCardSchema.properties.background_evidence.properties.position.enum, ['none', 'near_pokemon_or_card_background', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.background_evidence.properties.badge_type.enum, ['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.background_evidence.properties.appearance.enum, ['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
-        const smartPromptV1 = buildSmartHundoPromptV1();
-        [
-          'HUNDO_LEGENDARY_SCREEN', '傳說的寶可夢,幻,究極異獸&4*', '禁止重新分類', '所有可見的寶可夢卡片',
-          '部分可見', '由上到下、由左到右', '官方繁體中文名稱', 'visible_label', '次要佐證', '不能取代視覺辨識',
-          'shiny、purified、shadow', '分別獨立判斷', 'uncertain', '搜尋欄', '非寶可夢卡片', '不可見卡片', '重複卡片',
-          'JSON Schema', '不得輸出 Markdown', '額外欄位'
-        ].forEach(fragment => equal(smartPromptV1.includes(fragment), true, `V1 smart prompt protects ${fragment}`));
-        [
-          'recognized：僅在實際物種與型態可可靠辨識時使用',
-          'partial：僅在卡片或證據只部分可見且辨識未完成時使用',
-          '除非物種本身仍可可靠辨識，否則 official_name 留空',
-          'uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用'
-        ].forEach(fragment => equal(smartPromptV1.includes(fragment), true, `V1 smart prompt defines ${fragment}`));
-        test('keeps the complete A-G V1 smart prompt contract', () => {
-          const requiredBySection = {
-            A: [
-              '【A. 卡片列舉與位置】', '完整可見或部分可見', '由上到下、由左到右', 'order 必須從 1 開始',
-              '不得依賴圖片上傳順序', '不得把相鄰卡片合併', '不得把相鄰卡片的符號或狀態指派給本卡'
-            ],
-            B: [
-              '【B. 物種與型態辨識】', '身體、頭部、四肢、翅膀、尾巴、角', '型態專屬特徵',
-              '傳說、幻與究極異獸的設計特徵', '顏色只能作為輔助證據', '自訂暱稱',
-              'IV、151515、100、百分比', '縮寫、背景、招式、使用者符號、前綴或後綴',
-              '絕對不得直接複製到 official_name', 'GLO蒼響151515 -> 蒼響', '官方繁體中文名稱與型態名稱',
-              '證據衝突', 'official_name 留空', '不得猜測或發明'
-            ],
-            C: [
-              '【C. 色違 shiny】', 'CP／狀態區附近的官方色違閃光或狀態圖示', '只靠身體顏色不足',
-              '背景閃光、最愛星號、夥伴徽章、按鈕、徽章及相鄰卡片符號', '不清楚時填 uncertain'
-            ],
-            D: [
-              '【D. 淨化 purified】', '只屬於該卡片的官方淨化符號或淨化效果',
-              '無關的藍色、季節、服裝、背景或相鄰卡片圖形', '只保留在內部結果', '絕不能轉成 shiny'
-            ],
-            E: [
-              '【E. 暗影 shadow】', '只屬於該卡片的官方紫色火焰或煙霧', '紫色身體或相鄰卡片效果都不足'
-            ],
-            F: [
-              '【F. 必須忽略的 UI 與裝飾】', '最愛、夥伴、搜尋、排序、儲存空間、背景、紀念、全域、服裝、季節、底部導覽、CP 排序'
-            ],
-            G: [
-              '【G. Schema 與一致性】', '只輸出符合提供 JSON Schema 的 JSON', '不得遺漏可見卡片',
-              '不得發明隱藏或畫面外卡片', '不得輸出重複卡片', '位置與 order 必須一致'
-            ]
-          };
-          Object.entries(requiredBySection).forEach(([section, fragments]) => {
-            fragments.forEach(fragment => equal(smartPromptV1.includes(fragment), true, `V1 smart prompt section ${section} includes ${fragment}`));
-          });
-          equal(smartPromptV1.includes('所有狀態證據都必須屬於同一張正在判定的卡片'), true, 'same-card evidence ownership is explicit');
-        });
         test('stages the complete V2 enumeration, species, and five-evidence prompt', () => {
           const smartPrompt = buildSmartHundoPrompt();
           [
@@ -2295,7 +2124,7 @@
         const fixtureIds = [
           'openaiApiKey', 'imageInput', 'aiAutoBtn', 'aiAutoStatus', 'g_hundos',
           'g_level', 'g_team', 'g_xp', 'g_stardust',
-          'st_hundo_leg', 'st_shiny', 'st_coin', 'st_poke_bag', 'st_item_bag',
+          'st_hundo_leg', 'st_shiny', 'st_shiny_leg', 'st_coin', 'st_poke_bag', 'st_item_bag',
           'st_rarecandy', 'st_greenpass', 'st_masterball', 'st_old_poke',
           ...Array.from({ length: 11 }, (_, index) => `chk_sp_${index + 1}`),
           'chk_kyurem', 'sel_kyurem', 'chk_zamazenta', 'sel_dogs',
@@ -2364,26 +2193,18 @@
           equal(document.getElementById('g_level').value, '47', 'unrelated fields are never owned or changed');
         });
 
-        test('starts a staged session without resetForm, production listeners, or V1 cutover', () => {
-          document.getElementById('g_hundos').value = '手動保留';
-          document.getElementById('g_level').value = '48';
-          window.lastSmartHundoDiagnostics = { scan_session_id: 'old-safe-audit' };
-          window.lastSmartHundoScanResult = window.lastSmartHundoDiagnostics;
-          let resetCalls = 0;
-          const originalResetForm = window.resetForm;
-          window.resetForm = () => { resetCalls += 1; };
-
-          const session = beginSmartHundoScanSession();
-
-          equal(isCurrentSmartHundoSession(session), true);
-          equal(window.lastSmartHundoDiagnostics, null);
-          equal(window.lastSmartHundoScanResult, null);
-          equal(document.getElementById('g_hundos').value, '手動保留');
-          equal(document.getElementById('g_level').value, '48');
-          equal(resetCalls, 0);
-          equal(autoScan.toString().includes('beginSmartHundoScanSession'), false, 'Task 7 does not cut over autoScan');
-          equal(document.getElementById('st_hundo_leg').oninput, null, 'Task 7 does not attach production input listeners');
-          window.resetForm = originalResetForm;
+        test('rejects stale smart-hundo status and diagnostic writes', () => {
+          const staleSession = beginSmartHundoScanSession();
+          const currentSession = beginSmartHundoScanSession();
+          const currentDiagnostics = { scan_session_id: String(currentSession) };
+          const staleDiagnostics = { scan_session_id: String(staleSession) };
+          equal(publishSmartHundoDiagnostics(currentSession, currentDiagnostics), true);
+          equal(setSmartHundoStatus(currentSession, '目前 session 狀態'), true);
+          equal(publishSmartHundoDiagnostics(staleSession, staleDiagnostics), false);
+          equal(setSmartHundoStatus(staleSession, '晚到的舊狀態'), false);
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(window.lastSmartHundoScanResult, currentDiagnostics);
+          equal(document.getElementById('aiAutoStatus').textContent, '目前 session 狀態');
         });
 
         const makeFile = (id) => ({
@@ -2393,76 +2214,79 @@
         });
         const setScanFiles = (ids) => {
           const files = ids.map(makeFile);
-          files.forEach(file => resizedByOriginal.set(file.dataUrl, `data:image/jpeg;base64,RESIZED_${file.id}`));
+          files.forEach(file => {
+            resizedByOriginal.set(file.dataUrl, `data:image/jpeg;base64,RESIZED_${file.id}`);
+            countRegionByOriginal.set(file.dataUrl, `data:image/png;base64,HUNDO_COUNT_REGION_${file.id}`);
+          });
           Object.defineProperty(document.getElementById('imageInput'), 'files', {
             configurable: true,
             value: files
           });
           return files;
         };
-        const openAiResponse = (content, onJson) => ({
+        const openAiResponse = (content, onJson, finishReason = 'stop') => ({
           ok: true,
           json: async () => {
             onJson?.();
-            return { choices: [{ message: { content: JSON.stringify(content) } }] };
+            return { choices: [{ finish_reason: finishReason, message: { content: JSON.stringify(content) } }] };
           }
         });
         const classificationByImage = {
           PROFILE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
-          HUNDO: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
-          HUNDO_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢，幻，究極異獸＆4＊' },
-          HUNDO_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: ' 傳說的寶可夢, 幻, 究極異獸 & 4* ' },
-          RAW_OTHER_HUNDO: { image_type: 'OTHER', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
-          CONFLICT_HUNDO: { image_type: 'SHINY_CATEGORY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
-          RAW_HUNDO_FULL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '　傳說的寶可夢， 幻， 究極異獸 ＆ ４＊ ' },
-          RAW_OTHER_OLD: { image_type: 'OTHER', search_query: ' 年１６-２０ ' },
-          SHINY: { image_type: 'SHINY_CATEGORY_SCREEN', search_query: '' },
-          RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' }
+          RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' },
+          SHINY_LEGENDARY: { image_type: 'SHINY_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色' },
+          EXACT_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '　傳說的寶可夢， 幻， 究極異獸 ＆ ４＊ ' },
+          EXACT_B_RAW_OTHER: { image_type: 'OTHER', search_query: ' 傳說的寶可夢, 幻, 究極異獸 & 4* ' },
+          SIMILAR_HUNDO: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色&4*' },
+          COUNT_3_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          COUNT_3_B: { image_type: 'OTHER', search_query: '傳說的寶可夢，幻，究極異獸＆４＊' },
+          COUNT_9: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          TIE_3: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          TIE_9: { image_type: 'OTHER', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          COUNT_UNRESOLVED: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          STATE_REVIEW: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          INCOMPLETE: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          OVERLAP_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          OVERLAP_B: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          COUNT_FAIL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          CARD_FAIL: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          PROFILE_DELAY: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          STALE_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
+          CURRENT_SMART: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
         };
         const extractionForPrompt = (prompt) => {
           if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) return { level: '50', team: '紅隊', xp: '3500000' };
           if (prompt.includes('image_type = SHINY_CATEGORY_SCREEN')) return { shiny: '77' };
+          if (prompt.includes('image_type = SHINY_LEGENDARY_SCREEN')) return { shiny_leg: '12' };
           if (prompt.includes('image_type = OLD_POKEMON_SCREEN')) return { old_poke: '42' };
           if (prompt.includes('image_type = RESOURCE_SCREEN')) {
             return { coin: '123', poke_bag: '7800', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' };
           }
           fail(`unexpected ordinary extraction prompt: ${prompt.slice(0, 120)}`);
         };
-        const smartResult = {
-          hundo_leg: '8',
-          hundo_leg_confidence: 0.93,
-          detected_card_count: 3,
-          cards: [
-            card({ official_name: '超夢' }),
-            card({ order: 2, row: 1, column: 2, official_name: '夢幻', shiny_state: 'yes' }),
-            card({ order: 3, row: 2, column: 1, official_name: '', recognition_status: 'uncertain', species_confidence: 0.2 })
-          ]
+        const v2Card = (overrides = {}) => {
+          const normalized = card(overrides);
+          delete normalized.purified_state;
+          delete normalized.purified_confidence;
+          delete normalized.shadow_state;
+          delete normalized.shadow_confidence;
+          return normalized;
         };
-        const smartResultByImage = {
-          HUNDO: smartResult,
-          HUNDO_A: {
-            hundo_leg: '8',
-            hundo_leg_confidence: 0.91,
-            detected_card_count: 1,
-            cards: [card({ official_name: ' 超夢 ' })]
-          },
-          HUNDO_B: {
-            hundo_leg: '9',
-            hundo_leg_confidence: 0.89,
-            detected_card_count: 1,
-            cards: [card({ official_name: '夢幻', shiny_state: 'uncertain' })]
-          },
-          RAW_HUNDO_FULL: {
-            hundo_leg: '8',
-            hundo_leg_confidence: 0.95,
-            detected_card_count: 1,
-            cards: [card({ official_name: '蒼響' })]
-          }
-        };
+        const completeCardResult = (cards, overrides = {}) => ({
+          detected_card_count: cards.length,
+          scan_complete: true,
+          bottom_edge_checked: true,
+          enumeration_confidence: 0.99,
+          cards,
+          ...overrides
+        });
+        let countResultByImage = new Map();
+        let cardResultByImage = new Map();
         let routedRequests = [];
         let requestStageEvents = [];
-        let failSmartRequests = false;
-        let failedSmartIdentities = new Set();
+        let failedOperations = new Set();
+        let delayedOrdinaryIdentity = '';
+        let releaseDelayedOrdinary = null;
         globalThis.alert = () => {};
         globalThis.setTimeout = (callback) => { callback(); return 0; };
         installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
@@ -2475,196 +2299,381 @@
             const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
             return openAiResponse(classificationByImage[identity], () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
-          if (schemaName === 'pokemon_go_hundo_smart_extractor') {
+          if (schemaName === 'pokemon_go_hundo_count_extractor') {
+            const identity = imageUrl.match(/HUNDO_COUNT_REGION_(.+)$/)?.[1];
+            if (failedOperations.has(`count:${identity}`)) {
+              const error = new Error('COUNT_FAIL_SECRET test-key data:image/png;base64,COUNT_RESPONSE_BODY');
+              error.httpStatus = 503;
+              throw error;
+            }
+            return openAiResponse(
+              countResultByImage.get(identity) || validCount('(3)', '3'),
+              () => requestStageEvents.push({ event: 'finish', schemaName })
+            );
+          }
+          if (schemaName === 'pokemon_go_hundo_smart_extractor_v2') {
             const identity = imageUrl.match(/ORIGINAL_(.+)$/)?.[1];
-            if (failSmartRequests || failedSmartIdentities.has(identity)) throw new Error('mock smart network failure');
-            return openAiResponse(smartResultByImage[identity], () => requestStageEvents.push({ event: 'finish', schemaName }));
+            if (failedOperations.has(`cards:${identity}`)) {
+              const error = new Error('CARD_FAIL_SECRET test-key data:image/png;base64,CARD_RESPONSE_BODY');
+              error.httpStatus = 502;
+              throw error;
+            }
+            const configured = cardResultByImage.get(identity) || completeCardResult([]);
+            const content = Array.isArray(configured)
+              ? configured[prompt.includes('【結構重試】') ? 1 : 0]
+              : configured;
+            return openAiResponse(content, () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           if (schemaName === 'pokemon_go_forced_field_extractor') {
+            const identity = imageUrl.match(/RESIZED_(.+)$/)?.[1];
+            if (identity === delayedOrdinaryIdentity) {
+              await new Promise(resolve => { releaseDelayedOrdinary = resolve; });
+            }
             return openAiResponse(extractionForPrompt(prompt), () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           fail(`unexpected schema ${schemaName}`);
         });
-
-        await asyncTest('routes arbitrary-order jobs after classification and merges smart cards safely', async () => {
+        const resetScanScenario = () => {
           fileReadCounts.clear();
           routedRequests = [];
           requestStageEvents = [];
-          failSmartRequests = false;
-          failedSmartIdentities = new Set();
-          setScanFiles(['PROFILE', 'HUNDO', 'SHINY', 'RESOURCE']);
-          document.getElementById('g_hundos').value = '使用者舊值';
+          countResultByImage = new Map();
+          cardResultByImage = new Map();
+          failedOperations = new Set();
+          delayedOrdinaryIdentity = '';
+          releaseDelayedOrdinary = null;
+        };
+
+        await asyncTest('canonically routes exactly two arbitrary-order smart jobs through independent V2 count and card operations', async () => {
+          resetScanScenario();
+          setScanFiles(['PROFILE', 'EXACT_A', 'RESOURCE', 'EXACT_B_RAW_OTHER', 'SHINY_LEGENDARY']);
+          countResultByImage.set('EXACT_A', validCount('(3)', '3'));
+          countResultByImage.set('EXACT_B_RAW_OTHER', validCount('（3）', '3'));
+          cardResultByImage.set('EXACT_A', completeCardResult([
+            v2Card({ order: 1, row: 1, column: 1, cp: '3123', visible_label: '鳳王100', official_name: '鳳王' }),
+            v2Card({ order: 2, row: 1, column: 2, cp: '2871', visible_label: '哲爾尼亞斯', official_name: '哲爾尼亞斯' })
+          ]));
+          cardResultByImage.set('EXACT_B_RAW_OTHER', completeCardResult([
+            v2Card({
+              order: 1,
+              row: 1,
+              column: 1,
+              cp: '4268',
+              visible_label: '淨化雷吉奇卡斯',
+              official_name: '雷吉奇卡斯',
+              rocket_state: 'purified',
+              rocket_confidence: 0.98,
+              rocket_evidence: cyanPurificationEvidence()
+            })
+          ]));
 
           await autoScan();
 
           const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
           const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
-          equal(classifierRequests.length, 4, 'classifies every stable job first');
-          equal(ordinaryRequests.length, 3, 'only normal jobs use ordinary extraction');
-          equal(smartRequests.length, 1, 'one logical smart job request');
-          equal(smartRequests[0].imageUrl, 'data:image/png;base64,ORIGINAL_HUNDO', 'smart extraction uses its original');
-          equal(smartRequests[0].detail, 'high', 'smart extraction requests high detail');
-          equal(ordinaryRequests.every(request => request.imageUrl.startsWith('data:image/jpeg;base64,RESIZED_')), true, 'normal jobs use resized data');
-          equal(ordinaryRequests.some(request => request.imageUrl.includes('HUNDO')), false, 'smart image cannot enter ordinary extraction or validation');
-          equal(ordinaryRequests.some(request => request.prompt.includes('allow_pokemon_list')), false, 'ordinary prompts do not expose the smart routing flag');
-          equal(fileReadCounts.get('PROFILE'), 1, 'profile is read only for resizing');
-          equal(fileReadCounts.get('HUNDO'), 2, 'hundo is read once for resizing and once as original');
-          equal(fileReadCounts.get('SHINY'), 1, 'shiny is read only for resizing');
-          equal(fileReadCounts.get('RESOURCE'), 1, 'resource is read only for resizing');
-          equal(document.getElementById('g_level').value, '50');
-          equal(document.getElementById('g_team').value, '紅隊');
-          equal(document.getElementById('g_xp').value, '350');
-          equal(document.getElementById('st_shiny').value, '77');
-          equal(document.getElementById('st_coin').value, '123');
-          equal(document.getElementById('g_hundos').value, '超夢,色違夢幻', 'pokemon list comes only from normalized smart cards');
-          equal(document.getElementById('st_hundo_leg').value, '8');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [1]);
-          deepEqual(window.lastSmartHundoScanResult.failedIndexes, []);
-          equal(window.lastSmartHundoScanResult.detectedCardCount, 3);
-          equal(window.lastSmartHundoScanResult.recognizedCount, 2);
-          equal(window.lastSmartHundoScanResult.uncertainCount, 1);
-          equal(window.lastSmartHundoScanResult.cards[2].recognition_status, 'uncertain');
-          equal(window.lastSmartHundoScanResult.screenshots[0].index, 1, 'audit keeps cards associated with their screenshot');
-          equal(window.lastSmartHundoScanResult.screenshots[0].cards.length, 3);
-          equal(window.lastSmartHundoScanResult.hundoLegConflict, false);
-          equal(document.getElementById('aiAutoStatus').textContent.includes('1'), true, 'status shows manual-review count');
-          equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
-        });
-
-        await asyncTest('requires both the raw hundo type and normalized exact query for smart routing', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = false;
-          failedSmartIdentities = new Set();
-          setScanFiles(['RAW_OTHER_HUNDO', 'CONFLICT_HUNDO', 'RAW_HUNDO_FULL', 'RAW_OTHER_OLD']);
-          document.getElementById('g_hundos').value = '舊百神';
-
-          await autoScan();
-
-          const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
-          const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
-          equal(classifierRequests.length, 4, 'all raw classifier results are exercised end to end');
-          equal(ordinaryRequests.length, 1, 'ordinary non-hundo query inference remains enabled');
-          equal(ordinaryRequests[0].prompt.includes('image_type = OLD_POKEMON_SCREEN'), true);
-          equal(ordinaryRequests[0].imageUrl, 'data:image/jpeg;base64,RESIZED_RAW_OTHER_OLD');
-          deepEqual(smartRequests.map(request => request.imageUrl), [
-            'data:image/png;base64,ORIGINAL_RAW_HUNDO_FULL'
-          ], 'query-only inference never creates a smart request');
-          equal(fileReadCounts.get('RAW_OTHER_HUNDO'), 1, 'raw OTHER never reads the original image');
-          equal(fileReadCounts.get('CONFLICT_HUNDO'), 1, 'conflicting non-hundo type never reads the original image');
-          equal(fileReadCounts.get('RAW_HUNDO_FULL'), 2, 'raw hundo with normalized exact query uses its original image');
-          equal(fileReadCounts.get('RAW_OTHER_OLD'), 1, 'ordinary inferred search type remains on the resized path');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [2]);
-          equal(document.getElementById('g_hundos').value, '蒼響');
-        });
-
-        await asyncTest('normalizes full-width routing and merges multiple smart screenshots conservatively', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = false;
-          failedSmartIdentities = new Set();
-          setScanFiles(['HUNDO_A', 'PROFILE', 'HUNDO_B']);
-          document.getElementById('g_hundos').value = '舊百神';
-          document.getElementById('st_hundo_leg').value = '';
-          document.getElementById('g_level').value = '';
-
-          await autoScan();
-
-          const classifierRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_image_classifier');
-          const extractionRequests = routedRequests.filter(request => request.schemaName !== 'pokemon_go_image_classifier');
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
+          const countRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_count_extractor');
+          const cardRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2');
           const firstExtractionStart = requestStageEvents.findIndex(event => event.event === 'start' && event.schemaName !== 'pokemon_go_image_classifier');
           const lastClassificationFinish = requestStageEvents.reduce((lastIndex, event, index) => (
             event.event === 'finish' && event.schemaName === 'pokemon_go_image_classifier' ? index : lastIndex
           ), -1);
-          equal(classifierRequests.length, 3);
-          equal(lastClassificationFinish < firstExtractionStart, true, 'all classification responses finish before extraction starts');
-          equal(extractionRequests.length, 3, 'one ordinary and two smart extractions run');
-          deepEqual(smartRequests.map(request => request.imageUrl), [
-            'data:image/png;base64,ORIGINAL_HUNDO_A',
-            'data:image/png;base64,ORIGINAL_HUNDO_B'
-          ], 'each smart job reads its own exact original');
-          equal(smartRequests.every(request => request.detail === 'high'), true);
-          equal(fileReadCounts.get('HUNDO_A'), 2);
-          equal(fileReadCounts.get('HUNDO_B'), 2);
-          equal(document.getElementById('st_hundo_leg').value, '8', 'first valid hundo count is kept instead of summed');
-          equal(document.getElementById('st_hundo_leg').value === '17', false, 'conflicting hundo counts are never summed');
-          equal(document.getElementById('g_hundos').value, '超夢,夢幻');
+          equal(classifierRequests.length, 5, 'classifies every stable job first');
+          equal(lastClassificationFinish < firstExtractionStart, true, 'all classifications finish before any extraction starts');
+          equal(ordinaryRequests.length, 3, 'only non-smart jobs use ordinary extraction');
+          equal(countRequests.length, 2, 'each exact job gets one logical count operation');
+          equal(cardRequests.length, 2, 'each exact job gets one logical full-image card operation');
+          deepEqual(cardRequests.map(request => request.imageUrl), [
+            'data:image/png;base64,ORIGINAL_EXACT_A',
+            'data:image/png;base64,ORIGINAL_EXACT_B_RAW_OTHER'
+          ]);
+          deepEqual(countRequests.map(request => request.imageUrl), [
+            'data:image/png;base64,HUNDO_COUNT_REGION_EXACT_A',
+            'data:image/png;base64,HUNDO_COUNT_REGION_EXACT_B_RAW_OTHER'
+          ]);
+          equal([...countRequests, ...cardRequests].every(request => request.detail === 'high'), true);
+          equal(ordinaryRequests.every(request => request.imageUrl.startsWith('data:image/jpeg;base64,RESIZED_')), true, 'normal jobs use resized data');
+          equal(ordinaryRequests.some(request => /EXACT_A|EXACT_B_RAW_OTHER/.test(request.imageUrl)), false, 'smart images never enter ordinary extraction');
+          equal(ordinaryRequests.some(request => request.prompt.includes('allow_pokemon_list')), false, 'ordinary prompts do not expose the smart routing flag');
+          equal(fileReadCounts.get('PROFILE'), 1, 'profile is read only for resizing');
+          equal(fileReadCounts.get('EXACT_A'), 2, 'exact A original is read exactly once after classification preparation');
+          equal(fileReadCounts.get('EXACT_B_RAW_OTHER'), 2, 'raw OTHER exact original is read exactly once after classification preparation');
+          equal(fileReadCounts.get('RESOURCE'), 1, 'resource is read only for resizing');
+          equal(fileReadCounts.get('SHINY_LEGENDARY'), 1, 'similar shiny query remains ordinary');
           equal(document.getElementById('g_level').value, '50');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('百神數有衝突'), true, 'status reports hundo conflict');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('1 張卡片需人工確認'), true, 'status also reports manual-review count');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [0, 2]);
-          deepEqual(window.lastSmartHundoScanResult.screenshots.map(screenshot => screenshot.index), [0, 2]);
-          equal(window.lastSmartHundoScanResult.screenshots[0].cards[0].official_name, '超夢');
-          equal(window.lastSmartHundoScanResult.screenshots[1].cards[0].official_name, '夢幻');
-          equal(window.lastSmartHundoScanResult.hundoLeg, '8');
-          equal(window.lastSmartHundoScanResult.hundoLegConflict, true);
-          equal(window.lastSmartHundoScanResult.uncertainCount, 1);
+          equal(document.getElementById('g_team').value, '紅隊');
+          equal(document.getElementById('g_xp').value, '350');
+          equal(document.getElementById('st_coin').value, '123');
+          equal(document.getElementById('st_shiny_leg').value, '12');
+          equal(document.getElementById('st_hundo_leg').value, '3', 'count comes only from dedicated count evidence');
+          equal(document.getElementById('g_hundos').value, '鳳王,哲爾尼亞斯,雷吉奇卡斯');
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識3張卡片');
+          equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult, 'both diagnostic aliases share one safe object');
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots.map(screenshot => screenshot.index), [1, 3]);
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots.map(screenshot => screenshot.classification.image_type), [
+            'HUNDO_LEGENDARY_SCREEN',
+            'HUNDO_LEGENDARY_SCREEN'
+          ], 'raw OTHER exact query is canonicalized before partition');
+          equal(window.lastSmartHundoDiagnostics.screenshots[1].cards[0].effective_states.rocket, 'purified');
+          equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
+          equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
+          equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
         });
 
-        await asyncTest('keeps successful smart audit and edited list when another smart job fails', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = false;
-          failedSmartIdentities = new Set(['HUNDO_B']);
-          setScanFiles(['HUNDO_A', 'PROFILE', 'HUNDO_B']);
-          document.getElementById('g_hundos').value = '手動保留百神';
-          document.getElementById('g_level').value = '';
+        await asyncTest('merges three independent counts 3, 3, and 9 by votes while retaining conflict diagnostics', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_9', 'COUNT_3_A', 'COUNT_3_B']);
+          countResultByImage.set('COUNT_9', { ...validCount('(9)', '9'), confidence: 0.99 });
+          countResultByImage.set('COUNT_3_A', { ...validCount('(3)', '3'), confidence: 0.90 });
+          countResultByImage.set('COUNT_3_B', { ...validCount('(3)', '3'), confidence: 0.88 });
+          ['COUNT_9', 'COUNT_3_A', 'COUNT_3_B'].forEach((identity, index) => {
+            cardResultByImage.set(identity, completeCardResult([
+              v2Card({ cp: String(4000 + index), visible_label: identity, official_name: ['夢幻', '超夢', '鳳王'][index] })
+            ]));
+          });
+
+          await autoScan();
+
+          equal(document.getElementById('st_hundo_leg').value, '3');
+          equal(window.lastSmartHundoDiagnostics.count_conflict, true);
+          deepEqual(window.lastSmartHundoDiagnostics.count_candidates, [
+            { value: '3', votes: 2, confidence: 0.9 },
+            { value: '9', votes: 1, confidence: 0.99 }
+          ]);
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.hundo_count_conflict), true);
+        });
+
+        await asyncTest('leaves an exact-confidence count tie unresolved without order or card fallback', async () => {
+          resetScanScenario();
+          setScanFiles(['TIE_9', 'TIE_3']);
+          countResultByImage.set('TIE_9', { ...validCount('(9)', '9'), confidence: 0.95 });
+          countResultByImage.set('TIE_3', { ...validCount('(3)', '3'), confidence: 0.95 });
+          cardResultByImage.set('TIE_9', completeCardResult([
+            v2Card({ cp: '9001', visible_label: '九一', official_name: '夢幻' })
+          ]));
+          cardResultByImage.set('TIE_3', completeCardResult([
+            v2Card({ cp: '3001', visible_label: '三一', official_name: '超夢' }),
+            v2Card({ order: 2, column: 2, cp: '3002', visible_label: '三二', official_name: '鳳王' })
+          ]));
           document.getElementById('st_hundo_leg').value = '';
 
           await autoScan();
 
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
-          equal(smartRequests.filter(request => request.imageUrl.endsWith('ORIGINAL_HUNDO_A')).length, 1, 'successful smart job has one logical request');
-          equal(smartRequests.filter(request => request.imageUrl.endsWith('ORIGINAL_HUNDO_B')).length, 3, 'failed smart job exhausts bounded wrapper retries');
-          equal(document.getElementById('g_level').value, '50', 'ordinary fields survive partial smart failure');
-          equal(document.getElementById('st_hundo_leg').value, '8', 'successful smart hundo count remains usable');
-          equal(document.getElementById('g_hundos').value, '手動保留百神', 'any smart failure preserves edited list');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [0, 2]);
-          deepEqual(window.lastSmartHundoScanResult.failedIndexes, [2]);
-          deepEqual(window.lastSmartHundoScanResult.screenshots.map(screenshot => screenshot.index), [0]);
-          equal(window.lastSmartHundoScanResult.cards[0].official_name, '超夢');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('智慧百神辨識失敗'), true);
-          const serializedAudit = JSON.stringify(window.lastSmartHundoScanResult);
-          ['test-key', 'Authorization', 'ORIGINAL_', 'RESIZED_', 'data:image/', 'classificationDataUrl', 'file'].forEach(secret => {
+          equal(document.getElementById('st_hundo_leg').value, '');
+          equal(window.lastSmartHundoDiagnostics.count_conflict, true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('hundo_count_conflict'), true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('hundo_count_uncertain'), true);
+          equal(document.getElementById('g_hundos').value, '夢幻,超夢,鳳王', 'cards never supply a count fallback');
+        });
+
+        await asyncTest('renders the exact unresolved-count status while applying a validated three-card list', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_UNRESOLVED']);
+          countResultByImage.set('COUNT_UNRESOLVED', {
+            ...validCount('9/12', '9'),
+            active_tab: 'egg',
+            count_source: 'other',
+            relative_position: 'other',
+            has_parentheses: false,
+            has_slash: true
+          });
+          cardResultByImage.set('COUNT_UNRESOLVED', completeCardResult([
+            v2Card({ cp: '1', visible_label: '一', official_name: '鳳王' }),
+            v2Card({ order: 2, column: 2, cp: '2', visible_label: '二', official_name: '哲爾尼亞斯' }),
+            v2Card({ order: 3, row: 2, cp: '3', visible_label: '三', official_name: '雷吉奇卡斯' })
+          ]));
+          document.getElementById('st_hundo_leg').value = '';
+
+          await autoScan();
+
+          equal(document.getElementById('st_hundo_leg').value, '');
+          equal(document.getElementById('g_hundos').value, '鳳王,哲爾尼亞斯,雷吉奇卡斯');
+          equal(document.getElementById('aiAutoStatus').textContent, '百神清單辨識完成：辨識3張卡片；百神總數需人工確認');
+        });
+
+        await asyncTest('renders exact card-state review detail from centralized reason messages', async () => {
+          resetScanScenario();
+          setScanFiles(['STATE_REVIEW']);
+          countResultByImage.set('STATE_REVIEW', validCount('(3)', '3'));
+          cardResultByImage.set('STATE_REVIEW', completeCardResult([
+            v2Card({ cp: '1', visible_label: '一', official_name: '鳳王' }),
+            v2Card({
+              order: 2,
+              column: 2,
+              cp: '2',
+              visible_label: '二',
+              official_name: '哲爾尼亞斯',
+              background_type: 'uncertain',
+              background_confidence: 0.99
+            }),
+            v2Card({ order: 3, row: 2, cp: '3', visible_label: '三', official_name: '雷吉奇卡斯' })
+          ]));
+
+          await autoScan();
+
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，偵測3張卡片，辨識3張；1張背卡狀態需人工確認');
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('background_uncertain'), true);
+        });
+
+        await asyncTest('uses one structural retry replacement and reports incomplete enumeration', async () => {
+          resetScanScenario();
+          setScanFiles(['INCOMPLETE']);
+          countResultByImage.set('INCOMPLETE', validCount('(3)', '3'));
+          cardResultByImage.set('INCOMPLETE', [
+            completeCardResult([
+              v2Card({ cp: '1', visible_label: 'first', official_name: '第一次卡片' })
+            ], { detected_card_count: 2, scan_complete: false }),
+            completeCardResult([
+              v2Card({ cp: '2', visible_label: 'second', official_name: '第二次卡片' })
+            ], { detected_card_count: 2, bottom_edge_checked: false })
+          ]);
+
+          await autoScan();
+
+          const cardRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2');
+          equal(cardRequests.length, 2, 'structural retry is attempted at most once');
+          equal(document.getElementById('g_hundos').value, '第二次卡片', 'attempt two fully replaces attempt one');
+          equal(document.getElementById('g_hundos').value.includes('第一次卡片'), false);
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.incomplete_card_enumeration), true);
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].structural_retry_used, true);
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots[0].structural_retry_reason, [
+            'detected_card_count_mismatch',
+            'scan_incomplete'
+          ]);
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[0].official_name, '第二次卡片');
+        });
+
+        await asyncTest('keeps a one-card overlap and reports overlap uncertainty', async () => {
+          resetScanScenario();
+          setScanFiles(['OVERLAP_A', 'OVERLAP_B']);
+          const overlapCard = v2Card({ cp: '4444', visible_label: '同卡', official_name: '超夢' });
+          countResultByImage.set('OVERLAP_A', validCount('(2)', '2'));
+          countResultByImage.set('OVERLAP_B', validCount('(2)', '2'));
+          cardResultByImage.set('OVERLAP_A', completeCardResult([overlapCard]));
+          cardResultByImage.set('OVERLAP_B', completeCardResult([{ ...overlapCard }]));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '超夢*2');
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.screenshot_overlap_uncertain), true);
+          equal(window.lastSmartHundoDiagnostics.overlap_decisions[0].ambiguous, true);
+        });
+
+        await asyncTest('keeps count and list replacements independent across request failures and redacts errors', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_FAIL']);
+          failedOperations.add('count:COUNT_FAIL');
+          cardResultByImage.set('COUNT_FAIL', completeCardResult([
+            v2Card({ cp: '10', visible_label: '成功清單', official_name: '鳳王' })
+          ]));
+          document.getElementById('st_hundo_leg').value = '77';
+          document.getElementById('st_hundo_leg').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('st_hundo_leg').value, '77', 'failed count never overwrites a manual count');
+          equal(document.getElementById('g_hundos').value, '鳳王', 'validated cards replace independently');
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_request_failed), true);
+
+          resetScanScenario();
+          setScanFiles(['CARD_FAIL']);
+          failedOperations.add('cards:CARD_FAIL');
+          countResultByImage.set('CARD_FAIL', validCount('(3)', '3'));
+          document.getElementById('g_hundos').value = '手動保留清單';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('st_hundo_leg').value, '3', 'validated count replaces independently');
+          equal(document.getElementById('g_hundos').value, '手動保留清單', 'failed card scan never promotes an old or partial AI list');
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_request_failed), true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'), true);
+          equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult);
+          const serializedAudit = JSON.stringify(window.lastSmartHundoDiagnostics);
+          ['test-key', 'Authorization', 'ORIGINAL_', 'RESIZED_', 'data:image/', 'classificationDataUrl', 'file', 'CARD_FAIL_SECRET', 'COUNT_FAIL_SECRET'].forEach(secret => {
             equal(serializedAudit.includes(secret), false, `audit excludes ${secret}`);
           });
         });
 
-        await asyncTest('preserves ordinary output and edited hundo list when smart retries fail', async () => {
-          fileReadCounts.clear();
-          routedRequests = [];
-          requestStageEvents = [];
-          failSmartRequests = true;
-          failedSmartIdentities = new Set();
-          setScanFiles(['PROFILE', 'HUNDO']);
-          document.getElementById('g_hundos').value = '手動編輯百神';
-          document.getElementById('g_level').value = '';
-          document.getElementById('aiAutoStatus').textContent = '';
+        await asyncTest('prevents every delayed mixed-batch status and diagnostic write from replacing the current smart session', async () => {
+          resetScanScenario();
+          setScanFiles(['PROFILE_DELAY', 'STALE_SMART']);
+          delayedOrdinaryIdentity = 'PROFILE_DELAY';
+          countResultByImage.set('STALE_SMART', validCount('(8)', '8'));
+          cardResultByImage.set('STALE_SMART', completeCardResult([
+            v2Card({ cp: '8000', visible_label: '舊批次', official_name: '夢幻' })
+          ]));
+          const staleScan = autoScan();
+          await new Promise(resolve => {
+            const waitForDelayedRequest = () => {
+              if (releaseDelayedOrdinary) resolve();
+              else nativeSetTimeout(waitForDelayedRequest, 0);
+            };
+            waitForDelayedRequest();
+          });
 
+          setScanFiles(['CURRENT_SMART']);
+          countResultByImage.set('CURRENT_SMART', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_SMART', completeCardResult([
+            v2Card({ cp: '3000', visible_label: '目前批次', official_name: '鳳王' })
+          ]));
           await autoScan();
+          const currentDiagnostics = window.lastSmartHundoDiagnostics;
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識1張卡片');
+          equal(document.getElementById('g_hundos').value, '鳳王');
+          equal(document.getElementById('st_hundo_leg').value, '3');
 
-          const smartRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_hundo_smart_extractor');
-          equal(smartRequests.length, 3, 'shared wrapper performs its bounded smart retries');
-          equal(document.getElementById('g_level').value, '50', 'completed ordinary fields remain applied');
-          equal(document.getElementById('g_hundos').value, '手動編輯百神', 'failed smart work preserves edited list');
-          equal(document.getElementById('aiAutoBtn').disabled, false, 'failure restores button');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('智慧百神辨識失敗'), true, 'failure status is explicit');
-          equal(document.getElementById('aiAutoStatus').textContent.includes('合併完成'), false, 'failure status is not success');
-          deepEqual(window.lastSmartHundoScanResult.screenshotIndexes, [1]);
-          deepEqual(window.lastSmartHundoScanResult.failedIndexes, [1]);
-          equal(window.lastSmartHundoScanResult.cards.length, 0);
-          equal(window.lastSmartHundoScanResult.screenshots.length, 0);
+          releaseDelayedOrdinary();
+          await staleScan;
+
+          equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識1張卡片');
+          equal(document.getElementById('g_hundos').value, '鳳王');
+          equal(document.getElementById('st_hundo_leg').value, '3');
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(window.lastSmartHundoScanResult, currentDiagnostics);
+        });
+
+        test('production listeners preserve inline behavior and clear AI ownership on manual input', () => {
+          document.getElementById('g_hundos').value = '';
+          document.getElementById('st_hundo_leg').value = '';
+          const session = beginSmartHundoScanSession();
+          markSmartHundoAiValue('g_hundos', 'AI 清單', session);
+          markSmartHundoAiValue('st_hundo_leg', '6', session);
+          document.getElementById('g_hundos').value = '手動清單';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+          document.getElementById('st_hundo_leg').value = '8';
+          document.getElementById('st_hundo_leg').dispatchEvent(new Event('input'));
+          beginSmartHundoScanSession();
+          equal(document.getElementById('g_hundos').value, '手動清單');
+          equal(document.getElementById('st_hundo_leg').value, '8');
+          equal(inlineHundoInputCalls > 0, true, 'addEventListener does not replace the existing inline handler');
+        });
+
+        await asyncTest('does not begin a smart session or overwrite diagnostics for an ordinary-only batch', async () => {
+          resetScanScenario();
+          setScanFiles(['PROFILE']);
+          const sentinel = { ordinary_only: true };
+          window.lastSmartHundoDiagnostics = sentinel;
+          window.lastSmartHundoScanResult = sentinel;
+          await autoScan();
+          equal(window.lastSmartHundoDiagnostics, sentinel);
+          equal(window.lastSmartHundoScanResult, sentinel);
         });
 
         const serializedLogs = JSON.stringify(loggedValues);
         equal(serializedLogs.includes('test-key'), false, 'logs omit the API key');
         equal(serializedLogs.includes('data:image/'), false, 'logs omit image data URLs');
+        equal(serializedLogs.includes('CARD_FAIL_SECRET'), false, 'logs omit thrown response details');
+        equal(serializedLogs.includes('COUNT_FAIL_SECRET'), false, 'logs omit thrown response details');
+        const safeErrorSummaries = loggedValues
+          .flat(2)
+          .filter(value => value && typeof value === 'object' && value.reasonCode === 'smart_hundo_request_failed');
+        equal(safeErrorSummaries.length >= 2, true, 'each failed logical operation emits a safe summary');
+        safeErrorSummaries.forEach(summary => {
+          deepEqual(Object.keys(summary), ['stage', 'name', 'httpStatus', 'reasonCode']);
+          equal(['hundo_count', 'hundo_cards'].includes(summary.stage), true);
+          equal(['Error'].includes(summary.name), true);
+          equal([502, 503].includes(summary.httpStatus), true);
+        });
 
         executionStatus = 'pass';
       } catch (error) {

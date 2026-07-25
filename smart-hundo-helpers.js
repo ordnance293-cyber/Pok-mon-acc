@@ -34,7 +34,6 @@
     const BACKGROUND_POSITION_VALUES = new Set(['none', 'near_pokemon_or_card_background', 'other', 'uncertain']);
     const BADGE_TYPE_VALUES = new Set(['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain']);
     const BACKGROUND_APPEARANCE_VALUES = new Set(['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
-    const STATE_VALUES = INDEPENDENT_STATE_VALUES;
     const RECOGNITION_VALUES = new Set(['recognized', 'partial', 'uncertain']);
     const HUNDO_COUNT_ACTIVE_TAB_VALUES = new Set(['pokemon', 'egg', 'unknown']);
     const HUNDO_COUNT_SOURCE_VALUES = new Set(['pokemon_search_result_summary', 'other', 'uncertain']);
@@ -174,11 +173,6 @@
     const normalizeCount = (value) => {
         const number = Number(value);
         return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
-    };
-
-    const normalizeState = (value) => {
-        const state = stringValue(value).toLowerCase();
-        return STATE_VALUES.has(state) ? state : 'uncertain';
     };
 
     const normalizeRawValue = (value, fallback = 'uncertain') => {
@@ -854,49 +848,6 @@
         };
     };
 
-    const normalizeCard = (card = {}, normalizeOfficialName) => ({
-        order: normalizeCoordinate(card?.order),
-        row: normalizeCoordinate(card?.row),
-        column: normalizeCoordinate(card?.column),
-        visible_label: stringValue(card?.visible_label),
-        official_name: normalizeWith(normalizeOfficialName, card?.official_name),
-        recognition_status: normalizeRecognitionStatus(card?.recognition_status),
-        species_confidence: clampConfidence(card?.species_confidence),
-        shiny_state: normalizeState(card?.shiny_state),
-        shiny_confidence: clampConfidence(card?.shiny_confidence),
-        purified_state: normalizeState(card?.purified_state),
-        purified_confidence: clampConfidence(card?.purified_confidence),
-        shadow_state: normalizeState(card?.shadow_state),
-        shadow_confidence: clampConfidence(card?.shadow_confidence)
-    });
-
-    const compareCards = (left, right) => (
-        left.order - right.order
-        || left.row - right.row
-        || left.column - right.column
-    );
-
-    const normalizeCards = (cards, normalizeOfficialName) => {
-        const seen = new Set();
-        return (Array.isArray(cards) ? cards : [])
-            .map(card => normalizeCard(card, normalizeOfficialName))
-            .filter(card => {
-                const position = `${card.order}|${card.row}|${card.column}`;
-                const identity = `${position}|${JSON.stringify(card)}`;
-                if (seen.has(identity)) return false;
-                seen.add(identity);
-                return true;
-            })
-            .sort(compareCards);
-    };
-
-    const normalizeLegacySmartHundoResult = (result = {}, normalizeNumber, normalizeOfficialName) => ({
-        hundo_leg: normalizeWith(normalizeNumber, result?.hundo_leg),
-        hundo_leg_confidence: clampConfidence(result?.hundo_leg_confidence),
-        detected_card_count: normalizeCount(result?.detected_card_count),
-        cards: normalizeCards(result?.cards, normalizeOfficialName)
-    });
-
     const HUNDO_REVIEW_REASON_MESSAGES = Object.freeze({
         species_uncertain: '物種需人工確認',
         shiny_uncertain: '色違狀態需人工確認',
@@ -1106,56 +1057,6 @@
         };
     };
 
-    const legacySmartHundoCardsToPokemonList = (cards = [], normalizeOfficialName, normalizePokemonList) => {
-        const normalizedCards = (Array.isArray(cards) ? cards : [])
-            .map(card => normalizeCard(card, normalizeOfficialName))
-            .sort(compareCards);
-        const usableNames = [];
-        let uncertainCount = 0;
-        let recognizedCount = 0;
-
-        normalizedCards.forEach(card => {
-            const usable = card.recognition_status === 'recognized' && card.official_name !== '';
-            const hasUncertainState = [card.shiny_state, card.purified_state, card.shadow_state].includes('uncertain');
-            if (!usable || hasUncertainState) uncertainCount += 1;
-            if (!usable) return;
-
-            const officialName = normalizeWith(normalizeOfficialName, card.official_name);
-            if (!officialName) {
-                uncertainCount += hasUncertainState ? 0 : 1;
-                return;
-            }
-            const prefix = `${card.shiny_state === 'yes' ? '色違' : ''}${card.shadow_state === 'yes' ? '暗影' : ''}`;
-            usableNames.push(`${prefix}${officialName}`);
-            recognizedCount += 1;
-        });
-
-        const rawList = usableNames.join(',');
-        return {
-            pokemon_list: normalizeWith(normalizePokemonList, rawList),
-            uncertain_count: uncertainCount,
-            recognized_count: recognizedCount
-        };
-    };
-
-    const mergeSmartHundoScanResults = (results = [], normalizeNumber, normalizeOfficialName, normalizePokemonList) => {
-        const normalizedResults = (Array.isArray(results) ? results : [])
-            .map(result => normalizeLegacySmartHundoResult(result, normalizeNumber, normalizeOfficialName));
-        const hundoLegValues = normalizedResults.map(result => result.hundo_leg).filter(Boolean);
-        const cards = normalizedResults.flatMap(result => result.cards);
-        const conversion = legacySmartHundoCardsToPokemonList(cards, normalizeOfficialName, normalizePokemonList);
-
-        return {
-            hundo_leg: hundoLegValues[0] || '',
-            cards,
-            pokemon_list: conversion.pokemon_list,
-            uncertain_count: conversion.uncertain_count,
-            recognized_count: conversion.recognized_count,
-            detected_card_count: normalizedResults.reduce((total, result) => total + result.detected_card_count, 0),
-            hundo_leg_conflict: new Set(hundoLegValues).size > 1
-        };
-    };
-
     const api = {
         normalizeSearchQuery,
         isSmartHundoClassification,
@@ -1168,7 +1069,6 @@
         mergeSmartHundoScreenshots,
         shapeSmartHundoDiagnostics,
         validateSmartHundoStructure,
-        normalizeLegacySmartHundoResult,
         normalizeHundoCountResult,
         validateHundoCountEvidence,
         mergeHundoCountResults,
@@ -1186,9 +1086,7 @@
         HUNDO_REVIEW_REASON_MESSAGES,
         buildHundoDisplayName,
         smartHundoCardsToPokemonList,
-        summarizeHundoManualReview,
-        legacySmartHundoCardsToPokemonList,
-        mergeSmartHundoScanResults
+        summarizeHundoManualReview
     };
 
     global.SmartHundoHelpers = api;
