@@ -115,11 +115,16 @@ Cutover 後移除 V1 schema、舊 `shadow_state`/`purified_state` prompt 格式�
 }
 ```
 
+- 色違由 `shiny_state` 表達。
+- 亮晶晶由 `lucky_state` 表達。
+- 我的最愛由 `favorite_state` 表達。
+- 暗影與淨化由互斥的 `rocket_state` 表達。
+- 紀念背卡與特別背卡由互斥的 `background_type` 表達。
 - shiny、lucky、favorite 是獨立維度。
 - shadow 與 purified 是單一 rocket 維度的互斥值。
 - commemorative 與 special 是單一 background 維度的互斥值。
 - 不定義 `global`、`global_background` 或 `全球背卡`。
-- legacy 或測試輸入若含 `global`，raw 值仍保留供診斷，normalized 與 effective 值都是 `uncertain`。
+- legacy 或測試輸入若含 `global`，raw 值仍保留供診斷，normalized 與 effective 值都是 `uncertain`；不得自動映射成 `commemorative`。
 
 每張 normalized card 保存：
 
@@ -209,6 +214,7 @@ V2 `HUNDO_SMART_SCHEMA` 不含 `hundo_leg`。root properties：
 ```js
 shiny_evidence: {
   present: boolean,
+  region_visibility: "clear" | "partially_occluded" | "cropped" | "not_visible" | "uncertain",
   position: "none" | "cp_area" | "lower_left" | "upper_right" | "around_pokemon" | "other" | "uncertain",
   color: "none" | "dark_blue" | "blue_black" | "teal_blue" | "dark_blue_teal" | "light_cyan" | "yellow" | "purple" | "other" | "uncertain",
   shape: "none" | "multiple_four_point_sparkles" | "single_radial_sparkle" | "five_point_star" | "flame_or_smoke" | "other" | "uncertain"
@@ -216,18 +222,21 @@ shiny_evidence: {
 
 lucky_evidence: {
   present: boolean,
+  region_visibility: "clear" | "partially_occluded" | "cropped" | "not_visible" | "uncertain",
   position: "none" | "behind_pokemon" | "other" | "uncertain",
   appearance: "none" | "large_gold_shimmering_background" | "other" | "uncertain"
 }
 
 favorite_evidence: {
   present: boolean,
+  region_visibility: "clear" | "partially_occluded" | "cropped" | "not_visible" | "uncertain",
   position: "none" | "upper_right" | "other" | "uncertain",
   appearance: "none" | "filled_yellow_five_point_star" | "other" | "uncertain"
 }
 
 rocket_evidence: {
   present: boolean,
+  region_visibility: "clear" | "partially_occluded" | "cropped" | "not_visible" | "uncertain",
   position: "none" | "lower_left" | "lower_side" | "around_pokemon" | "other" | "uncertain",
   color: "none" | "light_blue" | "light_cyan" | "purple" | "other" | "uncertain",
   shape: "none" | "single_radial_sparkle" | "purification_starburst" | "flower_like_symbol" | "purple_flame" | "purple_smoke" | "shadow_aura" | "other" | "uncertain"
@@ -235,11 +244,14 @@ rocket_evidence: {
 
 background_evidence: {
   present: boolean,
+  region_visibility: "clear" | "partially_occluded" | "cropped" | "not_visible" | "uncertain",
   position: "none" | "near_pokemon_or_card_background" | "other" | "uncertain",
   badge_type: "none" | "commemorative_location_badge" | "special_background_badge" | "other" | "uncertain",
   appearance: "none" | "location_style_background" | "event_special_background" | "other" | "uncertain"
 }
 ```
+
+`region_visibility` 是每一個 evidence object 的 required property。effective `no`、`normal` 或 `none` 只允許由 `region_visibility === "clear"`、`present === false` 與該 evidence 其餘欄位的負向值共同建立；其他 visibility 值不能建立負向狀態。
 
 ## 視覺驗證
 
@@ -252,6 +264,14 @@ background_evidence: {
 - `ENUMERATION_CONFIDENCE_THRESHOLD = 0.85`
 
 低於門檻、raw/evidence 互相矛盾或 evidence pattern 不合法時，effective state 為 `uncertain`，不能成為可見 prefix。
+
+所有負向狀態都需要正向的「區域可判讀」證據：
+
+- shiny/lucky/favorite 的 effective `no`，必須確認該狀態的相關區域完整可見且 clear，並且沒有相符符號或背景證據。
+- rocket 的 effective `normal`，必須確認 Pokémon 下側、左下與身體周圍相關區域完整可見且 clear，沒有暗影或淨化證據。
+- background 的 effective `none`，必須確認卡片背景與 badge 相關區域完整可見且 clear，沒有紀念或特別背卡證據。
+- 相關區域被遮擋、模糊、位於截圖裁切邊緣或不可見時，無論 raw model 回傳 `no`、`normal` 或 `none`，effective state 都必須是 `uncertain`。
+- 「沒有看到符號」本身不足以判定負向狀態；validator 必須先證明應檢查的區域 clear。
 
 ### Shiny
 
@@ -334,7 +354,11 @@ shiny=yes + lucky=yes + favorite=yes + purified + special + 超夢
 - `screenshot_overlap_uncertain`
 - `smart_hundo_request_failed`
 
-卡片保存自己的 reasons；screenshot 與 session 保存彙總。UI 顯示分項數量，不再只顯示「N 張卡片需人工確認」。
+卡片保存自己的 reasons；同一卡片可以同時有多個 reason，例如 shiny 與 background 都 uncertain。screenshot 與 session 保存分項彙總。
+
+人工確認細項可重複計數不同 reason，但「需人工確認的卡片總數」必須以穩定 card identity 去重；同一卡片即使有三個 reason，卡片總數仍只計一次。UI 同時顯示分項數量與去重後卡片總數，不再只顯示沒有原因拆解的「N 張卡片需人工確認」。
+
+normalized card 的 `card_id` 定義為 `${screenshot_index}:${order}:${row}:${column}`。V2 schema 要求 order、row、column 都是從 1 開始的整數；同一 screenshot 若模型輸出重複座標，結果視為 structurally incomplete，而不是以陣列索引猜測 identity。完成 structural replacement 與 overlap removal 後，manual-review summary 只對仍保留的 cards 以 `card_id` 建立 `Set`，因此同卡多個 reasons 只貢獻一個 review-card total。
 
 ## Dedicated 百神數管線
 
@@ -365,7 +389,7 @@ shiny=yes + lucky=yes + favorite=yes + purified + special + 超夢
 
 strict schema、root `additionalProperties: false`、全部 properties required。
 
-prompt 只依 active Pokémon tab 的語意關係與相對位置辨識 parenthesized result summary；顏色不是必要或決定性訊號。明確排除 egg `9/12`、storage `142/450`、CP、clock、battery、query `4*`、visible card count、detected count、cards length 與 screenshot count。
+prompt 只依 active Pokémon tab 的語意關係與相對位置辨識 parenthesized result summary；顏色不是必要或決定性訊號。明確排除 egg `9/12`、storage `142/450`、CP、clock、battery、query `4*`、visible card count、detected count、`cards.length` 與 screenshot count。
 
 ### Deterministic count validation
 
@@ -418,7 +442,9 @@ root completeness fields：
 - bottom edge checked 不是 true
 - finish reason 表示 length/truncation
 
-只有 structurally incomplete 可進行一次 controlled structural retry。狀態 uncertain、species uncertain 或低 enumeration confidence 不自動重試；低 enumeration confidence 只加入人工確認。
+只有 structurally incomplete 可進行一次 controlled structural retry。若執行重試，第二次結果是該 screenshot 的 replacement result：正規化、驗證、顯示、重疊判斷與 diagnostics 都只使用第二次結果；不得把第一次與第二次的 `cards[]` 串接、加總或共同轉成清單。第一次結果只可在安全 diagnostics 記錄「曾觸發重試」及觸發原因，不保存其 cards。
+
+狀態 uncertain、species uncertain 或低 enumeration confidence 不自動重試；低 enumeration confidence 只加入人工確認。
 
 ## 物種與型態
 
@@ -518,8 +544,10 @@ console 只記固定 stage、index、count 與 reason codes。OpenAI HTTP error 
 - 五種 evidence validators 與 confidence/contradiction。
 - purified Groudon 不成 shiny；valid shiny、favorite、lucky、shadow、shiny+shadow、兩種背景。
 - 12 與 15 cards、partial card、structural mismatch、finish reason truncation、單次 retry。
+- structural retry 的第二次 cards 完全替換第一次 cards，兩輪 cards 不得 append。
 - count `(3)`、full-width parentheses、slash/storage rejection、3/3/9 merge 與 tie。
 - suffix-prefix overlap 至少兩卡去重、單卡不去重、ambiguous review。
+- 同一卡片同時有三個 manual-review reasons 時，分項原因保留三項，review-card total 等於 1。
 - AI provenance、manual edit preservation、stale session rejection。
 - diagnostics/log 禁止 sensitive sentinels。
 - ordinary route/compression/detail/prompts、newItem、GAS、copywriting、manual save、team、resource、profile regression。
@@ -528,11 +556,31 @@ console 只記固定 stage、index、count 與 reason codes。OpenAI HTTP error 
 
 新增 `docs/manual-tests/smart-hundo-state-pipeline-v2.md`，記錄下列案例而不宣稱由 mock 驗證真實視覺準確度：
 
-1. `(3)` 與 egg `9/12`；鳳王、哲爾尼亞斯、淨化雷吉奇卡斯 → count `3`，list `鳳王,哲爾尼亞斯,雷吉奇卡斯`。
+1. 精確 count/card 驗收：
+
+   ```text
+   百神搜尋摘要：(3)
+   蛋：9/12
+   卡片：鳳王、哲爾尼亞斯、淨化雷吉奇卡斯
+
+   hundo_leg = 3
+   pokemon_list = 鳳王,哲爾尼亞斯,雷吉奇卡斯
+   ```
+
 2. 藏瑪然特、拉帝亞斯、蒼響、淨化固拉多、藏瑪然特、酋雷姆 → `藏瑪然特*2,拉帝亞斯,蒼響,固拉多,酋雷姆`。
 3. 鳳王、鳳王、閃電鳥、蒼響、蓋歐卡、炎帝 → `鳳王*2,閃電鳥,蒼響,蓋歐卡,炎帝`。
 4. 12 張以上 full/partial cards 全部有 card object。
 5. 垂直 overlap 至少兩張連續卡移除，合法重複仍保留。
+
+以下兩個 display/grouping 驗收同樣必須精確保留：
+
+```text
+普通固拉多＋淨化固拉多＋亮晶晶固拉多
+→ 固拉多*3
+
+普通固拉多＋色違固拉多＋特別背卡固拉多
+→ 固拉多,色違固拉多,特別背卡固拉多
+```
 
 ## 驗證與交付
 
