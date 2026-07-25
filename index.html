@@ -751,14 +751,14 @@
                             type: 'object',
                             additionalProperties: false,
                             properties: {
-                                order: { type: 'integer', minimum: 0 },
-                                row: { type: 'integer', minimum: 0 },
-                                column: { type: 'integer', minimum: 0 },
+                                order: { type: 'integer', minimum: 1 },
+                                row: { type: 'integer', minimum: 1 },
+                                column: { type: 'integer', minimum: 1 },
                                 visible_label: { type: 'string' },
                                 official_name: { type: 'string' },
                                 recognition_status: { type: 'string', enum: ['recognized', 'partial', 'uncertain'] },
                                 species_confidence: { type: 'number', minimum: 0, maximum: 1 },
-                                cp: { type: 'integer', minimum: 0 },
+                                cp: { type: 'string' },
                                 shiny_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
                                 shiny_confidence: { type: 'number', minimum: 0, maximum: 1 },
                                 shiny_evidence: {
@@ -766,9 +766,9 @@
                                     properties: {
                                         present: { type: 'boolean' },
                                         region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
-                                        position: { type: 'string', enum: ['none', 'cp_area', 'upper_right', 'lower_left', 'background', 'uncertain'] },
-                                        color: { type: 'string', enum: ['none', 'dark_blue_teal', 'light_cyan', 'gold', 'yellow', 'purple', 'uncertain'] },
-                                        shape: { type: 'string', enum: ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'uncertain'] }
+                                        position: { type: 'string', enum: ['none', 'cp_area', 'lower_left', 'upper_right', 'around_pokemon', 'other', 'uncertain'] },
+                                        color: { type: 'string', enum: ['none', 'dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal', 'light_cyan', 'yellow', 'purple', 'other', 'uncertain'] },
+                                        shape: { type: 'string', enum: ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'five_point_star', 'flame_or_smoke', 'other', 'uncertain'] }
                                     },
                                     required: ['present', 'region_visibility', 'position', 'color', 'shape']
                                 },
@@ -779,11 +779,10 @@
                                     properties: {
                                         present: { type: 'boolean' },
                                         region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
-                                        position: { type: 'string', enum: ['none', 'cp_area', 'upper_right', 'lower_left', 'background', 'uncertain'] },
-                                        color: { type: 'string', enum: ['none', 'dark_blue_teal', 'light_cyan', 'gold', 'yellow', 'purple', 'uncertain'] },
-                                        shape: { type: 'string', enum: ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'uncertain'] }
+                                        position: { type: 'string', enum: ['none', 'behind_pokemon', 'other', 'uncertain'] },
+                                        appearance: { type: 'string', enum: ['none', 'large_gold_shimmering_background', 'other', 'uncertain'] }
                                     },
-                                    required: ['present', 'region_visibility', 'position', 'color', 'shape']
+                                    required: ['present', 'region_visibility', 'position', 'appearance']
                                 },
                                 favorite_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
                                 favorite_confidence: { type: 'number', minimum: 0, maximum: 1 },
@@ -792,8 +791,8 @@
                                     properties: {
                                         present: { type: 'boolean' },
                                         region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
-                                        position: { type: 'string', enum: ['none', 'upper_right', 'uncertain'] },
-                                        appearance: { type: 'string', enum: ['none', 'filled_yellow_five_point_star', 'uncertain'] }
+                                        position: { type: 'string', enum: ['none', 'upper_right', 'other', 'uncertain'] },
+                                        appearance: { type: 'string', enum: ['none', 'filled_yellow_five_point_star', 'other', 'uncertain'] }
                                     },
                                     required: ['present', 'region_visibility', 'position', 'appearance']
                                 },
@@ -804,9 +803,9 @@
                                     properties: {
                                         present: { type: 'boolean' },
                                         region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
-                                        position: { type: 'string', enum: ['none', 'cp_area', 'upper_right', 'lower_left', 'background', 'uncertain'] },
-                                        color: { type: 'string', enum: ['none', 'dark_blue_teal', 'light_cyan', 'gold', 'yellow', 'purple', 'uncertain'] },
-                                        shape: { type: 'string', enum: ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'uncertain'] }
+                                        position: { type: 'string', enum: ['none', 'lower_left', 'lower_side', 'around_pokemon', 'other', 'uncertain'] },
+                                        color: { type: 'string', enum: ['none', 'light_blue', 'light_cyan', 'purple', 'other', 'uncertain'] },
+                                        shape: { type: 'string', enum: ['none', 'single_radial_sparkle', 'purification_starburst', 'flower_like_symbol', 'purple_flame', 'purple_smoke', 'shadow_aura', 'other', 'uncertain'] }
                                     },
                                     required: ['present', 'region_visibility', 'position', 'color', 'shape']
                                 },
@@ -817,9 +816,9 @@
                                     properties: {
                                         present: { type: 'boolean' },
                                         region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
-                                        position: { type: 'string', enum: ['none', 'background', 'uncertain'] },
-                                        badge_type: { type: 'string', enum: ['none', 'commemorative', 'special', 'uncertain'] },
-                                        appearance: { type: 'string', enum: ['none', 'location_badge', 'event_badge', 'special_background', 'uncertain'] }
+                                        position: { type: 'string', enum: ['none', 'near_pokemon_or_card_background', 'other', 'uncertain'] },
+                                        badge_type: { type: 'string', enum: ['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain'] },
+                                        appearance: { type: 'string', enum: ['none', 'location_style_background', 'event_special_background', 'other', 'uncertain'] }
                                     },
                                     required: ['present', 'region_visibility', 'position', 'badge_type', 'appearance']
                                 }

@@ -14,14 +14,19 @@
         background: 'uncertain'
     });
     const REGION_VISIBILITY_VALUES = new Set(['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain']);
-    const SPARKLE_POSITION_VALUES = new Set(['none', 'cp_area', 'upper_right', 'lower_left', 'background', 'uncertain']);
-    const SPARKLE_COLOR_VALUES = new Set(['none', 'dark_blue_teal', 'light_cyan', 'gold', 'yellow', 'purple', 'uncertain']);
-    const SPARKLE_SHAPE_VALUES = new Set(['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'uncertain']);
-    const APPEARANCE_POSITION_VALUES = new Set(['none', 'upper_right', 'uncertain']);
-    const APPEARANCE_VALUES = new Set(['none', 'filled_yellow_five_point_star', 'uncertain']);
-    const BACKGROUND_POSITION_VALUES = new Set(['none', 'background', 'uncertain']);
-    const BADGE_TYPE_VALUES = new Set(['none', 'commemorative', 'special', 'uncertain']);
-    const BACKGROUND_APPEARANCE_VALUES = new Set(['none', 'location_badge', 'event_badge', 'special_background', 'uncertain']);
+    const SHINY_POSITION_VALUES = new Set(['none', 'cp_area', 'lower_left', 'upper_right', 'around_pokemon', 'other', 'uncertain']);
+    const SHINY_COLOR_VALUES = new Set(['none', 'dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal', 'light_cyan', 'yellow', 'purple', 'other', 'uncertain']);
+    const SHINY_SHAPE_VALUES = new Set(['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'five_point_star', 'flame_or_smoke', 'other', 'uncertain']);
+    const LUCKY_POSITION_VALUES = new Set(['none', 'behind_pokemon', 'other', 'uncertain']);
+    const LUCKY_APPEARANCE_VALUES = new Set(['none', 'large_gold_shimmering_background', 'other', 'uncertain']);
+    const FAVORITE_POSITION_VALUES = new Set(['none', 'upper_right', 'other', 'uncertain']);
+    const FAVORITE_APPEARANCE_VALUES = new Set(['none', 'filled_yellow_five_point_star', 'other', 'uncertain']);
+    const ROCKET_POSITION_VALUES = new Set(['none', 'lower_left', 'lower_side', 'around_pokemon', 'other', 'uncertain']);
+    const ROCKET_COLOR_VALUES = new Set(['none', 'light_blue', 'light_cyan', 'purple', 'other', 'uncertain']);
+    const ROCKET_SHAPE_VALUES = new Set(['none', 'single_radial_sparkle', 'purification_starburst', 'flower_like_symbol', 'purple_flame', 'purple_smoke', 'shadow_aura', 'other', 'uncertain']);
+    const BACKGROUND_POSITION_VALUES = new Set(['none', 'near_pokemon_or_card_background', 'other', 'uncertain']);
+    const BADGE_TYPE_VALUES = new Set(['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain']);
+    const BACKGROUND_APPEARANCE_VALUES = new Set(['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
     const STATE_VALUES = INDEPENDENT_STATE_VALUES;
     const RECOGNITION_VALUES = new Set(['recognized', 'partial', 'uncertain']);
 
@@ -53,6 +58,11 @@
     const normalizeCoordinate = (value) => {
         const number = Number(value);
         return Number.isFinite(number) ? Math.trunc(number) : 0;
+    };
+
+    const normalizeSmartHundoCoordinate = (value) => {
+        const number = Number(value);
+        return Number.isInteger(number) && number >= 1 ? number : 0;
     };
 
     const normalizeCount = (value) => {
@@ -89,19 +99,34 @@
         return 'uncertain';
     };
 
-    const normalizeSparkleEvidence = (evidence = {}) => ({
+    const normalizeShinyEvidence = (evidence = {}) => ({
         present: evidence?.present === true,
         region_visibility: normalizeEnum(evidence?.region_visibility, REGION_VISIBILITY_VALUES),
-        position: normalizeEnum(evidence?.position, SPARKLE_POSITION_VALUES, 'none'),
-        color: normalizeEnum(evidence?.color, SPARKLE_COLOR_VALUES, 'none'),
-        shape: normalizeEnum(evidence?.shape, SPARKLE_SHAPE_VALUES, 'none')
+        position: normalizeEnum(evidence?.position, SHINY_POSITION_VALUES, 'none'),
+        color: normalizeEnum(evidence?.color, SHINY_COLOR_VALUES, 'none'),
+        shape: normalizeEnum(evidence?.shape, SHINY_SHAPE_VALUES, 'none')
     });
 
-    const normalizeAppearanceEvidence = (evidence = {}) => ({
+    const normalizeLuckyEvidence = (evidence = {}) => ({
         present: evidence?.present === true,
         region_visibility: normalizeEnum(evidence?.region_visibility, REGION_VISIBILITY_VALUES),
-        position: normalizeEnum(evidence?.position, APPEARANCE_POSITION_VALUES, 'none'),
-        appearance: normalizeEnum(evidence?.appearance, APPEARANCE_VALUES, 'none')
+        position: normalizeEnum(evidence?.position, LUCKY_POSITION_VALUES, 'none'),
+        appearance: normalizeEnum(evidence?.appearance, LUCKY_APPEARANCE_VALUES, 'none')
+    });
+
+    const normalizeFavoriteEvidence = (evidence = {}) => ({
+        present: evidence?.present === true,
+        region_visibility: normalizeEnum(evidence?.region_visibility, REGION_VISIBILITY_VALUES),
+        position: normalizeEnum(evidence?.position, FAVORITE_POSITION_VALUES, 'none'),
+        appearance: normalizeEnum(evidence?.appearance, FAVORITE_APPEARANCE_VALUES, 'none')
+    });
+
+    const normalizeRocketEvidence = (evidence = {}) => ({
+        present: evidence?.present === true,
+        region_visibility: normalizeEnum(evidence?.region_visibility, REGION_VISIBILITY_VALUES),
+        position: normalizeEnum(evidence?.position, ROCKET_POSITION_VALUES, 'none'),
+        color: normalizeEnum(evidence?.color, ROCKET_COLOR_VALUES, 'none'),
+        shape: normalizeEnum(evidence?.shape, ROCKET_SHAPE_VALUES, 'none')
     });
 
     const normalizeBackgroundEvidence = (evidence = {}) => ({
@@ -140,15 +165,15 @@
             background: card?.background_confidence
         };
         const rawEvidence = {
-            shiny: normalizeSparkleEvidence(card?.shiny_evidence),
-            lucky: normalizeSparkleEvidence(card?.lucky_evidence),
-            favorite: normalizeAppearanceEvidence(card?.favorite_evidence),
-            rocket: normalizeSparkleEvidence(card?.rocket_evidence),
+            shiny: normalizeShinyEvidence(card?.shiny_evidence),
+            lucky: normalizeLuckyEvidence(card?.lucky_evidence),
+            favorite: normalizeFavoriteEvidence(card?.favorite_evidence),
+            rocket: normalizeRocketEvidence(card?.rocket_evidence),
             background: normalizeBackgroundEvidence(card?.background_evidence)
         };
-        const order = normalizeCoordinate(card?.order);
-        const row = normalizeCoordinate(card?.row);
-        const column = normalizeCoordinate(card?.column);
+        const order = normalizeSmartHundoCoordinate(card?.order);
+        const row = normalizeSmartHundoCoordinate(card?.row);
+        const column = normalizeSmartHundoCoordinate(card?.column);
 
         return {
             screenshot_index: screenshotIndex,
@@ -160,7 +185,7 @@
             official_name: normalizeWith(normalizeOfficialName, card?.official_name),
             recognition_status: normalizeRecognitionStatus(card?.recognition_status),
             species_confidence: clampConfidence(card?.species_confidence),
-            cp: normalizeCount(card?.cp),
+            cp: stringValue(card?.cp),
             shiny_state: normalizeIndependentState(rawStates.shiny),
             shiny_confidence: clampConfidence(rawConfidences.shiny),
             lucky_state: normalizeIndependentState(rawStates.lucky),
@@ -171,11 +196,17 @@
             rocket_confidence: clampConfidence(rawConfidences.rocket),
             background_type: normalizeBackgroundType(rawStates.background),
             background_confidence: clampConfidence(rawConfidences.background),
+            shiny_evidence: rawEvidence.shiny,
+            lucky_evidence: rawEvidence.lucky,
+            favorite_evidence: rawEvidence.favorite,
+            rocket_evidence: rawEvidence.rocket,
+            background_evidence: rawEvidence.background,
             effective_shiny_state: EFFECTIVE_STATE_DEFAULTS.shiny,
             effective_lucky_state: EFFECTIVE_STATE_DEFAULTS.lucky,
             effective_favorite_state: EFFECTIVE_STATE_DEFAULTS.favorite,
             effective_rocket_state: EFFECTIVE_STATE_DEFAULTS.rocket,
             effective_background_type: EFFECTIVE_STATE_DEFAULTS.background,
+            manual_review_reasons: [],
             raw: {
                 states: rawStates,
                 confidences: rawConfidences,

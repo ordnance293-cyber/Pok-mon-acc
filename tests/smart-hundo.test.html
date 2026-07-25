@@ -119,6 +119,21 @@
         appearance: 'none',
         ...overrides
       });
+      const luckyEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        appearance: 'none',
+        ...overrides
+      });
+      const rocketEvidence = (overrides = {}) => ({
+        present: false,
+        region_visibility: 'clear',
+        position: 'none',
+        color: 'none',
+        shape: 'none',
+        ...overrides
+      });
       const backgroundEvidence = (overrides = {}) => ({
         present: false,
         region_visibility: 'clear',
@@ -141,13 +156,13 @@
         shiny_evidence: sparkleEvidence(),
         lucky_state: 'no',
         lucky_confidence: 0.9,
-        lucky_evidence: sparkleEvidence(),
+        lucky_evidence: luckyEvidence(),
         favorite_state: 'no',
         favorite_confidence: 0.9,
         favorite_evidence: appearanceEvidence(),
         rocket_state: 'normal',
         rocket_confidence: 0.9,
-        rocket_evidence: sparkleEvidence(),
+        rocket_evidence: rocketEvidence(),
         background_type: 'none',
         background_confidence: 0.9,
         background_evidence: backgroundEvidence(),
@@ -239,6 +254,36 @@
           equal(normalized.card_id, '4:1:1:1');
         });
 
+        test('preserves dedicated evidence, CP text, and review fields on normalized cards', () => {
+          const normalized = normalizeSmartHundoCard(card({
+            cp: 3104,
+            shiny_evidence: sparkleEvidence({ position: 'around_pokemon', color: 'blue_black', shape: 'other' }),
+            lucky_evidence: luckyEvidence({ present: true, position: 'behind_pokemon', appearance: 'large_gold_shimmering_background' }),
+            favorite_evidence: appearanceEvidence({ present: true, position: 'upper_right', appearance: 'other' }),
+            rocket_evidence: rocketEvidence({ present: true, position: 'lower_side', color: 'light_blue', shape: 'purification_starburst' }),
+            background_evidence: backgroundEvidence({
+              present: true,
+              position: 'near_pokemon_or_card_background',
+              badge_type: 'special_background_badge',
+              appearance: 'event_special_background'
+            })
+          }), normalizeName, { screenshotIndex: 2 });
+          equal(normalized.cp, '3104');
+          deepEqual(normalized.shiny_evidence, sparkleEvidence({ position: 'around_pokemon', color: 'blue_black', shape: 'other' }));
+          deepEqual(normalized.lucky_evidence, luckyEvidence({ present: true, position: 'behind_pokemon', appearance: 'large_gold_shimmering_background' }));
+          deepEqual(normalized.favorite_evidence, appearanceEvidence({ present: true, position: 'upper_right', appearance: 'other' }));
+          deepEqual(normalized.rocket_evidence, rocketEvidence({ present: true, position: 'lower_side', color: 'light_blue', shape: 'purification_starburst' }));
+          deepEqual(normalized.background_evidence, backgroundEvidence({
+            present: true,
+            position: 'near_pokemon_or_card_background',
+            badge_type: 'special_background_badge',
+            appearance: 'event_special_background'
+          }));
+          deepEqual(normalized.manual_review_reasons, []);
+          deepEqual(normalized.raw.evidence.lucky, normalized.lucky_evidence);
+          equal(normalized.card_id, '2:1:1:1');
+        });
+
         test('adapts legacy shadow and purified into one rocket state', () => {
           equal(adaptLegacyRocketState({ shadow_state: 'yes', purified_state: 'no' }), 'shadow');
           equal(adaptLegacyRocketState({ shadow_state: 'no', purified_state: 'yes' }), 'purified');
@@ -268,6 +313,12 @@
           equal(normalized.enumeration_confidence, 1);
           equal(normalized.cards.length, 2);
           equal(normalized.cards[1].card_id, '7:1:1:1');
+        });
+
+        test('uses an explicit invalid-coordinate sentinel without inventing a card position', () => {
+          const normalized = normalizeSmartHundoCard(card({ order: -1, row: 1, column: 1 }), normalizeName, { screenshotIndex: 3 });
+          equal(normalized.order, 0);
+          equal(normalized.card_id, '3:0:1:1');
         });
 
         test('converts purified, shiny, shadow, and duplicate cards without a purified prefix', () => {
@@ -475,6 +526,10 @@
         ]);
         const smartCardSchema = HUNDO_SMART_SCHEMA.schema.properties.cards.items;
         equal(smartCardSchema.additionalProperties, false);
+        ['order', 'row', 'column'].forEach(field => {
+          equal(smartCardSchema.properties[field].minimum, 1, `${field} is 1-based`);
+        });
+        deepEqual(smartCardSchema.properties.cp, { type: 'string' });
         ['hundo_leg', 'shadow_state', 'purified_state'].forEach(field => {
           equal(Object.hasOwn(smartCardSchema.properties, field), false, field);
         });
@@ -485,6 +540,19 @@
           equal(evidenceSchema.required.includes('region_visibility'), true, `${field} requires visibility`);
           deepEqual(evidenceSchema.required, Object.keys(evidenceSchema.properties), `${field} requires every property`);
         });
+        deepEqual(smartCardSchema.properties.shiny_evidence.properties.position.enum, ['none', 'cp_area', 'lower_left', 'upper_right', 'around_pokemon', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.shiny_evidence.properties.color.enum, ['none', 'dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal', 'light_cyan', 'yellow', 'purple', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.shiny_evidence.properties.shape.enum, ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'five_point_star', 'flame_or_smoke', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.lucky_evidence.properties.position.enum, ['none', 'behind_pokemon', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.lucky_evidence.properties.appearance.enum, ['none', 'large_gold_shimmering_background', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.favorite_evidence.properties.position.enum, ['none', 'upper_right', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.favorite_evidence.properties.appearance.enum, ['none', 'filled_yellow_five_point_star', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.rocket_evidence.properties.position.enum, ['none', 'lower_left', 'lower_side', 'around_pokemon', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.rocket_evidence.properties.color.enum, ['none', 'light_blue', 'light_cyan', 'purple', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.rocket_evidence.properties.shape.enum, ['none', 'single_radial_sparkle', 'purification_starburst', 'flower_like_symbol', 'purple_flame', 'purple_smoke', 'shadow_aura', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.background_evidence.properties.position.enum, ['none', 'near_pokemon_or_card_background', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.background_evidence.properties.badge_type.enum, ['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.background_evidence.properties.appearance.enum, ['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
         const smartPrompt = buildSmartHundoPrompt();
         [
           'HUNDO_LEGENDARY_SCREEN', '傳說的寶可夢,幻,究極異獸&4*', '禁止重新分類', '所有可見的寶可夢卡片',
