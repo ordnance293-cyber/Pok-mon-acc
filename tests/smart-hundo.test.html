@@ -248,7 +248,11 @@
           validateHundoCardStates,
           normalizeHundoCountResult,
           validateHundoCountEvidence,
-          mergeHundoCountResults
+          mergeHundoCountResults,
+          normalizeVisibleLabel,
+          detectScreenshotOverlap,
+          mergeSmartHundoScreenshots,
+          shapeSmartHundoDiagnostics
         } = helpers;
         const smartHundoCardsToPokemonList = legacySmartHundoCardsToPokemonList;
         const normalizedCard = (overrides = {}) => normalizeSmartHundoCard(
@@ -1166,6 +1170,395 @@
           equal(ignoresInvalid.hundo_leg, '3');
           ['cards', 'cards_length', 'detected_card_count', 'visible_count', 'screenshot_index'].forEach(field => {
             equal(Object.hasOwn(ignoresInvalid, field), false, `merge API excludes ${field}`);
+          });
+        });
+
+        test('normalizes overlap labels with NFKC and every Unicode whitespace removed', () => {
+          equal(normalizeVisibleLabel(' Ｐ I\u00a0K\nA\u3000'), 'PIKA');
+        });
+
+        test('removes only a two-card suffix-prefix overlap and restores scroll order from reversed uploads', () => {
+          const firstScreenshot = {
+            index: 8,
+            cards: [
+              validatedCard({ card_id: '8:1:1:1', order: 1, cp: '50', official_name: 'Lead', visible_label: 'LEAD' }),
+              validatedCard({ card_id: '8:2:2:1', order: 2, cp: '100', official_name: 'Pikachu', visible_label: ' Ｐ I\u00a0K A ' }),
+              validatedCard({ card_id: '8:3:3:1', order: 3, cp: '200', official_name: 'Eevee', visible_label: 'EE VEE' })
+            ]
+          };
+          const secondScreenshot = {
+            index: 3,
+            cards: [
+              validatedCard({ card_id: '3:1:1:1', order: 1, cp: '100', official_name: 'Pikachu', visible_label: 'PIKA' }),
+              validatedCard({ card_id: '3:2:2:1', order: 2, cp: '200', official_name: 'Eevee', visible_label: 'ＥＥＶＥＥ' }),
+              validatedCard({ card_id: '3:3:3:1', order: 3, cp: '300', official_name: 'Tail', visible_label: 'TAIL' })
+            ]
+          };
+
+          deepEqual(detectScreenshotOverlap(firstScreenshot, secondScreenshot), {
+            direction: 'left_suffix_right_prefix',
+            overlap_count: 2,
+            ambiguous: false,
+            matched_card_ids: ['3:1:1:1', '3:2:2:1'],
+            manual_review_reasons: []
+          });
+
+          const merged = mergeSmartHundoScreenshots([secondScreenshot, firstScreenshot], normalizeName);
+          deepEqual(merged.cards.map(item => item.card_id), [
+            '8:1:1:1',
+            '8:2:2:1',
+            '8:3:3:1',
+            '3:3:3:1'
+          ], 'upload order cannot select the scroll direction');
+          equal(merged.overlap_decisions.length, 1);
+          equal(merged.overlap_decisions[0].direction, 'right_suffix_left_prefix');
+          deepEqual(merged.manual_review_reasons, []);
+        });
+
+        test('keeps a single matching boundary card and marks overlap uncertainty', () => {
+          const left = {
+            index: 0,
+            cards: [
+              validatedCard({ card_id: '0:1:1:1', order: 1, cp: '10', official_name: 'Lead', visible_label: 'LEAD' }),
+              validatedCard({ card_id: '0:2:2:1', order: 2, cp: '20', official_name: 'Same', visible_label: 'SAME' })
+            ]
+          };
+          const right = {
+            index: 1,
+            cards: [
+              validatedCard({ card_id: '1:1:1:1', order: 1, cp: '20', official_name: 'Same', visible_label: 'SAME' }),
+              validatedCard({ card_id: '1:2:2:1', order: 2, cp: '30', official_name: 'Tail', visible_label: 'TAIL' })
+            ]
+          };
+          const decision = detectScreenshotOverlap(left, right);
+          equal(decision.direction, 'none');
+          equal(decision.overlap_count, 1);
+          equal(decision.ambiguous, true);
+          deepEqual(decision.matched_card_ids, ['1:1:1:1']);
+          deepEqual(decision.manual_review_reasons, ['screenshot_overlap_uncertain']);
+
+          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          equal(merged.cards.length, 4);
+          deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
+        });
+
+        test('never deduplicates identical non-boundary cards without a consecutive boundary sequence', () => {
+          const duplicate = {
+            cp: '99',
+            official_name: 'LegitimateDuplicate',
+            visible_label: 'SAME',
+            effective_shiny_state: 'yes'
+          };
+          const merged = mergeSmartHundoScreenshots([
+            {
+              index: 0,
+              cards: [
+                validatedCard({ card_id: '0:1:1:1', order: 1, official_name: 'A' }),
+                validatedCard({ card_id: '0:2:2:1', order: 2, ...duplicate }),
+                validatedCard({ card_id: '0:3:3:1', order: 3, official_name: 'B' })
+              ]
+            },
+            {
+              index: 1,
+              cards: [
+                validatedCard({ card_id: '1:1:1:1', order: 1, official_name: 'C' }),
+                validatedCard({ card_id: '1:2:2:1', order: 2, ...duplicate }),
+                validatedCard({ card_id: '1:3:3:1', order: 3, official_name: 'D' })
+              ]
+            }
+          ], normalizeName);
+          equal(merged.cards.length, 6);
+          equal(merged.cards.filter(item => item.official_name === 'LegitimateDuplicate').length, 2);
+          deepEqual(merged.manual_review_reasons, []);
+        });
+
+        test('requires CP, official name, normalized label, and all five effective states in every overlap signature', () => {
+          const signatureFields = [
+            ['cp', 'different-cp'],
+            ['official_name', 'DifferentName'],
+            ['visible_label', 'DIFFERENT_LABEL'],
+            ['effective_shiny_state', 'yes'],
+            ['effective_lucky_state', 'yes'],
+            ['effective_favorite_state', 'yes'],
+            ['effective_rocket_state', 'shadow'],
+            ['effective_background_type', 'special']
+          ];
+          signatureFields.forEach(([field, changedValue]) => {
+            const sharedFirst = validatedCard({
+              card_id: '0:2:2:1',
+              order: 2,
+              cp: '100',
+              official_name: 'First',
+              visible_label: 'FIRST'
+            });
+            const sharedSecond = validatedCard({
+              card_id: '0:3:3:1',
+              order: 3,
+              cp: '200',
+              official_name: 'Second',
+              visible_label: 'SECOND'
+            });
+            const merged = mergeSmartHundoScreenshots([
+              {
+                index: 0,
+                cards: [
+                  validatedCard({ card_id: '0:1:1:1', order: 1, official_name: 'Lead' }),
+                  sharedFirst,
+                  sharedSecond
+                ]
+              },
+              {
+                index: 1,
+                cards: [
+                  { ...sharedFirst, card_id: '1:1:1:1', order: 1 },
+                  { ...sharedSecond, card_id: '1:2:2:1', order: 2, [field]: changedValue },
+                  validatedCard({ card_id: '1:3:3:1', order: 3, official_name: 'Tail' })
+                ]
+              }
+            ], normalizeName);
+            equal(merged.cards.length, 6, `${field} mismatch prevents overlap removal`);
+            equal(merged.overlap_decisions[0].overlap_count, 0, `${field} remains in the signature`);
+          });
+        });
+
+        test('preserves all cards when both boundary directions have competing strong overlaps', () => {
+          const signatureCard = (cardId, order, name) => validatedCard({
+            card_id: cardId,
+            order,
+            cp: name,
+            official_name: name,
+            visible_label: name
+          });
+          const left = {
+            index: 0,
+            cards: [
+              signatureCard('0:1:1:1', 1, 'X'),
+              signatureCard('0:2:2:1', 2, 'Y'),
+              signatureCard('0:3:3:1', 3, 'Z'),
+              signatureCard('0:4:4:1', 4, 'W')
+            ]
+          };
+          const right = {
+            index: 1,
+            cards: [
+              signatureCard('1:1:1:1', 1, 'Z'),
+              signatureCard('1:2:2:1', 2, 'W'),
+              signatureCard('1:3:3:1', 3, 'X'),
+              signatureCard('1:4:4:1', 4, 'Y')
+            ]
+          };
+          const decision = detectScreenshotOverlap(left, right);
+          equal(decision.direction, 'none');
+          equal(decision.overlap_count, 2);
+          equal(decision.ambiguous, true);
+          deepEqual(decision.matched_card_ids, [
+            '1:1:1:1',
+            '1:2:2:1',
+            '0:1:1:1',
+            '0:2:2:1'
+          ]);
+          deepEqual(decision.manual_review_reasons, ['screenshot_overlap_uncertain']);
+          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          equal(merged.cards.length, 8);
+          deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
+        });
+
+        test('preserves all screenshots when multiple strong sequences compete for one boundary', () => {
+          const sequence = (screenshotIndex) => [
+            validatedCard({
+              card_id: `${screenshotIndex}:2:2:1`,
+              order: 2,
+              cp: '100',
+              official_name: 'First',
+              visible_label: 'FIRST'
+            }),
+            validatedCard({
+              card_id: `${screenshotIndex}:3:3:1`,
+              order: 3,
+              cp: '200',
+              official_name: 'Second',
+              visible_label: 'SECOND'
+            })
+          ];
+          const firstSequence = sequence(0);
+          const competingSequence = sequence(2);
+          const merged = mergeSmartHundoScreenshots([
+            {
+              index: 0,
+              cards: [
+                validatedCard({ card_id: '0:1:1:1', order: 1, official_name: 'LeadA' }),
+                ...firstSequence
+              ]
+            },
+            {
+              index: 1,
+              cards: [
+                { ...firstSequence[0], card_id: '1:1:1:1', order: 1 },
+                { ...firstSequence[1], card_id: '1:2:2:1', order: 2 },
+                validatedCard({ card_id: '1:3:3:1', order: 3, official_name: 'Tail' })
+              ]
+            },
+            {
+              index: 2,
+              cards: [
+                validatedCard({ card_id: '2:1:1:1', order: 1, official_name: 'LeadB' }),
+                ...competingSequence
+              ]
+            }
+          ], normalizeName);
+          equal(merged.cards.length, 9);
+          equal(merged.overlap_decisions.filter(decision => decision.ambiguous).length, 2);
+          deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
+        });
+
+        test('constructs exact safe diagnostics by allowlist without serializing unknown session fields', () => {
+          const safeCard = validatedCard({
+            card_id: '4:1:1:1',
+            screenshot_index: 4,
+            order: 1,
+            row: 1,
+            column: 1,
+            cp: '1234',
+            visible_label: 'Safe Label',
+            official_name: 'SafeName',
+            recognition_status: 'recognized',
+            raw: {
+              states: { shiny: 'no', lucky: 'yes', favorite: 'no', rocket: 'purified', background: 'special' },
+              confidences: { shiny: .91, lucky: .92, favorite: .93, rocket: .94, background: .95 },
+              evidence: {
+                shiny: sparkleEvidence(),
+                lucky: luckyEvidence({ present: true, position: 'behind_pokemon', appearance: 'large_gold_shimmering_background' }),
+                favorite: appearanceEvidence(),
+                rocket: cyanPurificationEvidence(),
+                background: backgroundEvidence({
+                  present: true,
+                  position: 'near_pokemon_or_card_background',
+                  badge_type: 'special_background_badge',
+                  appearance: 'event_special_background'
+                })
+              },
+              originalDataUrl: 'data:image/png;base64,ORIGINAL_RAW'
+            },
+            effective_shiny_state: 'no',
+            effective_lucky_state: 'yes',
+            effective_favorite_state: 'no',
+            effective_rocket_state: 'purified',
+            effective_background_type: 'special',
+            manual_review_reasons: ['favorite_uncertain'],
+            classificationDataUrl: 'data:image/png;base64,COUNT_CROP_CARD'
+          });
+          const diagnostics = shapeSmartHundoDiagnostics({
+            scan_session_id: 'scan-17',
+            screenshots: [{
+              index: 4,
+              classification: {
+                image_type: 'HUNDO_LEGENDARY_SCREEN',
+                search_query: 'safe-query',
+                classificationDataUrl: 'data:image/png;base64,CLASSIFICATION'
+              },
+              normalized_search_query: 'safe-query',
+              raw_count_text: '(3)',
+              validated_count: '3',
+              count_source: 'pokemon_search_result_summary',
+              count_confidence: .98,
+              detected_card_count: 1,
+              cards_length: 1,
+              scan_complete: true,
+              bottom_edge_checked: true,
+              finish_reason: 'stop',
+              structural_retry_used: true,
+              structural_retry_reason: ['scan_incomplete'],
+              cards: [safeCard],
+              originalDataUrl: 'data:image/png;base64,ORIGINAL_SCREEN',
+              countCrop: 'data:image/png;base64,COUNT_CROP_SCREEN',
+              file: { name: 'File', secret: 'firebase-api-key' }
+            }],
+            count_candidates: [
+              { value: '3', votes: 2, confidence: .98, Authorization: 'Bearer test-key' }
+            ],
+            count_conflict: false,
+            overlap_decisions: [{
+              direction: 'left_suffix_right_prefix',
+              overlap_count: 2,
+              ambiguous: false,
+              matched_card_ids: ['4:1:1:1', '5:1:1:1'],
+              manual_review_reasons: []
+            }],
+            manual_review_reasons: ['favorite_uncertain'],
+            pokemon_list: 'SafeName',
+            apiKey: 'test-key',
+            Authorization: 'Bearer firebase-api-key',
+            credentials: 'gas-secret',
+            account: 'account;password',
+            request: { originalDataUrl: 'data:image/png;base64,ORIGINAL_REQUEST' }
+          });
+
+          deepEqual(Object.keys(diagnostics), [
+            'scan_session_id',
+            'screenshots',
+            'count_candidates',
+            'count_conflict',
+            'overlap_decisions',
+            'manual_review_reasons',
+            'pokemon_list'
+          ]);
+          deepEqual(diagnostics.screenshots[0].classification, {
+            image_type: 'HUNDO_LEGENDARY_SCREEN',
+            search_query: 'safe-query'
+          });
+          deepEqual(diagnostics.screenshots[0].cards[0].raw_states, {
+            shiny: 'no',
+            lucky: 'yes',
+            favorite: 'no',
+            rocket: 'purified',
+            background: 'special'
+          });
+          deepEqual(diagnostics.screenshots[0].cards[0].effective_states, {
+            shiny: 'no',
+            lucky: 'yes',
+            favorite: 'no',
+            rocket: 'purified',
+            background: 'special'
+          });
+          equal(diagnostics.screenshots[0].cards[0].raw_confidences.rocket, .94);
+          deepEqual(diagnostics.screenshots[0].cards[0].raw_evidence.rocket, {
+            present: true,
+            region_visibility: 'clear',
+            position: 'lower_left',
+            color: 'light_cyan',
+            shape: 'single_radial_sparkle'
+          });
+          deepEqual(diagnostics.count_candidates, [{ value: '3', votes: 2, confidence: .98 }]);
+          deepEqual(diagnostics.overlap_decisions, [{
+            direction: 'left_suffix_right_prefix',
+            overlap_count: 2,
+            ambiguous: false,
+            matched_card_ids: ['4:1:1:1', '5:1:1:1'],
+            manual_review_reasons: []
+          }]);
+          deepEqual(diagnostics.manual_review_reasons, ['favorite_uncertain']);
+          equal(diagnostics.screenshots[0].scan_complete, true);
+          equal(diagnostics.screenshots[0].finish_reason, 'stop');
+          equal(diagnostics.screenshots[0].structural_retry_used, true);
+          deepEqual(diagnostics.screenshots[0].structural_retry_reason, ['scan_incomplete']);
+          equal(diagnostics.pokemon_list, 'SafeName');
+
+          const serialized = JSON.stringify(diagnostics);
+          [
+            'test-key',
+            'Authorization',
+            'Bearer',
+            'data:image/',
+            'ORIGINAL_',
+            'COUNT_CROP_',
+            'classificationDataUrl',
+            'originalDataUrl',
+            'File',
+            'firebase-api-key',
+            'gas-secret',
+            'account;password'
+          ].forEach(sentinel => {
+            equal(serialized.includes(sentinel), false, `diagnostics excludes ${sentinel}`);
           });
         });
 
