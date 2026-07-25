@@ -268,17 +268,17 @@
     });
 
     const HUNDO_REVIEW_REASON_MESSAGES = Object.freeze({
-        species_uncertain: '寶可夢名稱不確定，請人工確認',
-        shiny_uncertain: '色違狀態不確定，請人工確認',
-        lucky_uncertain: '幸運狀態不確定，請人工確認',
-        favorite_uncertain: '最愛狀態不確定，請人工確認',
-        rocket_state_uncertain: '暗影或淨化狀態不確定，請人工確認',
-        background_uncertain: '背卡狀態不確定，請人工確認',
-        incomplete_card_enumeration: '卡片列舉不完整，請人工確認',
-        hundo_count_uncertain: '百神數不確定，請人工確認',
-        hundo_count_conflict: '百神數有衝突',
-        screenshot_overlap_uncertain: '截圖重疊不確定，請人工確認',
-        smart_hundo_request_failed: '智慧百神辨識失敗'
+        species_uncertain: '物種需人工確認',
+        shiny_uncertain: '色違狀態需人工確認',
+        lucky_uncertain: '亮晶晶狀態需人工確認',
+        favorite_uncertain: '我的最愛狀態需人工確認',
+        rocket_state_uncertain: '暗影／淨化狀態需人工確認',
+        background_uncertain: '背卡狀態需人工確認',
+        incomplete_card_enumeration: '卡片列舉不完整，需人工確認',
+        hundo_count_uncertain: '百神總數需人工確認',
+        hundo_count_conflict: '百神總數結果衝突',
+        screenshot_overlap_uncertain: '截圖重疊需人工確認',
+        smart_hundo_request_failed: '百神辨識請求失敗'
     });
 
     const isHundoReviewReason = (reason) => Object.prototype.hasOwnProperty.call(HUNDO_REVIEW_REASON_MESSAGES, reason);
@@ -305,7 +305,7 @@
                 : Array.isArray(screenshotReasons?.reasons)
                     ? screenshotReasons.reasons
                     : [];
-        return [...new Set(reasons.filter(isHundoReviewReason))];
+        return reasons.filter(isHundoReviewReason);
     };
 
     const buildHundoDisplayName = (card = {}, normalizeOfficialName) => {

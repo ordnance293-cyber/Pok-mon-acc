@@ -348,30 +348,46 @@
           equal(buildHundoDisplayName(modelYesButRejected, normalizeName), '超夢');
         });
 
+        test('exposes the exact manual-review reason messages', () => {
+          deepEqual(HUNDO_REVIEW_REASON_MESSAGES, {
+            species_uncertain: '物種需人工確認',
+            shiny_uncertain: '色違狀態需人工確認',
+            lucky_uncertain: '亮晶晶狀態需人工確認',
+            favorite_uncertain: '我的最愛狀態需人工確認',
+            rocket_state_uncertain: '暗影／淨化狀態需人工確認',
+            background_uncertain: '背卡狀態需人工確認',
+            incomplete_card_enumeration: '卡片列舉不完整，需人工確認',
+            hundo_count_uncertain: '百神總數需人工確認',
+            hundo_count_conflict: '百神總數結果衝突',
+            screenshot_overlap_uncertain: '截圖重疊需人工確認',
+            smart_hundo_request_failed: '百神辨識請求失敗'
+          });
+        });
+
         test('keeps hidden states internal and groups by display name', () => {
           const cards = [
-            validatedCard({ official_name: '超夢', effective_rocket_state: 'normal' }),
-            validatedCard({ official_name: '超夢', effective_rocket_state: 'purified' }),
-            validatedCard({ official_name: '超夢', effective_lucky_state: 'yes' })
+            validatedCard({ official_name: '固拉多', effective_rocket_state: 'normal' }),
+            validatedCard({ official_name: '固拉多', effective_rocket_state: 'purified' }),
+            validatedCard({ official_name: '固拉多', effective_lucky_state: 'yes' })
           ];
-          equal(effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list, '超夢*3');
+          equal(effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list, '固拉多*3');
         });
 
         test('separates visible states in fixed prefix order without one-count suffixes', () => {
           const cards = [
-            validatedCard({ official_name: '超夢' }),
-            validatedCard({ official_name: '超夢', effective_shiny_state: 'yes' }),
-            validatedCard({ official_name: '超夢', effective_background_type: 'special' })
+            validatedCard({ official_name: '固拉多' }),
+            validatedCard({ official_name: '固拉多', effective_shiny_state: 'yes' }),
+            validatedCard({ official_name: '固拉多', effective_background_type: 'special' })
           ];
           const pokemonList = effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list;
-          equal(pokemonList, '超夢,色違超夢,特別背卡超夢');
+          equal(pokemonList, '固拉多,色違固拉多,特別背卡固拉多');
           equal(pokemonList.includes('*1'), false);
           equal(buildHundoDisplayName(validatedCard({
-            official_name: '固拉多',
+            official_name: '超夢',
             effective_shiny_state: 'yes',
             effective_rocket_state: 'shadow',
             effective_background_type: 'special'
-          }), normalizeName), '色違暗影特別背卡固拉多');
+          }), normalizeName), '色違暗影特別背卡超夢');
         });
 
         test('counts a reviewed card once while retaining every reason bucket', () => {
@@ -392,6 +408,15 @@
             HUNDO_REVIEW_REASON_MESSAGES.lucky_uncertain,
             HUNDO_REVIEW_REASON_MESSAGES.background_uncertain
           ]);
+        });
+
+        test('retains repeated screenshot review reason occurrences without adding card reviews', () => {
+          const summary = summarizeHundoManualReview([], [
+            'incomplete_card_enumeration',
+            'incomplete_card_enumeration'
+          ]);
+          equal(summary.review_card_count, 0);
+          equal(summary.review_reason_counts.incomplete_card_enumeration, 2);
         });
 
         test('keeps recognized species visible with effective uncertainty review reasons', () => {
