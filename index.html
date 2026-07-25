@@ -1684,7 +1684,7 @@ ${outputTemplate}
             }
         };
 
-        const buildSmartHundoPrompt = () => `你是寶可夢 GO 百分百傳說、幻與究極異獸清單的嚴格視覺抽取器。
+        const buildSmartHundoPromptV1 = () => `你是寶可夢 GO 百分百傳說、幻與究極異獸清單的嚴格視覺抽取器。
 
 這張圖片已經在前一階段確認為 HUNDO_LEGENDARY_SCREEN，搜尋條件已確認為「${HUNDO_LEGENDARY_FILTER}」。禁止重新分類、禁止更改搜尋條件，也不要推論其他圖片。
 
@@ -1714,6 +1714,42 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
 
 【G. Schema 與一致性】
 只輸出符合提供 JSON Schema 的 JSON。不得輸出 Markdown、程式碼框、說明文字或額外欄位。不得遺漏可見卡片，不得發明隱藏或畫面外卡片、不可見卡片或未顯示的狀態，不得輸出重複卡片；每張可見卡片只輸出一次，所有卡片的位置與 order 必須一致。`;
+
+        const buildSmartHundoPrompt = ({ structuralRetry = false } = {}) => `你是寶可夢 GO 百分百傳說、幻與究極異獸卡片的嚴格全圖視覺抽取器。
+
+這張圖片已確認為 HUNDO_LEGENDARY_SCREEN，搜尋條件已確認為「${HUNDO_LEGENDARY_FILTER}」。禁止重新分類或更改搜尋條件。一次處理整張原始圖片，不得拆成每隻寶可夢的個別操作。
+
+【A. 完整卡片列舉與位置】
+掃描全圖由上到下、每列由左到右；超過 10 張仍必須繼續掃描到底部邊緣。完整可見與部分可見（包括任一邊緣被裁切）的卡片，每一張都各自輸出。detected_card_count 必須等於所有完整與部分可見卡片的總數；只有確實掃描完整張圖片才可填 scan_complete=true，只有確實檢查圖片最底部邊緣才可填 bottom_edge_checked=true。
+order、row、column 都從 1 開始並且每張卡片的座標組合必須唯一。不得把相鄰卡片合併，不得把相鄰卡片的符號或狀態轉移給本卡，也不得發明隱藏、畫面外或不存在的卡片。相同物種、CP 或標籤可能合法重複；合法重複的寶可夢仍是不同卡片，必須依各自位置分別輸出。
+
+【B. 物種與型態】
+official_name 必須是官方繁體中文物種與型態名稱，主要依身體輪廓、頭部、四肢、翅膀、尾巴、角、裝甲與型態專屬視覺特徵辨識。顏色只能輔助。visible_label 只能作為次要證據，可能是暱稱、IV、151515、100、百分比、縮寫、招式、使用者符號或其他前後綴，絕對不得直接複製為 official_name。
+例如標籤「GLO蒼響151515」不得成為 official_name；只有外觀可靠支持時才可輸出「蒼響」。保留可靠可辨識的型態，例如焰白酋雷姆、闇黑酋雷姆、蒼響劍王（蒼響／劍之王）、藏瑪然特盾王（藏瑪然特／盾之王）、起源型態與融合型態。視覺與標籤衝突或證據不可靠時，official_name 留空、recognition_status 填 uncertain，不得猜測或發明；部分可見卡片仍必須留在 cards。
+
+【C. 五維狀態 evidence 共通規則】
+shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判斷，證據只能歸屬同一張卡。每一個 evidence object 都必須明確填 region_visibility：區域完整可判讀填 clear，被遮擋填 partially_occluded，位於裁切邊緣填 cropped，不可見填 not_visible，仍無法判斷填 uncertain。只有 region_visibility=clear 且沒有相符正向證據時，才可輸出 no、normal 或 none；partially_occluded、cropped、not_visible 或 uncertain 不得建立負向狀態。顏色或身體顏色本身永遠不足。
+
+【D. shiny_evidence】
+色違 yes 需要同卡 CP area 的 dark-blue／teal 的 multiple_four_point_sparkles，也就是 position=cp_area、color=dark_blue／blue_black／teal_blue／dark_blue_teal、shape=multiple_four_point_sparkles；只靠寶可夢身體顏色不足。light-cyan 單一 radial sparkle 是淨化線索，不是色違；相鄰卡片、背景或最愛星號不得轉移。
+
+【E. lucky_evidence】
+亮晶晶 yes 需要同卡寶可夢後方的大面積 large_gold_shimmering_background，也就是 position=behind_pokemon、appearance=large_gold_shimmering_background。單一黃色星星、一般黃色或身體顏色都不是亮晶晶證據。
+
+【F. favorite_evidence】
+我的最愛 yes 需要同卡 upper-right 的 filled_yellow_five_point_star，也就是 position=upper_right、appearance=filled_yellow_five_point_star。深藍四角閃光、其他徽章或相鄰卡片星號都不是最愛證據。
+
+【G. rocket_evidence】
+淨化 purified 需要同卡 lower-side／lower-left 的 light-cyan 的 radial／starburst 淨化證據：position=lower_left／lower_side、color=light_blue／light_cyan、shape=single_radial_sparkle／purification_starburst／flower_like_symbol。暗影 shadow 需要同卡 lower-left 或身體周圍的 purple flame／smoke／aura：color=purple、shape=purple_flame／purple_smoke／shadow_aura。紫色身體、藍色身體或相鄰卡片效果本身不足。raw 狀態與 evidence 衝突時填 uncertain，不得在兩者之間猜測。
+
+【H. background_evidence】
+紀念背卡 commemorative 需要實際 commemorative／location badge 與相符 location background，即 badge_type=commemorative_location_badge、appearance=location_style_background。特殊背卡 special 需要實際 event-special badge／background，即 badge_type=special_background_badge、appearance=event_special_background。只有顏色、一般背景或相鄰卡片裝飾不足；證據不可靠時填 uncertain。
+
+【I. JSON 一致性】
+只輸出符合提供 JSON Schema 的 JSON，不得輸出 Markdown、說明文字或額外欄位。cards 不得截短、串接推測或去除合法重複卡片。enumeration_confidence 只表示完整列舉信心，不得用它刪除已看見的完整或部分卡片。${structuralRetry ? `
+
+【結構重試】
+前一次回覆的卡片列舉或輸出結構不完整。請重新從原始全圖頂端掃描到最底部邊緣，產生一份完整 replacement result；不得沿用、附加、合併或摘要前一次 cards。` : ''}`;
 
         const buildHundoCountPrompt = () => `你是寶可夢 GO 百神數的嚴格視覺抽取器。
 
@@ -1837,10 +1873,9 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
                     const data = await resp.json();
                     const result = parseJsonText(parseOpenAIMessageContent(data));
                     if (!options.includeMetadata) return result;
-                    const finishReason = data?.choices?.[0]?.finish_reason;
                     return {
                         result,
-                        finish_reason: typeof finishReason === 'string' ? finishReason : ''
+                        finish_reason: String(data?.choices?.[0]?.finish_reason || '')
                     };
                 } catch (error) {
                     if (attempt === maxRetries) throw error;
@@ -1861,12 +1896,74 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
 
         const requestSmartHundoExtractionV1 = async (apiKey, originalDataUrl, statusUpdater) => requestOpenAiJsonSchema(
             apiKey,
-            buildSmartHundoPrompt(),
+            buildSmartHundoPromptV1(),
             originalDataUrl,
             HUNDO_SMART_SCHEMA_V1,
             statusUpdater,
             { imageDetail: HUNDO_SMART_IMAGE_DETAIL }
         );
+
+        const requestSmartHundoExtractionV2 = async (
+            apiKey,
+            originalDataUrl,
+            statusUpdater,
+            { structuralRetry = false } = {}
+        ) => requestOpenAiJsonSchema(
+            apiKey,
+            buildSmartHundoPrompt({ structuralRetry }),
+            originalDataUrl,
+            HUNDO_SMART_SCHEMA,
+            statusUpdater,
+            { imageDetail: HUNDO_SMART_IMAGE_DETAIL, includeMetadata: true }
+        );
+
+        const requestSmartHundoWithStructuralRetry = async ({
+            apiKey,
+            originalDataUrl,
+            imageIndex,
+            statusUpdater
+        } = {}) => {
+            const helpers = globalThis.SmartHundoHelpers;
+            if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
+
+            const runAttempt = async (structuralRetry) => {
+                const response = await requestSmartHundoExtractionV2(
+                    apiKey,
+                    originalDataUrl,
+                    statusUpdater,
+                    { structuralRetry }
+                );
+                const result = helpers.normalizeSmartHundoResult(
+                    response?.result,
+                    normalizePokemonBaseName,
+                    { screenshotIndex: imageIndex }
+                );
+                const finishReason = String(response?.finish_reason || '');
+                return {
+                    result,
+                    finish_reason: finishReason,
+                    structure: helpers.validateSmartHundoStructure(result, finishReason)
+                };
+            };
+
+            const firstAttempt = await runAttempt(false);
+            if (firstAttempt.structure.structurally_complete) {
+                return {
+                    ...firstAttempt,
+                    structural_retry_used: false,
+                    structural_retry_reason: [],
+                    attempt_count: 1
+                };
+            }
+
+            const secondAttempt = await runAttempt(true);
+            return {
+                ...secondAttempt,
+                structural_retry_used: true,
+                structural_retry_reason: [...firstAttempt.structure.reasons],
+                attempt_count: 2
+            };
+        };
 
         const smartHundoScan = async ({ apiKey, originalDataUrl, imageIndex, statusUpdater } = {}) => {
             const helpers = globalThis.SmartHundoHelpers;

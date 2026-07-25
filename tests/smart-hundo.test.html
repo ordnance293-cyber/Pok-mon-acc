@@ -227,6 +227,7 @@
           adaptLegacyRocketState,
           normalizeSmartHundoCard,
           normalizeSmartHundoResult: normalizeSmartHundoResultV2,
+          validateSmartHundoStructure,
           normalizeLegacySmartHundoResult,
           legacySmartHundoCardsToPokemonList,
           buildHundoDisplayName,
@@ -255,6 +256,12 @@
           normalizeName,
           { screenshotIndex: 0 }
         );
+        const makeCards = (count, overrides = {}) => Array.from({ length: count }, (_, index) => card({
+          order: index + 1,
+          row: Math.floor(index / 3) + 1,
+          column: (index % 3) + 1,
+          ...overrides
+        }));
 
         test('normalizes each required hundo query variant', () => {
           const canonical = '傳說的寶可夢,幻,究極異獸&4*';
@@ -761,6 +768,77 @@
           equal(normalized.cards[1].card_id, '7:1:1:1');
         });
 
+        test('preserves complete 12-card and 15-card enumerations during normalization', () => {
+          [12, 15].forEach(count => {
+            const normalized = normalizeSmartHundoResultV2({
+              detected_card_count: count,
+              scan_complete: true,
+              bottom_edge_checked: true,
+              enumeration_confidence: 0.99,
+              cards: makeCards(count)
+            }, normalizeName, { screenshotIndex: 4 });
+            equal(normalized.cards.length, count, `${count} cards survive`);
+            equal(normalized.detected_card_count, count, `${count} detected cards survive`);
+            equal(normalized.cards.at(-1).card_id.startsWith('4:'), true, `${count} cards receive screenshot identity`);
+          });
+        });
+
+        test('retains a partial visible card with no reliable official name', () => {
+          const normalized = normalizeSmartHundoResultV2({
+            detected_card_count: 1,
+            scan_complete: true,
+            bottom_edge_checked: true,
+            enumeration_confidence: 0.8,
+            cards: makeCards(1, {
+              visible_label: 'GLO蒼響151515',
+              official_name: '',
+              recognition_status: 'partial',
+              species_confidence: 0.2
+            })
+          }, normalizeName, { screenshotIndex: 5 });
+          equal(normalized.cards.length, 1);
+          equal(normalized.cards[0].official_name, '');
+          equal(normalized.cards[0].recognition_status, 'partial');
+          equal(normalized.cards[0].visible_label, 'GLO蒼響151515');
+        });
+
+        test('marks every structural incompleteness condition without using confidence or uncertainty', () => {
+          const complete = {
+            detected_card_count: 2,
+            scan_complete: true,
+            bottom_edge_checked: true,
+            enumeration_confidence: 0.01,
+            cards: makeCards(2, {
+              official_name: '',
+              recognition_status: 'uncertain',
+              shiny_state: 'uncertain'
+            })
+          };
+          deepEqual(validateSmartHundoStructure(complete, 'stop'), {
+            structurally_complete: true,
+            reasons: [],
+            detected_card_count: 2,
+            cards_length: 2,
+            scan_complete: true,
+            bottom_edge_checked: true,
+            finish_reason: 'stop'
+          });
+
+          const cases = [
+            [{ ...complete, detected_card_count: 15 }, 'stop', 'detected_card_count_mismatch'],
+            [{ ...complete, scan_complete: false }, 'stop', 'scan_incomplete'],
+            [{ ...complete, bottom_edge_checked: false }, 'stop', 'bottom_edge_not_checked'],
+            [{ ...complete, cards: [complete.cards[0], { ...complete.cards[1], order: 1, row: 1, column: 1 }] }, 'stop', 'duplicate_card_coordinates'],
+            [{ ...complete, cards: [{ ...complete.cards[0], order: 0 }, complete.cards[1]] }, 'stop', 'invalid_card_coordinates'],
+            [complete, 'length', 'finish_reason_length']
+          ];
+          cases.forEach(([result, finishReason, reason]) => {
+            const structure = validateSmartHundoStructure(result, finishReason);
+            equal(structure.structurally_complete, false, reason);
+            equal(structure.reasons.includes(reason), true, reason);
+          });
+        });
+
         test('uses an explicit invalid-coordinate sentinel without inventing a card position', () => {
           const normalized = normalizeSmartHundoCard(card({ order: -1, row: 1, column: 1 }), normalizeName, { screenshotIndex: 3 });
           equal(normalized.order, 0);
@@ -1220,7 +1298,7 @@
 
         const pageModule = moduleMatch[1]
           .replace(/^\s*import\s+[^;]+;\s*$/gm, '')
-          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA_V1, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV1, smartHundoScan });';
+          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA_V1, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPromptV1, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV1, requestSmartHundoExtractionV2, requestSmartHundoWithStructuralRetry, smartHundoScan });';
         (0, eval)(pageModule);
 
         equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
@@ -1241,6 +1319,8 @@
         await smartHundoScan({ apiKey: 'test-key', originalDataUrl, imageIndex: 2 });
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
         equal(lastPayload.messages[0].content[1].image_url.url, originalDataUrl);
+        equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_smart_extractor');
+        equal(lastPayload.messages[0].content[0].text, buildSmartHundoPromptV1(), 'production smart scan remains on the V1 prompt');
         equal(smartRequestCount, 1);
         equal(JSON.stringify(lastPayload).includes('test-key'), false);
         equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
@@ -1284,6 +1364,31 @@
         equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_count_extractor');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
         equal(lastPayload.messages[0].content[1].image_url.url.startsWith('data:image/png'), true);
+        installStrictOpenAiFetchMock(async () => ({
+          ok: true,
+          json: async () => ({
+            choices: [{
+              finish_reason: 7,
+              message: {
+                content: JSON.stringify({
+                  hundo_leg: '',
+                  hundo_leg_confidence: 0,
+                  detected_card_count: 0,
+                  cards: []
+                })
+              }
+            }]
+          })
+        }));
+        const coercedMetadata = await requestOpenAiJsonSchema(
+          'test-key',
+          'metadata contract',
+          originalDataUrl,
+          HUNDO_SMART_SCHEMA_V1,
+          null,
+          { includeMetadata: true }
+        );
+        equal(coercedMetadata.finish_reason, '7', 'metadata finish reason is always a safe string');
         await assertRejects(globalThis.fetch('https://example.invalid/never', {
           body: JSON.stringify({ response_format: { json_schema: HUNDO_COUNT_SCHEMA } })
         }), 'unknown URL');
@@ -1329,20 +1434,20 @@
         deepEqual(smartCardSchema.properties.background_evidence.properties.position.enum, ['none', 'near_pokemon_or_card_background', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.background_evidence.properties.badge_type.enum, ['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.background_evidence.properties.appearance.enum, ['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
-        const smartPrompt = buildSmartHundoPrompt();
+        const smartPromptV1 = buildSmartHundoPromptV1();
         [
           'HUNDO_LEGENDARY_SCREEN', '傳說的寶可夢,幻,究極異獸&4*', '禁止重新分類', '所有可見的寶可夢卡片',
           '部分可見', '由上到下、由左到右', '官方繁體中文名稱', 'visible_label', '次要佐證', '不能取代視覺辨識',
           'shiny、purified、shadow', '分別獨立判斷', 'uncertain', '搜尋欄', '非寶可夢卡片', '不可見卡片', '重複卡片',
           'JSON Schema', '不得輸出 Markdown', '額外欄位'
-        ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt protects ${fragment}`));
+        ].forEach(fragment => equal(smartPromptV1.includes(fragment), true, `V1 smart prompt protects ${fragment}`));
         [
           'recognized：僅在實際物種與型態可可靠辨識時使用',
           'partial：僅在卡片或證據只部分可見且辨識未完成時使用',
           '除非物種本身仍可可靠辨識，否則 official_name 留空',
           'uncertain：僅在證據衝突或過於模糊而無法可靠辨識時使用'
-        ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt defines ${fragment}`));
-        test('contains the complete A-G smart prompt contract', () => {
+        ].forEach(fragment => equal(smartPromptV1.includes(fragment), true, `V1 smart prompt defines ${fragment}`));
+        test('keeps the complete A-G V1 smart prompt contract', () => {
           const requiredBySection = {
             A: [
               '【A. 卡片列舉與位置】', '完整可見或部分可見', '由上到下、由左到右', 'order 必須從 1 開始',
@@ -1375,9 +1480,153 @@
             ]
           };
           Object.entries(requiredBySection).forEach(([section, fragments]) => {
-            fragments.forEach(fragment => equal(smartPrompt.includes(fragment), true, `smart prompt section ${section} includes ${fragment}`));
+            fragments.forEach(fragment => equal(smartPromptV1.includes(fragment), true, `V1 smart prompt section ${section} includes ${fragment}`));
           });
-          equal(smartPrompt.includes('所有狀態證據都必須屬於同一張正在判定的卡片'), true, 'same-card evidence ownership is explicit');
+          equal(smartPromptV1.includes('所有狀態證據都必須屬於同一張正在判定的卡片'), true, 'same-card evidence ownership is explicit');
+        });
+        test('stages the complete V2 enumeration, species, and five-evidence prompt', () => {
+          const smartPrompt = buildSmartHundoPrompt();
+          [
+            '全圖由上到下、每列由左到右', '超過 10 張仍必須繼續掃描到底部邊緣',
+            '完整可見與部分可見', '每一張都各自輸出', '不得把相鄰卡片的符號或狀態轉移',
+            '合法重複的寶可夢仍是不同卡片', '不得發明',
+            '身體輪廓、頭部、四肢、翅膀、尾巴、角、裝甲', 'visible_label 只能作為次要證據',
+            'GLO蒼響151515', 'official_name 留空', 'recognition_status 填 uncertain',
+            '焰白酋雷姆', '闇黑酋雷姆', '蒼響劍王', '藏瑪然特盾王', '起源型態', '融合型態',
+            'dark-blue／teal 的 multiple_four_point_sparkles', 'CP area',
+            'large_gold_shimmering_background', 'filled_yellow_five_point_star', 'upper-right',
+            'light-cyan 的 radial／starburst', 'purple flame／smoke／aura',
+            'commemorative／location badge', 'event-special badge／background',
+            'position=cp_area', 'color=dark_blue／blue_black／teal_blue／dark_blue_teal',
+            'position=behind_pokemon', 'position=upper_right',
+            'color=light_blue／light_cyan', 'shape=purple_flame／purple_smoke／shadow_aura',
+            'badge_type=commemorative_location_badge', 'badge_type=special_background_badge',
+            'region_visibility', 'clear', 'partially_occluded', 'cropped',
+            '顏色或身體顏色本身永遠不足'
+          ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `V2 smart prompt protects ${fragment}`));
+        });
+        const v2Result = (count, officialName, overrides = {}) => ({
+          detected_card_count: count,
+          scan_complete: true,
+          bottom_edge_checked: true,
+          enumeration_confidence: 0.99,
+          cards: makeCards(count, { official_name: officialName }),
+          ...overrides
+        });
+        await asyncTest('retries one structurally incomplete V2 extraction and replaces every first-attempt field', async () => {
+          const attempts = [];
+          const canvasCallsBeforeV2 = canvasCalls;
+          installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
+            attempts.push({ payload, schemaName });
+            const content = attempts.length === 1
+              ? v2Result(15, '第一次卡片', {
+                enumeration_confidence: 0.91,
+                cards: makeCards(10, { official_name: '第一次卡片' })
+              })
+              : v2Result(15, '夢幻', { enumeration_confidence: 0.97 });
+            return {
+              ok: true,
+              json: async () => ({
+                choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
+              })
+            };
+          });
+
+          const retried = await requestSmartHundoWithStructuralRetry({
+            apiKey: 'test-key',
+            originalDataUrl,
+            imageIndex: 9
+          });
+          equal(attempts.length, 2, 'one logical retry makes exactly two extraction calls');
+          attempts.forEach(({ payload, schemaName }) => {
+            equal(schemaName, 'pokemon_go_hundo_smart_extractor_v2');
+            equal(payload.messages[0].content[1].image_url.url, originalDataUrl);
+            equal(payload.messages[0].content[1].image_url.detail, 'high');
+          });
+          equal(attempts[0].payload.messages[0].content[0].text, buildSmartHundoPrompt());
+          equal(attempts[1].payload.messages[0].content[0].text.includes('結構重試'), true);
+          equal(canvasCalls, canvasCallsBeforeV2, 'V2 never resizes or JPEG-compresses the original');
+          equal(retried.result.detected_card_count, 15);
+          equal(retried.result.enumeration_confidence, 0.97);
+          equal(retried.result.cards.length, 15);
+          equal(retried.result.cards.every(item => item.official_name === '夢幻'), true);
+          equal(retried.result.cards.some(item => item.official_name === '第一次卡片'), false);
+          equal(retried.result.cards.every(item => item.card_id.startsWith('9:')), true);
+          equal(retried.finish_reason, 'stop');
+          equal(retried.structure.structurally_complete, true);
+          equal(retried.structural_retry_used, true);
+          deepEqual(retried.structural_retry_reason, ['detected_card_count_mismatch']);
+          equal(retried.attempt_count, 2);
+        });
+
+        await asyncTest('does not structurally retry low-confidence uncertain cards', async () => {
+          let attempts = 0;
+          installStrictOpenAiFetchMock(async () => {
+            attempts += 1;
+            const content = v2Result(1, '', {
+              enumeration_confidence: 0.05,
+              cards: makeCards(1, {
+                official_name: '',
+                recognition_status: 'uncertain',
+                species_confidence: 0.05,
+                shiny_state: 'uncertain',
+                shiny_confidence: 0.01
+              })
+            });
+            return {
+              ok: true,
+              json: async () => ({
+                choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
+              })
+            };
+          });
+          const uncertain = await requestSmartHundoWithStructuralRetry({
+            apiKey: 'test-key',
+            originalDataUrl,
+            imageIndex: 10
+          });
+          equal(attempts, 1);
+          equal(uncertain.result.enumeration_confidence, 0.05);
+          equal(uncertain.result.cards[0].recognition_status, 'uncertain');
+          equal(uncertain.structure.structurally_complete, true);
+          equal(uncertain.structural_retry_used, false);
+          deepEqual(uncertain.structural_retry_reason, []);
+          equal(uncertain.attempt_count, 1);
+        });
+
+        await asyncTest('uses an incomplete second V2 result as the sole replacement result', async () => {
+          let attempts = 0;
+          installStrictOpenAiFetchMock(async () => {
+            attempts += 1;
+            const content = attempts === 1
+              ? v2Result(2, '第一次完整名稱', { scan_complete: false })
+              : v2Result(4, '第二次不完整名稱', {
+                bottom_edge_checked: false,
+                enumeration_confidence: 0.22,
+                cards: makeCards(3, { official_name: '第二次不完整名稱' })
+              });
+            return {
+              ok: true,
+              json: async () => ({
+                choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
+              })
+            };
+          });
+          const replaced = await requestSmartHundoWithStructuralRetry({
+            apiKey: 'test-key',
+            originalDataUrl,
+            imageIndex: 11
+          });
+          equal(attempts, 2);
+          equal(replaced.result.detected_card_count, 4);
+          equal(replaced.result.bottom_edge_checked, false);
+          equal(replaced.result.enumeration_confidence, 0.22);
+          equal(replaced.result.cards.length, 3);
+          equal(replaced.result.cards.every(item => item.official_name === '第二次不完整名稱'), true);
+          equal(replaced.result.cards.some(item => item.official_name === '第一次完整名稱'), false);
+          equal(replaced.structure.structurally_complete, false);
+          deepEqual(replaced.structural_retry_reason, ['scan_incomplete']);
+          equal(replaced.attempt_count, 2);
         });
         test('harness error channels serialize Error details and force failure', () => {
           const diagnostics = [];

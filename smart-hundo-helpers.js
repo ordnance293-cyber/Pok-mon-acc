@@ -396,6 +396,48 @@
             .map(card => normalizeSmartHundoCard(card, normalizeOfficialName, options))
     });
 
+    const validateSmartHundoStructure = (result = {}, finishReason = '') => {
+        const cards = Array.isArray(result?.cards) ? result.cards : [];
+        const detectedCardCount = normalizeCount(result?.detected_card_count);
+        const scanComplete = result?.scan_complete === true;
+        const bottomEdgeChecked = result?.bottom_edge_checked === true;
+        const normalizedFinishReason = String(finishReason ?? '');
+        const reasons = [];
+
+        if (detectedCardCount !== cards.length) reasons.push('detected_card_count_mismatch');
+        if (!scanComplete) reasons.push('scan_incomplete');
+        if (!bottomEdgeChecked) reasons.push('bottom_edge_not_checked');
+
+        const coordinates = new Set();
+        let invalidCoordinates = false;
+        let duplicateCoordinates = false;
+        cards.forEach(card => {
+            const values = [card?.order, card?.row, card?.column];
+            if (values.some(value => !Number.isInteger(value) || value < 1)) {
+                invalidCoordinates = true;
+                return;
+            }
+            const coordinate = values.join(':');
+            if (coordinates.has(coordinate)) duplicateCoordinates = true;
+            coordinates.add(coordinate);
+        });
+        if (invalidCoordinates) reasons.push('invalid_card_coordinates');
+        if (duplicateCoordinates) reasons.push('duplicate_card_coordinates');
+        if (['length', 'truncated', 'truncation'].includes(normalizedFinishReason.toLowerCase())) {
+            reasons.push('finish_reason_length');
+        }
+
+        return {
+            structurally_complete: reasons.length === 0,
+            reasons,
+            detected_card_count: detectedCardCount,
+            cards_length: cards.length,
+            scan_complete: scanComplete,
+            bottom_edge_checked: bottomEdgeChecked,
+            finish_reason: normalizedFinishReason
+        };
+    };
+
     const normalizeCard = (card = {}, normalizeOfficialName) => ({
         order: normalizeCoordinate(card?.order),
         row: normalizeCoordinate(card?.row),
@@ -705,6 +747,7 @@
         adaptLegacyRocketState,
         normalizeSmartHundoCard,
         normalizeSmartHundoResult,
+        validateSmartHundoStructure,
         normalizeLegacySmartHundoResult,
         normalizeHundoCountResult,
         validateHundoCountEvidence,
