@@ -1779,6 +1779,31 @@
           });
         });
 
+        test('redacts Firebase API keys and GAS deployment tokens from allowlisted diagnostic strings', () => {
+          const firebaseKey = 'AIzaSyA1b2C3d4E5f6G7h8I9j0K';
+          const gasDeploymentToken = 'AKfycbA1b2C3d4E5f6G7h8I9j0K';
+          const diagnostics = shapeSmartHundoDiagnostics({
+            scan_session_id: 'scan-safe',
+            screenshots: [{
+              index: 0,
+              classification: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: 'safe-query' },
+              cards: [validatedCard({
+                card_id: '0:1:1:1',
+                official_name: firebaseKey,
+                visible_label: gasDeploymentToken
+              })]
+            }],
+            pokemon_list: gasDeploymentToken
+          });
+
+          equal(diagnostics.screenshots[0].cards[0].official_name, '');
+          equal(diagnostics.screenshots[0].cards[0].visible_label, '');
+          equal(diagnostics.pokemon_list, '');
+          const serialized = JSON.stringify(diagnostics);
+          equal(serialized.includes(firebaseKey), false);
+          equal(serialized.includes(gasDeploymentToken), false);
+        });
+
         const indexRequest = new XMLHttpRequest();
         indexRequest.open('GET', '../index.html', false);
         indexRequest.send();

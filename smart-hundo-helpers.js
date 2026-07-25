@@ -631,7 +631,7 @@
         };
     };
 
-    const DIAGNOSTIC_FORBIDDEN_VALUE_PATTERN = /data:image\/|authorization|bearer|api[\s_-]*key|test[\s_-]*key|credentials?|password|firebase(?:[\s_-]*(?:api[\s_-]*key|secret))?|gas[\s_-]*secret|(?:^|[^a-z0-9])sk-[a-z0-9_-]{8,}/i;
+    const DIAGNOSTIC_FORBIDDEN_VALUE_PATTERN = /data:image\/|authorization|bearer|api[\s_-]*key|test[\s_-]*key|credentials?|password|firebase(?:[\s_-]*(?:api[\s_-]*key|secret))?|gas[\s_-]*secret|AIza[0-9a-z_-]{20,}|AKfycb[0-9a-z_-]{20,}|(?:^|[^a-z0-9])sk-[a-z0-9_-]{8,}/i;
     const STRUCTURAL_RETRY_REASON_VALUES = new Set([
         'detected_card_count_mismatch',
         'scan_incomplete',
