@@ -202,8 +202,19 @@
         const colors = [...new Set(validResults.map(result => result.effective_color))];
         const base = normalizeTrainerTeamResult({});
         if (colors.length === 0) {
+            const inheritedReasons = [...new Set(
+                screenshotResults.flatMap(result => result.validation_reasons)
+            )];
+            const inheritedConflicts = screenshotResults.flatMap(result => result.conflicts);
             return {
-                ...makeResult(base, 0, false, 'uncertain', ['no_valid_team_evidence'], []),
+                ...makeResult(
+                    base,
+                    0,
+                    false,
+                    'uncertain',
+                    [...inheritedReasons, 'no_valid_team_evidence'],
+                    inheritedConflicts
+                ),
                 screenshot_results: screenshotResults
             };
         }

@@ -471,9 +471,16 @@
             scanId === activeTrainerTeamScanId && activeTrainerTeamScanId > 0
         );
 
+        const clearTrainerTeamPublishedState = () => {
+            window.lastTrainerTeamDiagnostics = null;
+            const statusElement = document.getElementById('trainerTeamStatus');
+            if (statusElement) statusElement.textContent = '';
+        };
+
         const invalidateTrainerTeamScan = () => {
             trainerTeamScanCounter += 1;
             activeTrainerTeamScanId = trainerTeamScanCounter;
+            clearTrainerTeamPublishedState();
             return activeTrainerTeamScanId;
         };
 
@@ -488,7 +495,6 @@
             }
             trainerTeamAiValueOwnership = null;
             invalidateTrainerTeamScan();
-            window.lastTrainerTeamDiagnostics = null;
             return activeTrainerTeamScanId;
         };
 
@@ -512,6 +518,7 @@
         const handleTrainerTeamManualEdit = () => {
             trainerTeamAiValueOwnership = null;
             trainerTeamManualRevision += 1;
+            clearTrainerTeamPublishedState();
             return true;
         };
 
@@ -767,7 +774,6 @@
             poke_bag: '寶可夢包',
             item_bag: '道具背包',
             level: '等級',
-            team: '隊伍',
             xp: '經驗',
             stardust: '星塵',
             pokemon_list: '百神清單'
@@ -2772,6 +2778,10 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                             trainerTeamManualRevisionAtStart
                         )
                     );
+                    const manualSelectionPreserved = (
+                        mergedTrainerTeam.valid
+                        && trainerTeamManualRevisionAtStart !== trainerTeamManualRevision
+                    );
                     const trainerTeamDiagnostics = {
                         scan_id: String(trainerTeamScanId),
                         screenshots: trainerTeamResults.map(result => ({
@@ -2796,7 +2806,9 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                     );
                     setTrainerTeamStatus(
                         trainerTeamScanId,
-                        teamHelpers.formatTrainerTeamStatus(mergedTrainerTeam)
+                        manualSelectionPreserved
+                            ? '隊伍已保留手動選擇'
+                            : teamHelpers.formatTrainerTeamStatus(mergedTrainerTeam)
                     );
                 }
 

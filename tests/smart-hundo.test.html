@@ -2677,6 +2677,27 @@
           const fifthScan = beginTeamScan();
           equal(fifthScan > fourthScan, true);
           equal(teamInput.value, '紅隊', 'change removes AI ownership before the next scan');
+
+          const priorSuccess = { scan_id: String(fifthScan), applied_to_form: true };
+          publishDiagnostics(fifthScan, priorSuccess);
+          writeTeamStatus(fifthScan, '隊伍辨識完成：黃隊');
+          teamInput.dispatchEvent(new Event('change'));
+          equal(window.lastTrainerTeamDiagnostics, null, 'manual change clears old AI diagnostics immediately');
+          equal(teamStatus.textContent, '', 'manual change clears old AI success status immediately');
+          equal(isCurrentTeamScan(fifthScan), true, 'manual change does not invalidate the pending/current team scan');
+
+          publishDiagnostics(fifthScan, priorSuccess);
+          writeTeamStatus(fifthScan, '隊伍辨識完成：黃隊');
+          const sixthScan = beginTeamScan();
+          equal(window.lastTrainerTeamDiagnostics, null, 'begin clears old trainer-team diagnostics');
+          equal(teamStatus.textContent, '', 'begin clears old trainer-team status');
+
+          publishDiagnostics(sixthScan, { scan_id: String(sixthScan), applied_to_form: true });
+          writeTeamStatus(sixthScan, '隊伍辨識完成：黃隊');
+          document.getElementById('imageInput').dispatchEvent(new Event('change'));
+          equal(window.lastTrainerTeamDiagnostics, null, 'new image selection clears trainer-team diagnostics');
+          equal(teamStatus.textContent, '', 'new image selection clears trainer-team status');
+          equal(isCurrentTeamScan(sixthScan), false, 'new image selection invalidates the team scan');
         });
 
         trainerContractTest('renders an explicit manual-confirmation option and dedicated status in production markup', () => {
@@ -2684,6 +2705,36 @@
           const selectMatch = indexHtml.match(/<select[^>]+id="g_team"[^>]*>([\s\S]*?)<\/select>/);
           if (!selectMatch) fail('production team select is missing');
           equal(/<option\s+value=""[^>]*>/.test(selectMatch[1]), true, 'team select starts with an empty manual-confirmation option');
+        });
+
+        trainerContractTest('clear-image and reset clear only published trainer-team state', () => {
+          const beginTeamScan = requireTrainerProductionContract('beginTrainerTeamScan');
+          const publishDiagnostics = requireTrainerProductionContract('publishTrainerTeamDiagnostics');
+          const writeTeamStatus = requireTrainerProductionContract('setTrainerTeamStatus');
+          const teamStatus = document.getElementById('trainerTeamStatus');
+
+          const clearScan = beginTeamScan();
+          publishDiagnostics(clearScan, { scan_id: String(clearScan), applied_to_form: true });
+          writeTeamStatus(clearScan, '隊伍辨識完成：黃隊');
+          window.clearImage();
+          equal(window.lastTrainerTeamDiagnostics, null, 'clearImage clears trainer-team diagnostics');
+          equal(teamStatus.textContent, '', 'clearImage clears trainer-team status');
+
+          const itemStatus = nativeCreateElement('select');
+          itemStatus.id = 'g_item_status';
+          document.body.appendChild(itemStatus);
+          const previousTogglePage = window.togglePage;
+          window.togglePage = () => {};
+          try {
+            const resetScan = beginTeamScan();
+            publishDiagnostics(resetScan, { scan_id: String(resetScan), applied_to_form: true });
+            writeTeamStatus(resetScan, '隊伍辨識完成：黃隊');
+            window.resetForm();
+            equal(window.lastTrainerTeamDiagnostics, null, 'reset clears trainer-team diagnostics');
+            equal(teamStatus.textContent, '', 'reset clears trainer-team status');
+          } finally {
+            window.togglePage = previousTogglePage;
+          }
         });
 
         const makeFile = (id) => ({
@@ -2715,6 +2766,7 @@
           PROFILE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_YELLOW: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_YELLOW_B: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
+          TEAM_PRIMARY_CONFLICT: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_UNCERTAIN: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_BLUE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_FAILURE: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
@@ -3080,6 +3132,31 @@
           equal(document.getElementById('trainerTeamStatus').textContent, '隊伍需人工確認：固定 UI 證據不足');
         });
 
+        await trainerContractAsyncTest('surfaces a single screenshot primary conflict at the root and keeps the team empty', async () => {
+          requireTrainerProductionContract('runTrainerTeamScan');
+          resetScanScenario();
+          setScanFiles(['TEAM_PRIMARY_CONFLICT']);
+          trainerTeamResultByImage.set('TEAM_PRIMARY_CONFLICT', trainerTeamEvidence('yellow', {
+            level_number: { visibility: 'clear', color: 'yellow' },
+            xp_bar_fill: { visibility: 'clear', color: 'blue' },
+            xp_value_text: { visibility: 'uncertain', color: 'uncertain' }
+          }));
+          document.getElementById('g_team').value = '';
+
+          await autoScan();
+
+          equal(document.getElementById('g_team').value, '');
+          equal(window.lastTrainerTeamDiagnostics.validation_reasons.includes('primary_conflict'), true);
+          equal(
+            window.lastTrainerTeamDiagnostics.conflicts.some(conflict => conflict.type === 'primary_conflict'),
+            true
+          );
+          equal(
+            document.getElementById('trainerTeamStatus').textContent,
+            '隊伍需人工確認：等級數字與 XP 進度條顏色衝突'
+          );
+        });
+
         await trainerContractAsyncTest('keeps yellow-blue conflicts unresolved without upload-order dependence', async () => {
           requireTrainerProductionContract('runTrainerTeamScan');
           const runConflict = async (ids) => {
@@ -3155,6 +3232,10 @@
 
           equal(document.getElementById('g_team').value, '紅隊');
           equal(window.lastTrainerTeamDiagnostics.applied_to_form, false);
+          equal(
+            document.getElementById('trainerTeamStatus').textContent,
+            '隊伍已保留手動選擇'
+          );
         });
 
         await trainerContractAsyncTest('prevents an older delayed team scan from replacing newer form status or diagnostics', async () => {

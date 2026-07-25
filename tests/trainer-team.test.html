@@ -81,6 +81,20 @@
     test('rejects conflicting clear primary fixed UI evidence', () => assertValidation(validateTrainerTeamEvidence(evidence({
       level_number: { visibility: 'clear', color: 'yellow' }, xp_bar_fill: { visibility: 'clear', color: 'blue' }, xp_value_text: { visibility: 'uncertain', color: 'uncertain' }
     })), 'uncertain', '', 'primary_conflict'));
+    test('preserves a single screenshot primary conflict through merge and status formatting', () => {
+      const validated = validateTrainerTeamEvidence(evidence({
+        level_number: { visibility: 'clear', color: 'yellow' },
+        xp_bar_fill: { visibility: 'clear', color: 'blue' },
+        xp_value_text: { visibility: 'uncertain', color: 'uncertain' }
+      }));
+      const merged = mergeTrainerTeamResults([validated]);
+      assertValidation(merged, 'uncertain', '', 'primary_conflict');
+      equal(merged.conflicts.some(conflict => conflict.type === 'primary_conflict'), true);
+      equal(
+        formatTrainerTeamStatus(merged),
+        '隊伍需人工確認：等級數字與 XP 進度條顏色衝突'
+      );
+    });
     test('does not infer blue from Buddy or background without clear primary evidence', () => assertValidation(validateTrainerTeamEvidence(evidence({
       model_team_candidate: 'blue', level_number: { visibility: 'hidden', color: 'uncertain' }, xp_bar_fill: { visibility: 'hidden', color: 'uncertain' }, xp_value_text: { visibility: 'uncertain', color: 'uncertain' }, profile_name_block: { visibility: 'hidden', color: 'uncertain' }, arrow_or_progress_accent: { visibility: 'hidden', color: 'uncertain' }, buddy_color: 'blue', outer_background_color: 'blue'
     })), 'uncertain', ''));
