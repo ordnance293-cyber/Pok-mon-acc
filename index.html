@@ -693,6 +693,29 @@
             }
         };
 
+        const HUNDO_COUNT_SCHEMA = {
+            name: 'pokemon_go_hundo_count_extractor',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    hundo_leg: { type: 'string' },
+                    raw_count_text: { type: 'string' },
+                    active_tab: { type: 'string', enum: ['pokemon', 'egg', 'unknown'] },
+                    count_source: { type: 'string', enum: ['pokemon_search_result_summary', 'other', 'uncertain'] },
+                    relative_position: { type: 'string', enum: ['associated_with_active_pokemon_tab', 'other', 'uncertain'] },
+                    has_parentheses: { type: 'boolean' },
+                    has_slash: { type: 'boolean' },
+                    confidence: { type: 'number', minimum: 0, maximum: 1 }
+                },
+                required: [
+                    'hundo_leg', 'raw_count_text', 'active_tab', 'count_source',
+                    'relative_position', 'has_parentheses', 'has_slash', 'confidence'
+                ]
+            }
+        };
+
         const HUNDO_SMART_SCHEMA_V1 = {
             name: 'pokemon_go_hundo_smart_extractor',
             strict: true,
@@ -1692,6 +1715,23 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
 【G. Schema 與一致性】
 只輸出符合提供 JSON Schema 的 JSON。不得輸出 Markdown、程式碼框、說明文字或額外欄位。不得遺漏可見卡片，不得發明隱藏或畫面外卡片、不可見卡片或未顯示的狀態，不得輸出重複卡片；每張可見卡片只輸出一次，所有卡片的位置與 order 必須一致。`;
 
+        const buildHundoCountPrompt = () => `你是寶可夢 GO 百神數的嚴格視覺抽取器。
+
+只可辨識與 active Pokémon tab 具有明確語意關係與相對位置的 Pokémon search-result summary。合法數字必須是該摘要中完整可見的 parenthesized integer，例如「(3)」。
+
+辨識必須依 active Pokémon tab、Pokémon search-result summary、parentheses 與語意關係與相對位置；顏色不是必要或決定性訊號，也不得依賴固定高度、固定像素位置或裁切座標判定。
+
+明確排除下列附近數字，不得填入 hundo_leg：
+- egg 9/12 或任何含 slash 的蛋頁籤數字
+- storage 142/450 或任何儲存空間數字
+- CP、clock、battery
+- 搜尋 query 4*
+- cards.length、detected count、visible count、screenshot count
+
+上方 42% 裁切區只是聚焦輸入，不是合法性證據。若畫面沒有完整包含 active Pokémon tab、其 Pokémon search-result summary，以及足以排除 egg tab 的相鄰 UI，active_tab、count_source 或 relative_position 必須填 uncertain，hundo_leg 留空。不得 fallback 到卡片數量或其他附近數字。
+
+只輸出符合 JSON Schema 的 JSON，不得輸出 Markdown、說明或額外欄位。`;
+
         const fileToOriginalDataUrl = (file) => new Promise((resolve, reject) => {
             const supportedTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
             if (!supportedTypes.has(String(file?.type || '').toLowerCase())) {
@@ -1729,6 +1769,26 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
                 img.src = e.target.result;
             };
             reader.readAsDataURL(file);
+        });
+
+        const fileToHundoCountRegionDataUrl = (originalDataUrl) => new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('載入百神數辨識區域失敗，請重新選擇圖片。'));
+            img.onload = () => {
+                const width = img.naturalWidth || img.width;
+                const height = img.naturalHeight || img.height;
+                const cropHeight = Math.ceil(height * 0.42);
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = cropHeight;
+                canvas.getContext('2d').drawImage(
+                    img,
+                    0, 0, width, cropHeight,
+                    0, 0, width, cropHeight
+                );
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.src = originalDataUrl;
         });
 
         const buildAiRequestContent = (prompt, dataUrl, imageDetail = AI_IMAGE_DETAIL) => ([
@@ -1775,7 +1835,13 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
                     }
 
                     const data = await resp.json();
-                    return parseJsonText(parseOpenAIMessageContent(data));
+                    const result = parseJsonText(parseOpenAIMessageContent(data));
+                    if (!options.includeMetadata) return result;
+                    const finishReason = data?.choices?.[0]?.finish_reason;
+                    return {
+                        result,
+                        finish_reason: typeof finishReason === 'string' ? finishReason : ''
+                    };
                 } catch (error) {
                     if (attempt === maxRetries) throw error;
                 }
@@ -1783,6 +1849,15 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
 
             return {};
         };
+
+        const requestHundoCountExtraction = async (apiKey, countRegionDataUrl, statusUpdater) => requestOpenAiJsonSchema(
+            apiKey,
+            buildHundoCountPrompt(),
+            countRegionDataUrl,
+            HUNDO_COUNT_SCHEMA,
+            statusUpdater,
+            { imageDetail: 'high', includeMetadata: true }
+        );
 
         const requestSmartHundoExtractionV1 = async (apiKey, originalDataUrl, statusUpdater) => requestOpenAiJsonSchema(
             apiKey,

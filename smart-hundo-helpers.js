@@ -36,6 +36,9 @@
     const BACKGROUND_APPEARANCE_VALUES = new Set(['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
     const STATE_VALUES = INDEPENDENT_STATE_VALUES;
     const RECOGNITION_VALUES = new Set(['recognized', 'partial', 'uncertain']);
+    const HUNDO_COUNT_ACTIVE_TAB_VALUES = new Set(['pokemon', 'egg', 'unknown']);
+    const HUNDO_COUNT_SOURCE_VALUES = new Set(['pokemon_search_result_summary', 'other', 'uncertain']);
+    const HUNDO_COUNT_POSITION_VALUES = new Set(['associated_with_active_pokemon_tab', 'other', 'uncertain']);
 
     const stringValue = (value) => value === undefined || value === null ? '' : String(value).trim();
 
@@ -60,6 +63,105 @@
         const number = Number(value);
         if (!Number.isFinite(number)) return 0;
         return Math.min(1, Math.max(0, number));
+    };
+
+    const normalizeHundoCountResult = (result = {}) => ({
+        hundo_leg: String(result?.hundo_leg ?? '').normalize('NFKC').trim(),
+        raw_count_text: String(result?.raw_count_text ?? '').normalize('NFKC'),
+        active_tab: HUNDO_COUNT_ACTIVE_TAB_VALUES.has(stringValue(result?.active_tab).toLowerCase())
+            ? stringValue(result?.active_tab).toLowerCase()
+            : 'unknown',
+        count_source: HUNDO_COUNT_SOURCE_VALUES.has(stringValue(result?.count_source).toLowerCase())
+            ? stringValue(result?.count_source).toLowerCase()
+            : 'uncertain',
+        relative_position: HUNDO_COUNT_POSITION_VALUES.has(stringValue(result?.relative_position).toLowerCase())
+            ? stringValue(result?.relative_position).toLowerCase()
+            : 'uncertain',
+        has_parentheses: result?.has_parentheses === true,
+        has_slash: result?.has_slash === true,
+        confidence: clampConfidence(result?.confidence)
+    });
+
+    const validateHundoCountEvidence = (result = {}, classification = {}) => {
+        const normalized = normalizeHundoCountResult(result);
+        const rawMatch = normalized.raw_count_text.match(/^\(\s*(\d+)\s*\)$/);
+        const parsedNumber = rawMatch ? Number(rawMatch[1]) : NaN;
+        const parsedCount = Number.isFinite(parsedNumber) ? String(parsedNumber) : '';
+        const valid = (
+            normalizeSearchQuery(classification?.search_query) === HUNDO_LEGENDARY_QUERY
+            && normalized.active_tab === 'pokemon'
+            && normalized.count_source === 'pokemon_search_result_summary'
+            && normalized.relative_position === 'associated_with_active_pokemon_tab'
+            && normalized.has_parentheses === true
+            && normalized.has_slash === false
+            && rawMatch !== null
+            && normalized.hundo_leg === parsedCount
+            && normalized.confidence >= HUNDO_COUNT_CONFIDENCE_THRESHOLD
+        );
+
+        return {
+            hundo_leg: valid ? parsedCount : '',
+            confidence: normalized.confidence,
+            valid,
+            raw_count_text: normalized.raw_count_text,
+            manual_review_reasons: valid ? [] : ['hundo_count_uncertain']
+        };
+    };
+
+    const mergeHundoCountResults = (results = []) => {
+        const grouped = new Map();
+        (Array.isArray(results) ? results : []).forEach(result => {
+            const value = String(result?.hundo_leg ?? '').normalize('NFKC').trim();
+            const number = Number(value);
+            if (
+                result?.valid !== true
+                || !/^\d+$/.test(value)
+                || !Number.isFinite(number)
+                || String(number) !== value
+            ) return;
+            if (!grouped.has(value)) grouped.set(value, []);
+            grouped.get(value).push(clampConfidence(result?.confidence));
+        });
+
+        const candidates = [...grouped.entries()]
+            .map(([value, confidences]) => {
+                const sortedConfidences = [...confidences].sort((left, right) => right - left);
+                return {
+                    value,
+                    confidence: sortedConfidences[0],
+                    confidences: sortedConfidences
+                };
+            })
+            .sort((left, right) => left.value.localeCompare(right.value));
+
+        if (candidates.length === 0) {
+            return {
+                hundo_leg: '',
+                conflict: false,
+                uncertain: true,
+                candidates,
+                manual_review_reasons: ['hundo_count_uncertain']
+            };
+        }
+
+        const conflict = candidates.length > 1;
+        const highestFrequency = Math.max(...candidates.map(candidate => candidate.confidences.length));
+        const frequencyLeaders = candidates.filter(candidate => candidate.confidences.length === highestFrequency);
+        const highestConfidence = Math.max(...frequencyLeaders.map(candidate => candidate.confidence));
+        const confidenceLeaders = frequencyLeaders.filter(candidate => candidate.confidence === highestConfidence);
+        const unresolved = confidenceLeaders.length !== 1;
+
+        return {
+            hundo_leg: unresolved ? '' : confidenceLeaders[0].value,
+            conflict,
+            uncertain: unresolved,
+            candidates,
+            manual_review_reasons: unresolved
+                ? ['hundo_count_conflict', 'hundo_count_uncertain']
+                : conflict
+                    ? ['hundo_count_conflict']
+                    : []
+        };
     };
 
     const normalizeCoordinate = (value) => {
@@ -607,6 +709,9 @@
         normalizeSmartHundoCard,
         normalizeSmartHundoResult,
         normalizeLegacySmartHundoResult,
+        normalizeHundoCountResult,
+        validateHundoCountEvidence,
+        mergeHundoCountResults,
         HUNDO_COUNT_CONFIDENCE_THRESHOLD,
         SPECIES_CONFIDENCE_THRESHOLD,
         STATE_YES_CONFIDENCE_THRESHOLD,

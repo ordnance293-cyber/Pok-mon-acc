@@ -244,7 +244,10 @@
           isValidFavoriteEvidence,
           deriveRocketStateFromEvidence,
           deriveBackgroundTypeFromEvidence,
-          validateHundoCardStates
+          validateHundoCardStates,
+          normalizeHundoCountResult,
+          validateHundoCountEvidence,
+          mergeHundoCountResults
         } = helpers;
         const smartHundoCardsToPokemonList = legacySmartHundoCardsToPokemonList;
         const normalizedCard = (overrides = {}) => normalizeSmartHundoCard(
@@ -969,6 +972,117 @@
           equal(merged.detected_card_count, 2);
         });
 
+        const exactHundoClassification = () => ({
+          image_type: 'HUNDO_LEGENDARY_SCREEN',
+          search_query: '傳說的寶可夢,幻,究極異獸&4*'
+        });
+        const validCount = (rawCountText = '(3)', hundoLeg = '3') => ({
+          hundo_leg: hundoLeg,
+          raw_count_text: rawCountText,
+          active_tab: 'pokemon',
+          count_source: 'pokemon_search_result_summary',
+          relative_position: 'associated_with_active_pokemon_tab',
+          has_parentheses: true,
+          has_slash: false,
+          confidence: 0.99
+        });
+        const count = (hundoLeg, confidence) => ({
+          hundo_leg: hundoLeg,
+          confidence,
+          valid: true,
+          manual_review_reasons: []
+        });
+
+        test('normalizes and validates only exact semantic hundo count evidence', () => {
+          deepEqual(normalizeHundoCountResult({
+            ...validCount('（ ３０ ）', '30'),
+            active_tab: 'POKEMON',
+            confidence: 2
+          }), {
+            hundo_leg: '30',
+            raw_count_text: '( 30 )',
+            active_tab: 'pokemon',
+            count_source: 'pokemon_search_result_summary',
+            relative_position: 'associated_with_active_pokemon_tab',
+            has_parentheses: true,
+            has_slash: false,
+            confidence: 1
+          });
+          equal(validateHundoCountEvidence(validCount('(3)', '3'), exactHundoClassification()).hundo_leg, '3');
+          equal(validateHundoCountEvidence(validCount('( 30 )', '30'), exactHundoClassification()).hundo_leg, '30');
+          equal(validateHundoCountEvidence(validCount('（００３）', '3'), exactHundoClassification()).hundo_leg, '3');
+
+          const rejected = [
+            { ...validCount(), raw_count_text: '9/12', has_slash: true },
+            { ...validCount(), raw_count_text: '142/450' },
+            { ...validCount(), raw_count_text: 'CP 3000' },
+            { ...validCount(), raw_count_text: '(3) nearby', hundo_leg: '3' },
+            { ...validCount(), hundo_leg: '03' },
+            { ...validCount(), confidence: 0.849 },
+            { ...validCount(), has_parentheses: false },
+            { ...validCount(), has_slash: true },
+            { ...validCount(), active_tab: 'egg' },
+            { ...validCount(), count_source: 'other' },
+            { ...validCount(), relative_position: 'other' }
+          ];
+          rejected.forEach((evidence, index) => {
+            const validated = validateHundoCountEvidence(evidence, exactHundoClassification());
+            equal(validated.hundo_leg, '', `rejects unsafe evidence ${index}`);
+            equal(validated.valid, false, `marks unsafe evidence invalid ${index}`);
+            deepEqual(validated.manual_review_reasons, ['hundo_count_uncertain']);
+          });
+
+          const wrongQuery = validateHundoCountEvidence(validCount(), {
+            image_type: 'HUNDO_LEGENDARY_SCREEN',
+            search_query: '傳說的寶可夢,幻,究極異獸'
+          });
+          equal(wrongQuery.hundo_leg, '');
+          deepEqual(wrongQuery.manual_review_reasons, ['hundo_count_uncertain']);
+
+          const missingUiContext = validateHundoCountEvidence({
+            ...validCount(),
+            active_tab: 'unknown',
+            count_source: 'uncertain',
+            relative_position: 'uncertain'
+          }, exactHundoClassification());
+          equal(missingUiContext.hundo_leg, '');
+          deepEqual(missingUiContext.manual_review_reasons, ['hundo_count_uncertain']);
+        });
+
+        test('merges only valid count evidence by frequency then confidence without order tie-breaking', () => {
+          const majority = mergeHundoCountResults([count('3', .90), count('3', .88), count('9', .99)]);
+          equal(majority.hundo_leg, '3');
+          equal(majority.conflict, true);
+          equal(majority.uncertain, false);
+          deepEqual(majority.candidates.map(candidate => candidate.value), ['3', '9']);
+          deepEqual(majority.manual_review_reasons, ['hundo_count_conflict']);
+
+          const confidenceWinner = mergeHundoCountResults([count('3', .94), count('9', .95)]);
+          equal(confidenceWinner.hundo_leg, '9');
+          equal(confidenceWinner.conflict, true);
+          equal(confidenceWinner.uncertain, false);
+
+          const unresolved = mergeHundoCountResults([count('3', .95), count('9', .95)]);
+          const unresolvedReordered = mergeHundoCountResults([count('9', .95), count('3', .95)]);
+          equal(unresolved.hundo_leg, '');
+          equal(unresolved.conflict, true);
+          equal(unresolved.uncertain, true);
+          deepEqual(unresolved.manual_review_reasons, ['hundo_count_conflict', 'hundo_count_uncertain']);
+          deepEqual(unresolvedReordered, unresolved);
+          equal(mergeHundoCountResults([count('3', .91)]).hundo_leg, '3');
+          equal(mergeHundoCountResults([count('3', .91), count('3', .87)]).hundo_leg, '3');
+
+          const ignoresInvalid = mergeHundoCountResults([
+            count('3', .91),
+            { ...count('999', 1), valid: false, cards: Array(999).fill({}) },
+            { hundo_leg: '777', confidence: 1, detected_card_count: 777, visible_count: 777 }
+          ]);
+          equal(ignoresInvalid.hundo_leg, '3');
+          ['cards', 'cards_length', 'detected_card_count', 'visible_count', 'screenshot_index'].forEach(field => {
+            equal(Object.hasOwn(ignoresInvalid, field), false, `merge API excludes ${field}`);
+          });
+        });
+
         const indexRequest = new XMLHttpRequest();
         indexRequest.open('GET', '../index.html', false);
         indexRequest.send();
@@ -979,13 +1093,38 @@
 
         const nativeCreateElement = document.createElement.bind(document);
         let canvasCalls = 0;
+        const canvasRecords = [];
         let lastPayload = null;
         let smartRequestCount = 0;
+        let countRequestCount = 0;
         const fileReadCounts = new Map();
         const resizedByOriginal = new Map();
         const originalDataUrl = 'data:image/png;base64,SMART_ORIGINAL_DO_NOT_EXPOSE';
         const resizedUrl = 'data:image/jpeg;base64,RESIZED';
+        const countRegionUrl = 'data:image/png;base64,HUNDO_COUNT_REGION_SENTINEL';
         const pngFile = { type: 'image/png', dataUrl: originalDataUrl };
+        const expectedOpenAiUrl = 'https://api.openai.com/v1/chat/completions';
+        const allowedOpenAiSchemas = new Set([
+          'pokemon_go_image_classifier',
+          'pokemon_go_forced_field_extractor',
+          'pokemon_go_hundo_smart_extractor',
+          'pokemon_go_hundo_count_extractor',
+          'pokemon_go_hundo_smart_extractor_v2'
+        ]);
+        const installStrictOpenAiFetchMock = (responder) => {
+          globalThis.fetch = async (url, options = {}) => {
+            if (url !== expectedOpenAiUrl) throw new Error(`strict OpenAI mock rejected unknown URL: ${url}`);
+            const payload = JSON.parse(options.body);
+            const schemaName = payload?.response_format?.json_schema?.name;
+            if (!allowedOpenAiSchemas.has(schemaName)) {
+              throw new Error(`strict OpenAI mock rejected unknown schema: ${schemaName}`);
+            }
+            const response = await responder({ url, options, payload, schemaName });
+            if (!response) throw new Error(`strict OpenAI mock has no response for schema: ${schemaName}`);
+            return response;
+          };
+          return globalThis.fetch;
+        };
 
         class MockFileReader {
           readAsDataURL(file) {
@@ -1017,10 +1156,31 @@
           if (String(tagName).toLowerCase() !== 'canvas') return nativeCreateElement(tagName, ...args);
           canvasCalls += 1;
           let drawnImage = null;
-          return {
-            getContext: () => ({ drawImage: (image) => { drawnImage = image; } }),
-            toDataURL: () => resizedByOriginal.get(drawnImage?.source) || resizedUrl
+          let drawArguments = [];
+          const canvas = {
+            width: 0,
+            height: 0,
+            getContext: () => ({
+              drawImage: (...drawArgs) => {
+                [drawnImage] = drawArgs;
+                drawArguments = drawArgs.slice(1);
+              }
+            }),
+            toDataURL: (type, quality) => {
+              canvasRecords.push({
+                width: canvas.width,
+                height: canvas.height,
+                source: drawnImage?.source,
+                drawArguments,
+                type,
+                quality
+              });
+              return type === 'image/png'
+                ? countRegionUrl
+                : resizedByOriginal.get(drawnImage?.source) || resizedUrl;
+            }
           };
+          return canvas;
         };
         globalThis.initializeApp = () => ({});
         globalThis.getDatabase = () => ({});
@@ -1030,30 +1190,45 @@
         globalThis.onValue = () => {};
         globalThis.remove = async () => {};
         globalThis.update = async () => {};
-        globalThis.fetch = async (_url, options = {}) => {
-          lastPayload = JSON.parse(options.body);
+        installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
+          lastPayload = payload;
           if (lastPayload.messages[0].content[1].image_url.detail === 'high') smartRequestCount += 1;
+          if (schemaName === 'pokemon_go_hundo_count_extractor') countRequestCount += 1;
+          const content = schemaName === 'pokemon_go_hundo_count_extractor'
+            ? validCount('(3)', '3')
+            : {
+              hundo_leg: '8',
+              hundo_leg_confidence: 0.9,
+              detected_card_count: 0,
+              cards: []
+            };
           return {
             ok: true,
             json: async () => ({
-              choices: [{ message: { content: JSON.stringify({
-                hundo_leg: '8',
-                hundo_leg_confidence: 0.9,
-                detected_card_count: 0,
-                cards: []
-              }) } }]
+              choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
             })
           };
-        };
+        });
 
         const pageModule = moduleMatch[1]
           .replace(/^\s*import\s+[^;]+;\s*$/gm, '')
-          + '\nObject.assign(globalThis, { HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA_V1, HUNDO_SMART_SCHEMA, buildSmartHundoPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestSmartHundoExtractionV1, smartHundoScan });';
+          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA_V1, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV1, smartHundoScan });';
         (0, eval)(pageModule);
 
         equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
         equal(canvasCalls, 0);
-        await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA_V1, null);
+        equal(await fileToResizedDataUrl(pngFile), resizedUrl);
+        deepEqual(canvasRecords.at(-1), {
+          width: 1000,
+          height: 562.5,
+          source: originalDataUrl,
+          drawArguments: [0, 0, 1000, 562.5],
+          type: 'image/jpeg',
+          quality: 0.7
+        }, 'ordinary compressor retains its size, JPEG quality, and draw contract');
+        const ordinaryResult = await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA_V1, null);
+        equal(ordinaryResult.hundo_leg, '8');
+        equal(Object.hasOwn(ordinaryResult, 'result'), false, 'ordinary callers retain parsed-object return');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'auto');
         await smartHundoScan({ apiKey: 'test-key', originalDataUrl, imageIndex: 2 });
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
@@ -1061,6 +1236,50 @@
         equal(smartRequestCount, 1);
         equal(JSON.stringify(lastPayload).includes('test-key'), false);
         equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
+        equal(OPENAI_CHAT_COMPLETIONS_URL, expectedOpenAiUrl);
+        equal(HUNDO_COUNT_SCHEMA.name, 'pokemon_go_hundo_count_extractor');
+        equal(HUNDO_COUNT_SCHEMA.strict, true);
+        equal(HUNDO_COUNT_SCHEMA.schema.additionalProperties, false);
+        deepEqual(Object.keys(HUNDO_COUNT_SCHEMA.schema.properties), [
+          'hundo_leg', 'raw_count_text', 'active_tab', 'count_source',
+          'relative_position', 'has_parentheses', 'has_slash', 'confidence'
+        ]);
+        deepEqual(HUNDO_COUNT_SCHEMA.schema.required, Object.keys(HUNDO_COUNT_SCHEMA.schema.properties));
+        deepEqual(HUNDO_COUNT_SCHEMA.schema.properties.active_tab.enum, ['pokemon', 'egg', 'unknown']);
+        deepEqual(HUNDO_COUNT_SCHEMA.schema.properties.count_source.enum, ['pokemon_search_result_summary', 'other', 'uncertain']);
+        deepEqual(HUNDO_COUNT_SCHEMA.schema.properties.relative_position.enum, ['associated_with_active_pokemon_tab', 'other', 'uncertain']);
+        const countPrompt = buildHundoCountPrompt();
+        [
+          'active Pokémon tab', 'Pokémon search-result summary', '語意關係與相對位置', 'parenthesized',
+          '顏色不是必要或決定性訊號', '不得依賴固定高度', 'egg 9/12', 'storage 142/450',
+          'CP', 'clock', 'battery', 'query 4*', 'cards.length', 'detected count',
+          'visible count', 'screenshot count', '上方 42% 裁切區只是聚焦輸入', 'uncertain', '排除 egg tab'
+        ].forEach(fragment => equal(countPrompt.includes(fragment), true, `count prompt protects ${fragment}`));
+
+        const croppedCountRegion = await fileToHundoCountRegionDataUrl(originalDataUrl);
+        equal(croppedCountRegion, countRegionUrl);
+        deepEqual(canvasRecords.at(-1), {
+          width: 1600,
+          height: 378,
+          source: originalDataUrl,
+          drawArguments: [0, 0, 1600, 378, 0, 0, 1600, 378],
+          type: 'image/png',
+          quality: undefined
+        }, 'count crop retains native width, ceil 42% height, and lossless PNG');
+
+        const countResponse = await requestHundoCountExtraction('test-key', croppedCountRegion, null);
+        equal(countRequestCount, 1, 'count extraction sends one logical schema request');
+        equal(countResponse.result.hundo_leg, '3');
+        equal(countResponse.finish_reason, 'stop');
+        equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_count_extractor');
+        equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
+        equal(lastPayload.messages[0].content[1].image_url.url.startsWith('data:image/png'), true);
+        await assertRejects(globalThis.fetch('https://example.invalid/never', {
+          body: JSON.stringify({ response_format: { json_schema: HUNDO_COUNT_SCHEMA } })
+        }), 'unknown URL');
+        await assertRejects(globalThis.fetch(expectedOpenAiUrl, {
+          body: JSON.stringify({ response_format: { json_schema: { name: 'unknown_paid_schema' } } })
+        }), 'unknown schema');
         equal(HUNDO_SMART_SCHEMA_V1.strict, true);
         equal(HUNDO_SMART_SCHEMA_V1.schema.additionalProperties, false);
         equal(HUNDO_SMART_SCHEMA.strict, true);
@@ -1280,9 +1499,7 @@
         let failedSmartIdentities = new Set();
         globalThis.alert = () => {};
         globalThis.setTimeout = (callback) => { callback(); return 0; };
-        globalThis.fetch = async (_url, options = {}) => {
-          const payload = JSON.parse(options.body);
-          const schemaName = payload.response_format.json_schema.name;
+        installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
           const prompt = payload.messages[0].content[0].text;
           const imageUrl = payload.messages[0].content[1].image_url.url;
           const detail = payload.messages[0].content[1].image_url.detail;
@@ -1301,7 +1518,7 @@
             return openAiResponse(extractionForPrompt(prompt), () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           fail(`unexpected schema ${schemaName}`);
-        };
+        });
 
         await asyncTest('routes arbitrary-order jobs after classification and merges smart cards safely', async () => {
           fileReadCounts.clear();
