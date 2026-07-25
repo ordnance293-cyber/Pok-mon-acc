@@ -370,6 +370,12 @@ normalized card 的 `card_id` 定義為 `${screenshot_index}:${order}:${row}:${c
 
 此區域涵蓋 active 寶可夢 tab、其搜尋結果摘要、搜尋 input 與鄰近 egg tab，並避免以卡片數量干擾 count。
 
+- 原圖上方約 42% 只是預設的聚焦輸入，不是固定 UI 座標或百神數判定規則。
+- 不得因數字位於特定高度、特定像素位置或特定顏色，就判定為百神數。
+- 合法性仍完全由 active Pokémon tab、Pokémon search-result summary、parentheses、relative position 與 slash exclusion 驗證。
+- 若裁切圖沒有完整包含 active Pokémon tab、其搜尋結果摘要，以及足以排除 egg tab 的相鄰 UI，count result 必須是 `uncertain`、validated `hundo_leg` 必須留空、加入 `hundo_count_uncertain`。
+- 裁切資訊不足時不得 fallback 到 `cards.length`、`detected_card_count`、可見卡片數、egg `9/12` 或任何其他附近數字。
+
 ### Count schema
 
 `HUNDO_COUNT_SCHEMA`：
@@ -413,8 +419,14 @@ prompt 只依 active Pokémon tab 的語意關係與相對位置辨識 parenthes
 - 只有一個 valid：採該值。
 - 衝突：採出現次數最多者。
 - 最高次數同票：採該組中 confidence 最高者。
-- confidence 仍同票：以數值大小作 deterministic 最後排序，不依 upload order。
-- 任一不同 valid 值保留 conflict diagnostic；majority tie 另要求人工確認。
+- 最高 confidence 仍同票：
+  - validated `hundo_leg = ""`
+  - 加入 `hundo_count_conflict`
+  - 加入 `hundo_count_uncertain`
+  - 在安全 diagnostics 保留所有候選值與各自 confidence
+  - 要求人工確認
+- 完全平手時禁止使用數值大小、upload order、screenshot index、`cards.length`、`detected_card_count` 或可見卡片數選出百神數。
+- 任一不同 valid 值都保留 conflict diagnostic；最高 confidence 仍同票時 count 必須 unresolved。
 - 永不加總。
 
 ## 完整卡片管線
