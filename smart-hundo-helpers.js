@@ -267,6 +267,103 @@
         cards: normalizeCards(result?.cards, normalizeOfficialName)
     });
 
+    const HUNDO_REVIEW_REASON_MESSAGES = Object.freeze({
+        species_uncertain: '寶可夢名稱不確定，請人工確認',
+        shiny_uncertain: '色違狀態不確定，請人工確認',
+        lucky_uncertain: '幸運狀態不確定，請人工確認',
+        favorite_uncertain: '最愛狀態不確定，請人工確認',
+        rocket_state_uncertain: '暗影或淨化狀態不確定，請人工確認',
+        background_uncertain: '背卡狀態不確定，請人工確認',
+        incomplete_card_enumeration: '卡片列舉不完整，請人工確認',
+        hundo_count_uncertain: '百神數不確定，請人工確認',
+        hundo_count_conflict: '百神數有衝突',
+        screenshot_overlap_uncertain: '截圖重疊不確定，請人工確認',
+        smart_hundo_request_failed: '智慧百神辨識失敗'
+    });
+
+    const isHundoReviewReason = (reason) => Object.prototype.hasOwnProperty.call(HUNDO_REVIEW_REASON_MESSAGES, reason);
+
+    const reviewReasonCodes = (card = {}) => {
+        const reasons = Array.isArray(card?.manual_review_reasons)
+            ? card.manual_review_reasons.filter(isHundoReviewReason)
+            : [];
+        const officialName = stringValue(card?.official_name);
+        if (card?.recognition_status !== 'recognized' || !officialName) reasons.push('species_uncertain');
+        if (card?.effective_shiny_state === 'uncertain') reasons.push('shiny_uncertain');
+        if (card?.effective_lucky_state === 'uncertain') reasons.push('lucky_uncertain');
+        if (card?.effective_favorite_state === 'uncertain') reasons.push('favorite_uncertain');
+        if (card?.effective_rocket_state === 'uncertain') reasons.push('rocket_state_uncertain');
+        if (card?.effective_background_type === 'uncertain') reasons.push('background_uncertain');
+        return [...new Set(reasons)];
+    };
+
+    const screenshotReviewReasonCodes = (screenshotReasons) => {
+        const reasons = Array.isArray(screenshotReasons)
+            ? screenshotReasons
+            : Array.isArray(screenshotReasons?.manual_review_reasons)
+                ? screenshotReasons.manual_review_reasons
+                : Array.isArray(screenshotReasons?.reasons)
+                    ? screenshotReasons.reasons
+                    : [];
+        return [...new Set(reasons.filter(isHundoReviewReason))];
+    };
+
+    const buildHundoDisplayName = (card = {}, normalizeOfficialName) => {
+        const officialName = normalizeWith(normalizeOfficialName, card?.official_name);
+        const prefix = [
+            card?.effective_shiny_state === 'yes' ? '色違' : '',
+            card?.effective_rocket_state === 'shadow' ? '暗影' : '',
+            card?.effective_background_type === 'commemorative' ? '紀念背卡' : '',
+            card?.effective_background_type === 'special' ? '特別背卡' : ''
+        ].join('');
+        return `${prefix}${officialName}`;
+    };
+
+    const summarizeHundoManualReview = (cards = [], screenshotReasons = []) => {
+        const reviewCardIds = new Set();
+        const reviewReasonCounts = {};
+        const reasonCodes = [];
+        const addReason = (reason, cardId) => {
+            reviewReasonCounts[reason] = (reviewReasonCounts[reason] || 0) + 1;
+            if (!reasonCodes.includes(reason)) reasonCodes.push(reason);
+            if (cardId) reviewCardIds.add(cardId);
+        };
+
+        (Array.isArray(cards) ? cards : []).forEach(card => {
+            const cardId = stringValue(card?.card_id);
+            reviewReasonCodes(card).forEach(reason => addReason(reason, cardId));
+        });
+        screenshotReviewReasonCodes(screenshotReasons).forEach(reason => addReason(reason));
+
+        return {
+            review_card_count: reviewCardIds.size,
+            review_reason_counts: reviewReasonCounts,
+            manual_review_reasons: reasonCodes.map(reason => HUNDO_REVIEW_REASON_MESSAGES[reason])
+        };
+    };
+
+    const smartHundoCardsToPokemonList = (cards = [], normalizeOfficialName) => {
+        const displayGroups = new Map();
+        let recognizedCount = 0;
+
+        (Array.isArray(cards) ? cards : []).forEach(card => {
+            const officialName = normalizeWith(normalizeOfficialName, card?.official_name);
+            if (card?.recognition_status !== 'recognized' || !officialName) return;
+
+            const displayName = buildHundoDisplayName(card, normalizeOfficialName);
+            displayGroups.set(displayName, (displayGroups.get(displayName) || 0) + 1);
+            recognizedCount += 1;
+        });
+
+        const manualReview = summarizeHundoManualReview(cards);
+        return {
+            pokemon_list: [...displayGroups].map(([name, count]) => count > 1 ? `${name}*${count}` : name).join(','),
+            recognized_count: recognizedCount,
+            review_card_count: manualReview.review_card_count,
+            review_reason_counts: manualReview.review_reason_counts
+        };
+    };
+
     const legacySmartHundoCardsToPokemonList = (cards = [], normalizeOfficialName, normalizePokemonList) => {
         const normalizedCards = (Array.isArray(cards) ? cards : [])
             .map(card => normalizeCard(card, normalizeOfficialName))
@@ -325,6 +422,10 @@
         normalizeSmartHundoCard,
         normalizeSmartHundoResult,
         normalizeLegacySmartHundoResult,
+        HUNDO_REVIEW_REASON_MESSAGES,
+        buildHundoDisplayName,
+        smartHundoCardsToPokemonList,
+        summarizeHundoManualReview,
         legacySmartHundoCardsToPokemonList,
         mergeSmartHundoScanResults
     };
