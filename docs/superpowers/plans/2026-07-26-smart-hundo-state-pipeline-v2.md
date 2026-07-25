@@ -202,6 +202,24 @@ git commit -m "feat: define smart hundo v2 state contract"
 - Produces `buildHundoDisplayName(card, normalizeOfficialName): string`.
 - Produces `smartHundoCardsToPokemonList(cards, normalizeOfficialName): { pokemon_list, recognized_count, review_card_count, review_reason_counts }`.
 - Produces `summarizeHundoManualReview(cards, screenshotReasons): { review_card_count, review_reason_counts, manual_review_reasons }`.
+- Produces the single source of user-facing reason text:
+
+```js
+const HUNDO_REVIEW_REASON_MESSAGES = Object.freeze({
+  species_uncertain: '物種需人工確認',
+  shiny_uncertain: '色違狀態需人工確認',
+  lucky_uncertain: '亮晶晶狀態需人工確認',
+  favorite_uncertain: '我的最愛狀態需人工確認',
+  rocket_state_uncertain: '暗影／淨化狀態需人工確認',
+  background_uncertain: '背卡狀態需人工確認',
+  incomplete_card_enumeration: '卡片列舉不完整，需人工確認',
+  hundo_count_uncertain: '百神總數需人工確認',
+  hundo_count_conflict: '百神總數結果衝突',
+  screenshot_overlap_uncertain: '截圖重疊需人工確認',
+  smart_hundo_request_failed: '百神辨識請求失敗'
+});
+```
+
 - Consumes only `effective_shiny_state`, `effective_rocket_state`, and `effective_background_type` for visible prefixes.
 
 - [ ] **Step 1: Add failing effective-state/display tests**
@@ -271,6 +289,12 @@ Add a recognized Groudon with `effective_shiny_state: 'uncertain'`; assert the l
 
 - [ ] **Step 2: Run browser tests and confirm RED**
 
+Run:
+
+```text
+python tests/run_browser_tests.py
+```
+
 Expected failure: the display helper and deduplicated manual-review summary are absent, and the old converter reads raw state fields.
 
 - [ ] **Step 3: Implement display and grouping**
@@ -290,7 +314,15 @@ Never inspect lucky, favorite, or purified when building the prefix. Build one d
 
 - [ ] **Step 4: Run GREEN verification**
 
-Run browser tests, regression checks, and `git diff --check`. Confirm the exact three acceptance strings:
+Run:
+
+```text
+python tests/run_browser_tests.py
+python tests/verify_regressions.py
+git diff --check
+```
+
+Confirm the exact three acceptance strings:
 
 ```text
 固拉多*3
@@ -315,6 +347,7 @@ git commit -m "feat: build hundo lists from effective states"
 
 **Interfaces:**
 - Produces constants:
+  - `HUNDO_COUNT_CONFIDENCE_THRESHOLD = 0.85`
   - `SPECIES_CONFIDENCE_THRESHOLD = 0.80`
   - `STATE_YES_CONFIDENCE_THRESHOLD = 0.85`
   - `STATE_NEGATIVE_CONFIDENCE_THRESHOLD = 0.75`
@@ -382,6 +415,12 @@ For every dimension, assert `no`/`normal`/`none` becomes effective only when `re
 
 - [ ] **Step 2: Run tests and confirm RED**
 
+Run:
+
+```text
+python tests/run_browser_tests.py
+```
+
 Expected failure: validators and thresholds are missing.
 
 - [ ] **Step 3: Implement validators in order**
@@ -428,6 +467,8 @@ git commit -m "feat: validate smart hundo state evidence"
 - Produces `HUNDO_COUNT_SCHEMA`.
 - Produces `buildHundoCountPrompt()`.
 - Produces `fileToHundoCountRegionDataUrl(originalDataUrl): Promise<string>`.
+- Extends `requestOpenAiJsonSchema(..., { includeMetadata: true })` to return `{ result, finish_reason }`, while every existing ordinary caller still receives the parsed result object.
+- Produces `requestHundoCountExtraction(apiKey, countRegionDataUrl, statusUpdater): Promise<{ result: object, finish_reason: string }>`; it sends exactly one `HUNDO_COUNT_SCHEMA` request using `detail: "high"`.
 - Produces `normalizeHundoCountResult(result)`.
 - Produces `validateHundoCountEvidence(result, classification): { hundo_leg, confidence, valid, raw_count_text, manual_review_reasons }`.
 - Produces `mergeHundoCountResults(results): { hundo_leg, conflict, uncertain, candidates, manual_review_reasons }`.
@@ -494,7 +535,36 @@ equal(mergeHundoCountResults([count('3', .91), count('3', .87)]).hundo_leg, '3')
 
 Reorder the tied inputs and assert the same unresolved result. Assert no cards-derived field appears in the merge API.
 
+Add one mocked request test with a locally generated `data:image/png` count-region sentinel. The mock parses the request and requires:
+
+```js
+request.url === OPENAI_CHAT_COMPLETIONS_URL
+payload.response_format.json_schema.name === 'pokemon_go_hundo_count_extractor'
+payload.messages[0].content[1].image_url.detail === 'high'
+payload.messages[0].content[1].image_url.url.startsWith('data:image/png')
+```
+
+Use a shared `installStrictOpenAiFetchMock()` for all request-bearing tests from this task onward. It must throw immediately for an unknown URL or a schema name outside this explicit allowlist:
+
+```js
+[
+  'pokemon_go_image_classifier',
+  'pokemon_go_forced_field_extractor',
+  'pokemon_go_hundo_smart_extractor', // V1 transition only; remove in Task 8
+  'pokemon_go_hundo_count_extractor',
+  'pokemon_go_hundo_smart_extractor_v2'
+]
+```
+
+The mock must never delegate to the real network and must use only fake keys and sentinel image data.
+
 - [ ] **Step 2: Run tests and confirm RED**
+
+Run:
+
+```text
+python tests/run_browser_tests.py
+```
 
 Expected failure: no dedicated count schema/helpers exist.
 
@@ -506,9 +576,19 @@ Vote by frequency, then highest confidence only. If confidence remains tied, ret
 
 Implement a native-resolution canvas crop using full width and `Math.ceil(height * 0.42)`, output `canvas.toDataURL('image/png')`. The prompt—not the crop coordinate—defines legal evidence. Missing active-tab/summary/egg-exclusion context must normalize to uncertain.
 
+Add the opt-in metadata return to `requestOpenAiJsonSchema()` and implement `requestHundoCountExtraction()` with the exact signature above. Do not change `OPENAI_MODEL`, the endpoint, authorization storage, retry policy, or the default return shape used by classification and ordinary extraction.
+
 - [ ] **Step 4: Run GREEN verification**
 
-Run browser and regression tests. Assert ordinary JPEG compressor call count/settings remain unchanged and the count region is PNG/high detail.
+Run:
+
+```text
+python tests/run_browser_tests.py
+python tests/verify_regressions.py
+git diff --check
+```
+
+Assert ordinary JPEG compressor call count/settings remain unchanged, the count region is PNG/high detail, and both unknown-URL and unknown-schema mock assertions fail closed.
 
 - [ ] **Step 5: Commit**
 
@@ -527,9 +607,49 @@ git commit -m "feat: add semantic hundo count extraction"
 - Modify: `index.html`
 
 **Interfaces:**
-- Produces `validateSmartHundoStructure(result, finishReason)`.
-- Produces `requestOpenAiJsonSchema(..., { includeMetadata: true })` response `{ result, finish_reason }` without changing default ordinary return values.
-- Produces staged `buildSmartHundoPrompt()`, `requestSmartHundoExtractionV2()`, and `requestSmartHundoWithStructuralRetry(): { result, finish_reason, structural_retry_used, structural_retry_reason }`.
+- Produces:
+
+```js
+validateSmartHundoStructure(result, finishReason): {
+  structurally_complete: boolean,
+  reasons: string[],
+  detected_card_count: number,
+  cards_length: number,
+  scan_complete: boolean,
+  bottom_edge_checked: boolean,
+  finish_reason: string
+}
+```
+
+- Produces staged `buildSmartHundoPrompt()`.
+- Produces:
+
+```js
+requestSmartHundoExtractionV2(
+  apiKey,
+  originalDataUrl,
+  statusUpdater,
+  { structuralRetry = false } = {}
+): Promise<{ result: object, finish_reason: string }>
+```
+
+- Produces:
+
+```js
+requestSmartHundoWithStructuralRetry({
+  apiKey,
+  originalDataUrl,
+  imageIndex,
+  statusUpdater
+}): Promise<{
+  result: NormalizedHundoScreenshot,
+  finish_reason: string,
+  structure: ReturnType<typeof validateSmartHundoStructure>,
+  structural_retry_used: boolean,
+  structural_retry_reason: string[],
+  attempt_count: 1 | 2
+}>
+```
 
 - [ ] **Step 1: Add failing enumeration tests**
 
@@ -553,11 +673,17 @@ Mock first response with 10/15 mismatch and second response with 15 cards. Asser
 
 - [ ] **Step 2: Run tests and confirm RED**
 
+Run:
+
+```text
+python tests/run_browser_tests.py
+```
+
 Expected failure: structural validator, metadata return, and controlled replacement retry are missing.
 
 - [ ] **Step 3: Implement completeness and replacement**
 
-Update `requestOpenAiJsonSchema` so ordinary callers still receive the parsed result. Only `{ includeMetadata: true }` returns:
+Use the Task 4 metadata contract. Ordinary callers still receive the parsed result. Only `{ includeMetadata: true }` returns:
 
 ```js
 {
@@ -566,7 +692,7 @@ Update `requestOpenAiJsonSchema` so ordinary callers still receive the parsed re
 }
 ```
 
-`requestSmartHundoWithStructuralRetry()` calls once, validates, and calls once more only for structural incompleteness/truncation. The second normalized result replaces the first. Diagnostics retain retry reason and attempt count, not first-round cards.
+`requestSmartHundoWithStructuralRetry()` calls once, normalizes with `{ screenshotIndex: imageIndex }`, validates, and calls once more only for structural incompleteness/truncation. The second normalized result replaces the first in every returned field. Diagnostics retain retry reason and attempt count, not first-round cards.
 
 Prompt explicitly requires top-to-bottom, left-to-right, beyond ten cards, bottom edge, full/partial cards, no neighbor-symbol transfer, and no invented cards.
 
@@ -584,7 +710,15 @@ Add the five evidence sections only now, after Tasks 1–3 are green:
 
 - [ ] **Step 4: Run GREEN verification**
 
-Run browser/regression tests and check:
+Run:
+
+```text
+python tests/run_browser_tests.py
+python tests/verify_regressions.py
+git diff --check
+```
+
+Check:
 
 ```text
 12 normalized cards
@@ -609,9 +743,72 @@ git commit -m "feat: enforce complete hundo card enumeration"
 - Modify: `smart-hundo-helpers.js`
 
 **Interfaces:**
-- Produces `detectScreenshotOverlap(left, right)`.
-- Produces `mergeSmartHundoScreenshots(screenshots, normalizeOfficialName)`.
-- Produces `shapeSmartHundoDiagnostics(session)`.
+- Produces:
+
+```js
+detectScreenshotOverlap(left, right): {
+  direction: 'left_suffix_right_prefix' | 'right_suffix_left_prefix' | 'none',
+  overlap_count: number,
+  ambiguous: boolean,
+  matched_card_ids: string[],
+  manual_review_reasons: string[]
+}
+```
+
+- Produces:
+
+```js
+mergeSmartHundoScreenshots(screenshots, normalizeOfficialName): {
+  cards: ValidatedHundoCard[],
+  overlap_decisions: ReturnType<typeof detectScreenshotOverlap>[],
+  manual_review_reasons: string[]
+}
+```
+
+- Produces:
+
+```js
+shapeSmartHundoDiagnostics(session): {
+  scan_session_id: string,
+  screenshots: Array<{
+    index: number,
+    classification: { image_type: string, search_query: string },
+    normalized_search_query: string,
+    raw_count_text: string,
+    validated_count: string,
+    count_source: string,
+    count_confidence: number,
+    detected_card_count: number,
+    cards_length: number,
+    scan_complete: boolean,
+    bottom_edge_checked: boolean,
+    finish_reason: string,
+    structural_retry_used: boolean,
+    structural_retry_reason: string[],
+    cards: Array<{
+      card_id: string,
+      order: number,
+      row: number,
+      column: number,
+      cp: string,
+      visible_label: string,
+      official_name: string,
+      recognition_status: string,
+      raw_states: object,
+      raw_confidences: object,
+      raw_evidence: object,
+      effective_states: object,
+      manual_review_reasons: string[]
+    }>
+  }>,
+  count_candidates: Array<{ value: string, votes: number, confidence: number }>,
+  count_conflict: boolean,
+  overlap_decisions: object[],
+  manual_review_reasons: string[],
+  pokemon_list: string
+}
+```
+
 - Produces `normalizeVisibleLabel(value): string` using NFKC and Unicode whitespace removal.
 
 - [ ] **Step 1: Add failing overlap and diagnostics tests**
@@ -641,6 +838,12 @@ account;password
 
 - [ ] **Step 2: Run tests and confirm RED**
 
+Run:
+
+```text
+python tests/run_browser_tests.py
+```
+
 Expected failure: overlap and diagnostics helpers do not exist.
 
 - [ ] **Step 3: Implement conservative overlap**
@@ -666,7 +869,15 @@ Diagnostics are constructed by explicit allowlist, never by spreading job/reques
 
 - [ ] **Step 4: Run GREEN verification**
 
-Run browser/regression tests and serialize all captured logs/diagnostics to recheck forbidden sentinels.
+Run:
+
+```text
+python tests/run_browser_tests.py
+python tests/verify_regressions.py
+git diff --check
+```
+
+Serialize all captured logs/diagnostics to recheck forbidden sentinels.
 
 - [ ] **Step 5: Commit**
 
@@ -689,6 +900,7 @@ git commit -m "feat: merge overlapping hundo screenshots safely"
 - Produces `handleSmartHundoManualEdit(inputId)`.
 - Produces `isCurrentSmartHundoSession(sessionId)`.
 - Tracks only `g_hundos` and `st_hundo_leg`.
+- These are staged helper contracts in this task. Do not call `beginSmartHundoScanSession()` from `autoScan()`, do not guard the current V1 writes, and do not attach production input listeners until Task 8 performs the single cutover.
 
 - [ ] **Step 1: Add failing session tests**
 
@@ -710,17 +922,31 @@ Assert old session results cannot write after a new session starts. Assert count
 
 - [ ] **Step 2: Run tests and confirm RED**
 
+Run:
+
+```text
+python tests/run_browser_tests.py
+```
+
 Expected failure: no session/provenance helpers exist.
 
 - [ ] **Step 3: Implement ownership**
 
-Use a module-local monotonic counter and a `Map` containing `{ sessionId, value }` for the two hundo inputs. A manual input event deletes that field’s marker. New sessions clear a field only when its current value still equals the marked AI value.
+Use a module-local monotonic counter and a `Map` containing `{ sessionId, value }` for the two hundo inputs. `handleSmartHundoManualEdit()` deletes that field’s marker. New sessions clear a field only when its current value still equals the marked AI value.
 
-Before every form/audit/status write, require `isCurrentSmartHundoSession(sessionId)`.
+Keep these functions staged and test them through their direct API. Task 8 will attach the two input listeners, invoke session start from the smart route, and require `isCurrentSmartHundoSession(sessionId)` before every form/audit/status write.
 
 - [ ] **Step 4: Run GREEN verification**
 
-Run browser/regression tests. Confirm old AI values clear, manual values survive until a validated replacement, stale callbacks do nothing, and ordinary fields stay unchanged.
+Run:
+
+```text
+python tests/run_browser_tests.py
+python tests/verify_regressions.py
+git diff --check
+```
+
+Confirm through direct helper tests that old AI values clear, manual values survive until a validated replacement, stale callbacks do nothing, and ordinary fields stay unchanged. Confirm `autoScan()` still uses V1 and does not start a V2 session yet.
 
 - [ ] **Step 5: Commit**
 
@@ -764,7 +990,7 @@ For each smart screenshot assert:
 - no smart image enters ordinary extraction/validation;
 - all classifications finish before extraction begins.
 
-Mock count values 3, 3, 9 across three screenshots and assert final `st_hundo_leg = 3` with conflict diagnostic. Mock exact confidence tie 3 vs 9 and assert the field remains blank with both reasons.
+Keep that five-image fixture as the exact two-job routing test. In a separate three-smart-screenshot fixture, mock count values 3, 3, 9 and assert final `st_hundo_leg = 3` with conflict diagnostic. In another two-smart-screenshot fixture, mock an exact confidence tie 3 vs 9 and assert the field remains blank with both reasons. Neither fixture may infer the count from its card responses.
 
 Mock cards:
 
@@ -783,7 +1009,21 @@ g_hundos = 鳳王,哲爾尼亞斯,雷吉奇卡斯
 
 Assert detailed status formats for fully successful, count unresolved, state-review breakdown, incomplete enumeration, overlap uncertainty, and request failure.
 
+Derive every user-facing reason phrase from `HUNDO_REVIEW_REASON_MESSAGES`. Assert at least these exact summaries:
+
+```text
+百神掃描完成：總數3，辨識3張卡片
+百神清單辨識完成：辨識3張卡片；百神總數需人工確認
+百神掃描完成：總數3，偵測3張卡片，辨識3張；1張背卡狀態需人工確認
+```
+
 - [ ] **Step 2: Run tests and confirm RED**
+
+Run:
+
+```text
+python tests/run_browser_tests.py
+```
 
 Expected failure: production still uses V1 combined count/card extraction and raw-type routing.
 
@@ -801,9 +1041,11 @@ For each smart job:
 
 Merge count results, merge screenshots with overlap, validate states, build display names, group, summarize reviews, shape diagnostics, and apply only current-session validated replacements.
 
+At cutover, attach `input` listeners only to `g_hundos` and `st_hundo_leg`, begin one session for the batch, and require `isCurrentSmartHundoSession(sessionId)` before every smart-hundo form, diagnostics, or status write. Remove the staged-only restriction from Task 7 without changing ordinary form behavior.
+
 Set both `window.lastSmartHundoDiagnostics` and compatibility alias `window.lastSmartHundoScanResult` to the same safe allowlisted object.
 
-Remove all V1 transitional definitions and direct raw-state conversion. Keep the ordinary HUNDO metadata only where existing classification compatibility requires it, but exact smart jobs must never reach ordinary extraction.
+Remove all V1 transitional definitions, the transitional V1 schema name from the strict test allowlist, and direct raw-state conversion. Keep the ordinary HUNDO metadata only where existing classification compatibility requires it, but exact smart jobs must never reach ordinary extraction.
 
 Replace full-error console logging with a safe `{ stage, name, httpStatus, reasonCode }` summary. Keep the existing generic user alert, never put OpenAI response text into diagnostics or console, and never log the thrown `Error` object itself.
 
@@ -869,7 +1111,14 @@ Add exact required/forbidden fragment checks proving:
 - V2 schema excludes `hundo_leg`, `shadow_state`, `purified_state`, `global`;
 - smart diagnostics/log code does not include forbidden sensitive field names.
 
-Run `python tests/verify_regressions.py` and confirm RED where the new manual doc/locks are absent.
+Before creating the document, add a regression assertion that
+`docs/manual-tests/smart-hundo-state-pipeline-v2.md` exists and contains the exact Case A result plus both required Groudon grouping strings. Then run:
+
+```text
+python tests/verify_regressions.py
+```
+
+Expected RED: the new document existence/content assertion fails. Existing regression checks must still pass up to that new assertion.
 
 - [ ] **Step 2: Create the manual acceptance document**
 
@@ -884,13 +1133,24 @@ Case C: 鳳王/鳳王/閃電鳥/蒼響/蓋歐卡/炎帝
         => 鳳王*2,閃電鳥,蒼響,蓋歐卡,炎帝
 Case D: 12+ full/partial cards all represented
 Case E: strong two-card overlap removed; legitimate duplicates retained
+
+普通固拉多＋淨化固拉多＋亮晶晶固拉多
+        => 固拉多*3
+普通固拉多＋色違固拉多＋特別背卡固拉多
+        => 固拉多,色違固拉多,特別背卡固拉多
 ```
 
 Mark these as manual; do not claim mock tests prove real visual accuracy.
 
 - [ ] **Step 3: Run GREEN verification**
 
-Run browser tests, regression checks, and `git diff --check`.
+Run:
+
+```text
+python tests/run_browser_tests.py
+python tests/verify_regressions.py
+git diff --check
+```
 
 - [ ] **Step 4: Commit**
 
