@@ -2309,6 +2309,7 @@
         let delayedCardIdentity = '';
         let releaseDelayedCard = null;
         let notifyDelayedCard = null;
+        let delayedCardReleased = false;
         let alertMessages = [];
         globalThis.alert = (message) => alertMessages.push(String(message));
         globalThis.setTimeout = (callback) => { callback(); return 0; };
@@ -2351,9 +2352,12 @@
           }
           if (schemaName === 'pokemon_go_hundo_smart_extractor_v2') {
             const identity = imageUrl.match(/ORIGINAL_(.+)$/)?.[1];
-            if (identity === delayedCardIdentity) {
+            if (identity === delayedCardIdentity && !delayedCardReleased) {
               await new Promise(resolve => {
-                releaseDelayedCard = resolve;
+                releaseDelayedCard = () => {
+                  delayedCardReleased = true;
+                  resolve();
+                };
                 notifyDelayedCard?.();
               });
             }
@@ -2400,6 +2404,7 @@
           delayedCardIdentity = '';
           releaseDelayedCard = null;
           notifyDelayedCard = null;
+          delayedCardReleased = false;
           alertMessages = [];
         };
 
@@ -2538,6 +2543,34 @@
           equal(document.getElementById('aiAutoStatus').textContent, currentStatus);
           equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
           equal(document.getElementById('aiAutoBtn').disabled, false);
+        });
+
+        await asyncTest('suppresses stale smart operation warnings after delayed count and card failures settle', async () => {
+          resetScanScenario();
+          delayedCardIdentity = 'STALE_SMART';
+          failedOperations.add('count:STALE_SMART');
+          failedOperations.add('cards:STALE_SMART');
+          setScanFiles(['STALE_SMART']);
+          const staleCardReached = new Promise(resolve => { notifyDelayedCard = resolve; });
+          const staleScan = autoScan();
+          await staleCardReached;
+
+          setScanFiles(['CURRENT_B']);
+          countResultByImage.set('CURRENT_B', validCount('(3)', '3'));
+          cardResultByImage.set('CURRENT_B', completeCardResult([
+            v2Card({ cp: '3000', visible_label: '目前批次', official_name: '鳳王' })
+          ]));
+          await autoScan();
+          const logCount = loggedValues.length;
+          const currentDiagnostics = window.lastSmartHundoDiagnostics;
+          const currentStatus = document.getElementById('aiAutoStatus').textContent;
+
+          releaseDelayedCard();
+          await staleScan;
+
+          equal(loggedValues.length, logCount, 'stale operation failures do not emit warnings');
+          equal(window.lastSmartHundoDiagnostics, currentDiagnostics);
+          equal(document.getElementById('aiAutoStatus').textContent, currentStatus);
         });
 
         await asyncTest('blocks a stale ordinary-only completion from mutating or unlocking a newer pending smart run', async () => {
@@ -2831,6 +2864,70 @@
           ['test-key', 'Authorization', 'ORIGINAL_', 'RESIZED_', 'data:image/', 'classificationDataUrl', 'file', 'CARD_FAIL_SECRET', 'COUNT_FAIL_SECRET'].forEach(secret => {
             equal(serializedAudit.includes(secret), false, `audit excludes ${secret}`);
           });
+        });
+
+        await asyncTest('preserves a manual hundo list when validated nonzero count contradicts a complete empty extraction', async () => {
+          resetScanScenario();
+          setScanFiles(['VALID_EMPTY']);
+          countResultByImage.set('VALID_EMPTY', validCount('(3)', '3'));
+          cardResultByImage.set('VALID_EMPTY', completeCardResult([]));
+          document.getElementById('g_hundos').value = '非零總數矛盾時保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '非零總數矛盾時保留');
+          equal(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.includes('incomplete_card_enumeration'),
+            true,
+            'contradictory empty extraction is not reported as a validated empty list'
+          );
+          equal(
+            document.getElementById('aiAutoStatus').textContent.includes(
+              HUNDO_REVIEW_REASON_MESSAGES.incomplete_card_enumeration
+            ),
+            true,
+            'visible status does not imply full success'
+          );
+        });
+
+        await asyncTest('does not clear a manual hundo list from a conflicted count resolved to zero', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_3_A', 'COUNT_3_B', 'COUNT_9']);
+          countResultByImage.set('COUNT_3_A', { ...validCount('(0)', '0'), confidence: 0.91 });
+          countResultByImage.set('COUNT_3_B', { ...validCount('(0)', '0'), confidence: 0.89 });
+          countResultByImage.set('COUNT_9', { ...validCount('(3)', '3'), confidence: 0.99 });
+          ['COUNT_3_A', 'COUNT_3_B', 'COUNT_9'].forEach(identity => {
+            cardResultByImage.set(identity, completeCardResult([]));
+          });
+          document.getElementById('g_hundos').value = '衝突零值須保留';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '衝突零值須保留');
+          equal(window.lastSmartHundoDiagnostics.count_conflict, true);
+          equal(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.includes('incomplete_card_enumeration'),
+            true
+          );
+        });
+
+        await asyncTest('allows a complete confident empty card result when the count operation fails independently', async () => {
+          resetScanScenario();
+          setScanFiles(['COUNT_FAIL']);
+          failedOperations.add('count:COUNT_FAIL');
+          cardResultByImage.set('COUNT_FAIL', completeCardResult([]));
+          document.getElementById('g_hundos').value = '計數失敗仍由獨立空清單清除';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '');
+          equal(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'),
+            true
+          );
         });
 
         await asyncTest('clears only a fully validated empty smart list and preserves all unresolved empty outcomes', async () => {

@@ -1985,7 +1985,8 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
             originalDataUrl,
             imageIndex,
             classification,
-            statusUpdater
+            statusUpdater,
+            isCurrentRun = () => false
         } = {}) => {
             const helpers = globalThis.SmartHundoHelpers;
             if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
@@ -2021,7 +2022,7 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                     'smart_hundo_request_failed'
                 );
                 requestFailures.push(summary);
-                console.warn('Smart hundo operation failed', summary);
+                if (isCurrentRun()) console.warn('Smart hundo operation failed', summary);
             }
             if (cardSettlement.status === 'rejected') {
                 const summary = safeSmartHundoErrorSummary(
@@ -2030,7 +2031,7 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                     'smart_hundo_request_failed'
                 );
                 requestFailures.push(summary);
-                console.warn('Smart hundo operation failed', summary);
+                if (isCurrentRun()) console.warn('Smart hundo operation failed', summary);
             }
 
             const count = countSettlement.status === 'fulfilled'
@@ -2440,6 +2441,7 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                         originalDataUrl,
                         imageIndex: job.index,
                         classification: job.classification,
+                        isCurrentRun: () => isCurrentAutoScanRun(scanRunId),
                         statusUpdater: (stage, attempt, maxRetries) => {
                             if (!isCurrentAutoScanRun(scanRunId)) return;
                             setSmartHundoStatus(
@@ -2519,6 +2521,28 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                         overlapMerge.cards,
                         normalizePokemonBaseName
                     );
+                    const allCardOperationsSucceeded = smartResults.every(result => result.card_operation_succeeded);
+                    const hasCompleteConfidentEmptyCardExtraction = (
+                        smartResults.length > 0
+                        && smartResults.every(result => (
+                            result.card_operation_succeeded
+                            && result.structure?.structurally_complete === true
+                            && Number(result.card_result.enumeration_confidence || 0) >= helpers.ENUMERATION_CONFIDENCE_THRESHOLD
+                            && result.card_result.cards.length === 0
+                        ))
+                    );
+                    const hasValidatedNonzeroCount = (
+                        String(countMerge.hundo_leg || '') !== ''
+                        && String(countMerge.hundo_leg) !== '0'
+                    );
+                    const hasConflictedResolvedZeroCount = (
+                        String(countMerge.hundo_leg) === '0'
+                        && countMerge.conflict === true
+                    );
+                    const hasContradictoryEmptyCardExtraction = (
+                        hasCompleteConfidentEmptyCardExtraction
+                        && (hasValidatedNonzeroCount || hasConflictedResolvedZeroCount)
+                    );
                     const sessionReasons = [
                         ...countMerge.manual_review_reasons,
                         ...(
@@ -2528,7 +2552,8 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                                 : []
                         ),
                         ...smartResults.flatMap(result => result.manual_review_reasons),
-                        ...overlapMerge.manual_review_reasons
+                        ...overlapMerge.manual_review_reasons,
+                        ...(hasContradictoryEmptyCardExtraction ? ['incomplete_card_enumeration'] : [])
                     ];
                     const reviewSummary = helpers.summarizeHundoManualReview(
                         overlapMerge.cards,
@@ -2538,15 +2563,9 @@ shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判
                         (total, result) => total + Number(result.card_result.detected_card_count || 0),
                         0
                     );
-                    const allCardOperationsSucceeded = smartResults.every(result => result.card_operation_succeeded);
                     const hasValidatedEmptyCardList = (
-                        smartResults.length > 0
-                        && smartResults.every(result => (
-                            result.card_operation_succeeded
-                            && result.structure?.structurally_complete === true
-                            && Number(result.card_result.enumeration_confidence || 0) >= helpers.ENUMERATION_CONFIDENCE_THRESHOLD
-                            && result.card_result.cards.length === 0
-                        ))
+                        hasCompleteConfidentEmptyCardExtraction
+                        && !hasContradictoryEmptyCardExtraction
                     );
                     const shouldReplaceSmartList = (
                         allCardOperationsSucceeded
