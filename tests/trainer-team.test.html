@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><title>Trainer team fixed UI evidence tests</title></head>
+<body data-test-status="running"><pre id="results"></pre>
+<script>
+(() => {
+  'use strict';
+  const results = [];
+  const fail = message => { throw new Error(message); };
+  const equal = (actual, expected, message = 'values differ') => {
+    if (actual !== expected) fail(`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  };
+  const includes = (values, expected, message = 'missing expected value') => {
+    if (!Array.isArray(values) || !values.includes(expected)) fail(`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(values)}`);
+  };
+  const test = (name, callback) => { callback(); results.push(`PASS ${name}`); };
+  const render = () => {
+    const passed = results.filter(result => result.startsWith('PASS ')).length;
+    const failed = results.filter(result => result.startsWith('FAIL ')).length;
+    document.body.dataset.testPassed = String(passed);
+    document.body.dataset.testFailed = String(failed);
+    document.body.dataset.testStatus = failed === 0 ? 'pass' : 'fail';
+    document.getElementById('results').textContent = results.join('\n');
+  };
+  const evidence = (overrides = {}) => ({
+    model_team_candidate: 'yellow', model_confidence: 0.99,
+    level_number: { visibility: 'clear', color: 'yellow' },
+    xp_bar_fill: { visibility: 'clear', color: 'yellow' },
+    xp_value_text: { visibility: 'clear', color: 'yellow' },
+    profile_name_block: { visibility: 'clear', color: 'yellow' },
+    arrow_or_progress_accent: { visibility: 'clear', color: 'yellow' },
+    ...overrides
+  });
+  const assertValidation = (actual, color, team, diagnostic) => {
+    equal(actual.effective_color, color, 'effective fixed-UI color');
+    equal(actual.effective_team, team, 'effective trainer team');
+    if (diagnostic) includes(actual.diagnostics, diagnostic, 'validator diagnostic');
+  };
+  try {
+    const helpers = globalThis.TrainerTeamHelpers;
+    if (!helpers) fail('globalThis.TrainerTeamHelpers is absent');
+    const { normalizeTrainerTeamResult, validateTrainerTeamEvidence, mergeTrainerTeamResults, formatTrainerTeamStatus } = helpers;
+
+    test('normalizes malformed evidence to strict uncertain values', () => {
+      const result = normalizeTrainerTeamResult({ model_team_candidate: 'green', model_confidence: 2, level_number: { visibility: 'visible', color: 'green' } });
+      equal(result.model_team_candidate, 'uncertain'); equal(result.model_confidence, 1);
+      equal(result.level_number.visibility, 'uncertain'); equal(result.level_number.color, 'uncertain');
+    });
+    test('accepts yellow fixed UI despite a blue Dialga Buddy', () => {
+      const result = validateTrainerTeamEvidence({
+        model_team_candidate: 'blue', model_confidence: 0.99,
+        level_number: { visibility: 'clear', color: 'yellow' }, xp_bar_fill: { visibility: 'clear', color: 'yellow' },
+        xp_value_text: { visibility: 'clear', color: 'yellow' }, profile_name_block: { visibility: 'clear', color: 'yellow' },
+        arrow_or_progress_accent: { visibility: 'clear', color: 'yellow' }, buddy_color: 'blue'
+      });
+      assertValidation(result, 'yellow', '黃隊', 'model_evidence_disagreement');
+    });
+    test('accepts yellow fixed UI despite red Groudon and purple Shadow smoke', () => assertValidation(validateTrainerTeamEvidence(evidence({ buddy_color: 'red', shadow_aura_color: 'purple' })), 'yellow', '黃隊'));
+    test('accepts yellow fixed UI despite green Groudon', () => assertValidation(validateTrainerTeamEvidence(evidence({ buddy_color: 'green' })), 'yellow', '黃隊'));
+    test('accepts blue fixed UI despite black and blue Necrozma', () => assertValidation(validateTrainerTeamEvidence(evidence({
+      model_team_candidate: 'blue', level_number: { visibility: 'clear', color: 'blue' }, xp_bar_fill: { visibility: 'clear', color: 'blue' }, xp_value_text: { visibility: 'clear', color: 'blue' }, profile_name_block: { visibility: 'clear', color: 'blue' }, arrow_or_progress_accent: { visibility: 'clear', color: 'blue' }, buddy_color: 'black_blue'
+    })), 'blue', '藍隊'));
+    test('accepts blue fixed UI despite blue and gold Zamazenta', () => assertValidation(validateTrainerTeamEvidence(evidence({
+      model_team_candidate: 'blue', level_number: { visibility: 'clear', color: 'blue' }, xp_bar_fill: { visibility: 'clear', color: 'blue' }, xp_value_text: { visibility: 'clear', color: 'blue' }, profile_name_block: { visibility: 'clear', color: 'blue' }, arrow_or_progress_accent: { visibility: 'clear', color: 'blue' }, buddy_color: 'blue_gold'
+    })), 'blue', '藍隊'));
+    test('accepts red fixed UI despite blue and gold Zamazenta', () => assertValidation(validateTrainerTeamEvidence(evidence({
+      model_team_candidate: 'red', level_number: { visibility: 'clear', color: 'red' }, xp_bar_fill: { visibility: 'clear', color: 'red' }, xp_value_text: { visibility: 'clear', color: 'red' }, profile_name_block: { visibility: 'clear', color: 'red' }, arrow_or_progress_accent: { visibility: 'clear', color: 'red' }, buddy_color: 'blue_gold'
+    })), 'red', '紅隊'));
+    test('rejects conflicting clear primary fixed UI evidence', () => assertValidation(validateTrainerTeamEvidence(evidence({
+      level_number: { visibility: 'clear', color: 'yellow' }, xp_bar_fill: { visibility: 'clear', color: 'blue' }, xp_value_text: { visibility: 'uncertain', color: 'uncertain' }
+    })), 'uncertain', '', 'primary_conflict'));
+    test('does not infer blue from Buddy or background without clear primary evidence', () => assertValidation(validateTrainerTeamEvidence(evidence({
+      model_team_candidate: 'blue', level_number: { visibility: 'hidden', color: 'uncertain' }, xp_bar_fill: { visibility: 'hidden', color: 'uncertain' }, xp_value_text: { visibility: 'uncertain', color: 'uncertain' }, profile_name_block: { visibility: 'hidden', color: 'uncertain' }, arrow_or_progress_accent: { visibility: 'hidden', color: 'uncertain' }, buddy_color: 'blue', outer_background_color: 'blue'
+    })), 'uncertain', ''));
+    test('accepts one red primary only when both red secondary sources agree', () => assertValidation(validateTrainerTeamEvidence(evidence({
+      model_team_candidate: 'red', level_number: { visibility: 'clear', color: 'red' }, xp_bar_fill: { visibility: 'partial', color: 'red' }, xp_value_text: { visibility: 'hidden', color: 'uncertain' }, profile_name_block: { visibility: 'clear', color: 'red' }, arrow_or_progress_accent: { visibility: 'clear', color: 'red' }
+    })), 'red', '紅隊'));
+    test('keeps three yellow primary sources over a blue model candidate', () => assertValidation(validateTrainerTeamEvidence(evidence({ model_team_candidate: 'blue' })), 'yellow', '黃隊', 'model_evidence_disagreement'));
+    test('merges agreeing yellow screenshots', () => {
+      const yellow = validateTrainerTeamEvidence(evidence()); assertValidation(mergeTrainerTeamResults([yellow, yellow]), 'yellow', '黃隊');
+    });
+    test('rejects conflicting yellow and blue screenshots without upload-order bias', () => {
+      const yellow = validateTrainerTeamEvidence(evidence());
+      const blue = validateTrainerTeamEvidence(evidence({ model_team_candidate: 'blue', level_number: { visibility: 'clear', color: 'blue' }, xp_bar_fill: { visibility: 'clear', color: 'blue' }, xp_value_text: { visibility: 'clear', color: 'blue' }, profile_name_block: { visibility: 'clear', color: 'blue' }, arrow_or_progress_accent: { visibility: 'clear', color: 'blue' } }));
+      assertValidation(mergeTrainerTeamResults([yellow, blue]), 'uncertain', '', 'team_conflict');
+    });
+    test('rejects evidence below the 0.85 confidence threshold', () => assertValidation(validateTrainerTeamEvidence(evidence({ model_confidence: 0.84 })), 'uncertain', ''));
+    test('formats validated and insufficient-evidence status text', () => {
+      equal(formatTrainerTeamStatus({ effective_color: 'yellow', effective_team: '黃隊', diagnostics: [] }), '隊伍辨識完成：黃隊');
+      equal(formatTrainerTeamStatus({ effective_color: 'uncertain', effective_team: '', diagnostics: [] }), '隊伍需人工確認：固定 UI 證據不足');
+    });
+  } catch (error) {
+    results.push(`FAIL ${error && error.message ? error.message : String(error)}`);
+  }
+  render();
+})();
+</script></body>
+</html>

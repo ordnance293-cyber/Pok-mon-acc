@@ -1,4 +1,4 @@
-"""Dependency-free browser runner for the smart hundo helper contract."""
+"""Dependency-free browser runner for the browser helper contracts."""
 
 from __future__ import annotations
 
@@ -14,7 +14,10 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TEST_PATH = "/tests/smart-hundo.test.html"
+TEST_PATHS = (
+    "/tests/trainer-team.test.html",
+    "/tests/smart-hundo.test.html",
+)
 BROWSER_CANDIDATES = (
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
     Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
@@ -76,25 +79,39 @@ def main() -> int:
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), QuietHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    url = f"http://127.0.0.1:{server.server_port}{TEST_PATH}"
-
     try:
-        with tempfile.TemporaryDirectory(prefix="smart-hundo-browser-") as profile_dir:
-            completed = subprocess.run(
-                [
-                    find_browser(),
-                    "--headless=new",
-                    "--disable-gpu",
-                    "--disable-software-rasterizer",
-                    "--no-first-run",
-                    f"--user-data-dir={profile_dir}",
-                    "--dump-dom",
-                    url,
-                ],
-                capture_output=True,
-                timeout=30,
-                check=False,
-            )
+        browser = find_browser()
+        summaries = []
+        for test_path in TEST_PATHS:
+            url = f"http://127.0.0.1:{server.server_port}{test_path}"
+            with tempfile.TemporaryDirectory(prefix="browser-contract-") as profile_dir:
+                completed = subprocess.run(
+                    [
+                        browser,
+                        "--headless=new",
+                        "--disable-gpu",
+                        "--disable-software-rasterizer",
+                        "--no-first-run",
+                        f"--user-data-dir={profile_dir}",
+                        "--dump-dom",
+                        url,
+                    ],
+                    capture_output=True,
+                    timeout=30,
+                    check=False,
+                )
+            stdout = completed.stdout.decode("utf-8", errors="replace")
+            stderr = completed.stderr.decode("utf-8", errors="replace")
+            output = stdout + stderr
+            if completed.returncode != 0:
+                print(f"{test_path} exited {completed.returncode}\n{output}", file=sys.stderr)
+                return completed.returncode
+            try:
+                status, passed_groups, failed_groups = parse_test_summary(stdout)
+            except ValueError as error:
+                print(f"Browser harness result error for {test_path}: {error}\n{output}", file=sys.stderr)
+                return 1
+            summaries.append((test_path, status, passed_groups, failed_groups, output))
     except (OSError, subprocess.TimeoutExpired, RuntimeError) as error:
         print(f"Browser harness error: {error}", file=sys.stderr)
         return 2
@@ -102,26 +119,23 @@ def main() -> int:
         server.shutdown()
         server.server_close()
 
-    stdout = completed.stdout.decode("utf-8", errors="replace")
-    stderr = completed.stderr.decode("utf-8", errors="replace")
-    output = stdout + stderr
-    if completed.returncode != 0:
-        print(output, file=sys.stderr)
-        return completed.returncode
-    try:
-        status, passed_groups, failed_groups = parse_test_summary(stdout)
-    except ValueError as error:
-        print(f"Browser harness result error: {error}\n{output}", file=sys.stderr)
-        return 1
-    if status != "pass" or failed_groups != 0:
-        print(
-            f"Browser tests reported status={status!r}, passed={passed_groups}, failed={failed_groups}\n{output}",
-            file=sys.stderr,
-        )
+    total_passed = sum(passed for _path, _status, passed, _failed, _output in summaries)
+    total_failed = sum(failed for _path, _status, _passed, failed, _output in summaries)
+    failures = [
+        (path, status, passed, failed, output)
+        for path, status, passed, failed, output in summaries
+        if status != "pass" or passed <= 0 or failed != 0
+    ]
+    if failures:
+        for path, status, passed, failed, output in failures:
+            print(
+                f"Browser tests for {path} reported status={status!r}, passed={passed}, failed={failed}\n{output}",
+                file=sys.stderr,
+            )
         return 1
     print(
-        "Smart hundo browser tests passed: "
-        f"{passed_groups} test groups; failed test groups: {failed_groups}; "
+        "Browser helper tests passed: "
+        f"{total_passed} test groups; failed test groups: {total_failed}; "
         "OpenAI requests: 0 (mocked)"
     )
     return 0
