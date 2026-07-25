@@ -1933,7 +1933,7 @@
 
         const pageModule = moduleMatch[1]
           .replace(/^\s*import\s+[^;]+;\s*$/gm, '')
-          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA_V1, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPromptV1, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV1, requestSmartHundoExtractionV2, requestSmartHundoWithStructuralRetry, smartHundoScan });';
+          + '\nObject.assign(globalThis, { OPENAI_CHAT_COMPLETIONS_URL, HUNDO_SMART_IMAGE_DETAIL, HUNDO_SMART_SCHEMA_V1, HUNDO_SMART_SCHEMA, HUNDO_COUNT_SCHEMA, buildSmartHundoPromptV1, buildSmartHundoPrompt, buildHundoCountPrompt, fileToOriginalDataUrl, fileToResizedDataUrl, fileToHundoCountRegionDataUrl, buildAiRequestContent, requestOpenAiJsonSchema, requestHundoCountExtraction, requestSmartHundoExtractionV1, requestSmartHundoExtractionV2, requestSmartHundoWithStructuralRetry, smartHundoScan, beginSmartHundoScanSession, markSmartHundoAiValue, handleSmartHundoManualEdit, isCurrentSmartHundoSession });';
         (0, eval)(pageModule);
 
         equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
@@ -2313,6 +2313,78 @@
           document.body.appendChild(element);
         });
         document.getElementById('openaiApiKey').value = 'test-key';
+
+        test('clears only unchanged AI-owned hundo values when a new session begins', () => {
+          document.getElementById('g_hundos').value = '';
+          document.getElementById('st_hundo_leg').value = '';
+          const firstSession = beginSmartHundoScanSession();
+          equal(markSmartHundoAiValue('g_hundos', '舊 AI 百神', firstSession), true);
+          equal(markSmartHundoAiValue('st_hundo_leg', '3', firstSession), true);
+          equal(document.getElementById('g_hundos').value, '舊 AI 百神');
+          equal(document.getElementById('st_hundo_leg').value, '3');
+
+          const secondSession = beginSmartHundoScanSession();
+          equal(secondSession > firstSession, true, 'session IDs are monotonic');
+          equal(document.getElementById('g_hundos').value, '');
+          equal(document.getElementById('st_hundo_leg').value, '');
+          equal(isCurrentSmartHundoSession(secondSession), true);
+          equal(isCurrentSmartHundoSession(firstSession), false);
+        });
+
+        test('preserves manual hundo edits and keeps count and list ownership independent', () => {
+          document.getElementById('g_hundos').value = '';
+          document.getElementById('st_hundo_leg').value = '';
+          const session = beginSmartHundoScanSession();
+          markSmartHundoAiValue('g_hundos', 'AI 清單', session);
+          markSmartHundoAiValue('st_hundo_leg', '6', session);
+
+          document.getElementById('g_hundos').value = '未觸發 listener 的使用者值';
+          const nextSession = beginSmartHundoScanSession();
+          equal(document.getElementById('g_hundos').value, '未觸發 listener 的使用者值', 'a marker mismatch is never cleared');
+          equal(document.getElementById('st_hundo_leg').value, '', 'unchanged AI count is cleared independently');
+
+          markSmartHundoAiValue('g_hundos', '下一輪 AI 清單', nextSession);
+          document.getElementById('g_hundos').value = '使用者手動清單';
+          equal(handleSmartHundoManualEdit('g_hundos'), true);
+          beginSmartHundoScanSession();
+
+          equal(document.getElementById('g_hundos').value, '使用者手動清單');
+        });
+
+        test('rejects stale and unrelated smart-hundo ownership writes', () => {
+          document.getElementById('g_hundos').value = '目前清單';
+          document.getElementById('g_level').value = '47';
+          const staleSession = beginSmartHundoScanSession();
+          const currentSession = beginSmartHundoScanSession();
+
+          equal(markSmartHundoAiValue('g_hundos', '晚到的舊結果', staleSession), false);
+          equal(document.getElementById('g_hundos').value, '目前清單');
+          equal(markSmartHundoAiValue('g_level', '50', currentSession), false);
+          equal(handleSmartHundoManualEdit('g_level'), false);
+          equal(document.getElementById('g_level').value, '47', 'unrelated fields are never owned or changed');
+        });
+
+        test('starts a staged session without resetForm, production listeners, or V1 cutover', () => {
+          document.getElementById('g_hundos').value = '手動保留';
+          document.getElementById('g_level').value = '48';
+          window.lastSmartHundoDiagnostics = { scan_session_id: 'old-safe-audit' };
+          window.lastSmartHundoScanResult = window.lastSmartHundoDiagnostics;
+          let resetCalls = 0;
+          const originalResetForm = window.resetForm;
+          window.resetForm = () => { resetCalls += 1; };
+
+          const session = beginSmartHundoScanSession();
+
+          equal(isCurrentSmartHundoSession(session), true);
+          equal(window.lastSmartHundoDiagnostics, null);
+          equal(window.lastSmartHundoScanResult, null);
+          equal(document.getElementById('g_hundos').value, '手動保留');
+          equal(document.getElementById('g_level').value, '48');
+          equal(resetCalls, 0);
+          equal(autoScan.toString().includes('beginSmartHundoScanSession'), false, 'Task 7 does not cut over autoScan');
+          equal(document.getElementById('st_hundo_leg').oninput, null, 'Task 7 does not attach production input listeners');
+          window.resetForm = originalResetForm;
+        });
 
         const makeFile = (id) => ({
           id,

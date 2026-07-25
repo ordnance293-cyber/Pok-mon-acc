@@ -441,6 +441,49 @@
             setTimeout(() => listInput.classList.remove('ring-2', 'ring-blue-200'), 300);
         };
 
+        const SMART_HUNDO_AI_OWNED_INPUT_IDS = new Set(['g_hundos', 'st_hundo_leg']);
+        const smartHundoAiValueOwnership = new Map();
+        let smartHundoSessionCounter = 0;
+        let activeSmartHundoSessionId = 0;
+
+        const isCurrentSmartHundoSession = (sessionId) => (
+            sessionId === activeSmartHundoSessionId && activeSmartHundoSessionId > 0
+        );
+
+        const beginSmartHundoScanSession = () => {
+            smartHundoSessionCounter += 1;
+            activeSmartHundoSessionId = smartHundoSessionCounter;
+
+            SMART_HUNDO_AI_OWNED_INPUT_IDS.forEach(inputId => {
+                const marker = smartHundoAiValueOwnership.get(inputId);
+                const input = document.getElementById(inputId);
+                if (marker && input && input.value === marker.value) input.value = '';
+            });
+            smartHundoAiValueOwnership.clear();
+
+            window.lastSmartHundoDiagnostics = null;
+            window.lastSmartHundoScanResult = null;
+            return activeSmartHundoSessionId;
+        };
+
+        const markSmartHundoAiValue = (inputId, value, sessionId) => {
+            if (!SMART_HUNDO_AI_OWNED_INPUT_IDS.has(inputId) || !isCurrentSmartHundoSession(sessionId)) {
+                return false;
+            }
+            const input = document.getElementById(inputId);
+            if (!input) return false;
+            const normalizedValue = String(value ?? '');
+            input.value = normalizedValue;
+            smartHundoAiValueOwnership.set(inputId, { sessionId, value: normalizedValue });
+            return true;
+        };
+
+        const handleSmartHundoManualEdit = (inputId) => {
+            if (!SMART_HUNDO_AI_OWNED_INPUT_IDS.has(inputId)) return false;
+            smartHundoAiValueOwnership.delete(inputId);
+            return true;
+        };
+
         const parseNum = (val) => {
             if(!val) return NaN;
             return parseInt(String(val).replace(/,/g, '').replace(/\D/g, ''), 10);
