@@ -1717,9 +1717,9 @@ shadow 只可依據只屬於該卡片的官方紫色火焰或煙霧；紫色身�
 
         const buildHundoCountPrompt = () => `你是寶可夢 GO 百神數的嚴格視覺抽取器。
 
-只可辨識與 active Pokémon tab 具有明確語意關係與相對位置的 Pokémon search-result summary。合法數字必須是該摘要中完整可見的 parenthesized integer，例如「(3)」。
+只可辨識與 active Pokémon tab 具有明確語意關係與相對位置的 Pokémon search-result summary。合法數字必須是該摘要中完整可見的 parenthesized integer。合法範例：(3) 輸出 3；（30）輸出 30。
 
-辨識必須依 active Pokémon tab、Pokémon search-result summary、parentheses 與語意關係與相對位置；顏色不是必要或決定性訊號，也不得依賴固定高度、固定像素位置或裁切座標判定。
+辨識必須依 active Pokémon tab、Pokémon search-result summary、parentheses 與語意關係與相對位置；result color 可能是 gray、orange、blue-green、white 或 another UI color，color is never required or decisive。顏色不是必要或決定性訊號，也不得依賴固定高度、固定像素位置或裁切座標判定。
 
 明確排除下列附近數字，不得填入 hundo_leg：
 - egg 9/12 或任何含 slash 的蛋頁籤數字

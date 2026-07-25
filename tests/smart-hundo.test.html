@@ -1054,19 +1054,27 @@
           equal(majority.hundo_leg, '3');
           equal(majority.conflict, true);
           equal(majority.uncertain, false);
-          deepEqual(majority.candidates.map(candidate => candidate.value), ['3', '9']);
-          deepEqual(majority.manual_review_reasons, ['hundo_count_conflict']);
+          deepEqual(majority.candidates, [
+            { value: '3', votes: 2, confidence: .90 },
+            { value: '9', votes: 1, confidence: .99 }
+          ]);
+          deepEqual(majority.manual_review_reasons, []);
 
           const confidenceWinner = mergeHundoCountResults([count('3', .94), count('9', .95)]);
           equal(confidenceWinner.hundo_leg, '9');
           equal(confidenceWinner.conflict, true);
           equal(confidenceWinner.uncertain, false);
+          deepEqual(confidenceWinner.manual_review_reasons, []);
 
           const unresolved = mergeHundoCountResults([count('3', .95), count('9', .95)]);
           const unresolvedReordered = mergeHundoCountResults([count('9', .95), count('3', .95)]);
           equal(unresolved.hundo_leg, '');
           equal(unresolved.conflict, true);
           equal(unresolved.uncertain, true);
+          deepEqual(unresolved.candidates, [
+            { value: '3', votes: 1, confidence: .95 },
+            { value: '9', votes: 1, confidence: .95 }
+          ]);
           deepEqual(unresolved.manual_review_reasons, ['hundo_count_conflict', 'hundo_count_uncertain']);
           deepEqual(unresolvedReordered, unresolved);
           equal(mergeHundoCountResults([count('3', .91)]).hundo_leg, '3');
@@ -1253,7 +1261,9 @@
           'active Pokémon tab', 'Pokémon search-result summary', '語意關係與相對位置', 'parenthesized',
           '顏色不是必要或決定性訊號', '不得依賴固定高度', 'egg 9/12', 'storage 142/450',
           'CP', 'clock', 'battery', 'query 4*', 'cards.length', 'detected count',
-          'visible count', 'screenshot count', '上方 42% 裁切區只是聚焦輸入', 'uncertain', '排除 egg tab'
+          'visible count', 'screenshot count', '上方 42% 裁切區只是聚焦輸入', 'uncertain', '排除 egg tab',
+          'result color 可能是 gray、orange、blue-green、white 或 another UI color',
+          'color is never required or decisive', '(3) 輸出 3', '（30）輸出 30'
         ].forEach(fragment => equal(countPrompt.includes(fragment), true, `count prompt protects ${fragment}`));
 
         const croppedCountRegion = await fileToHundoCountRegionDataUrl(originalDataUrl);

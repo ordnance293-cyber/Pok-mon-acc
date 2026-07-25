@@ -125,11 +125,10 @@
 
         const candidates = [...grouped.entries()]
             .map(([value, confidences]) => {
-                const sortedConfidences = [...confidences].sort((left, right) => right - left);
                 return {
                     value,
-                    confidence: sortedConfidences[0],
-                    confidences: sortedConfidences
+                    votes: confidences.length,
+                    confidence: Math.max(...confidences)
                 };
             })
             .sort((left, right) => left.value.localeCompare(right.value));
@@ -145,8 +144,8 @@
         }
 
         const conflict = candidates.length > 1;
-        const highestFrequency = Math.max(...candidates.map(candidate => candidate.confidences.length));
-        const frequencyLeaders = candidates.filter(candidate => candidate.confidences.length === highestFrequency);
+        const highestFrequency = Math.max(...candidates.map(candidate => candidate.votes));
+        const frequencyLeaders = candidates.filter(candidate => candidate.votes === highestFrequency);
         const highestConfidence = Math.max(...frequencyLeaders.map(candidate => candidate.confidence));
         const confidenceLeaders = frequencyLeaders.filter(candidate => candidate.confidence === highestConfidence);
         const unresolved = confidenceLeaders.length !== 1;
@@ -158,9 +157,7 @@
             candidates,
             manual_review_reasons: unresolved
                 ? ['hundo_count_conflict', 'hundo_count_uncertain']
-                : conflict
-                    ? ['hundo_count_conflict']
-                    : []
+                : []
         };
     };
 
