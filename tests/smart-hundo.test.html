@@ -2246,9 +2246,11 @@
           equal(canvasRecords.length, failedCanvasStart, 'load failure has no whole-image or JPEG fallback');
         });
 
+        const canvasCallsBeforeOriginalRead = canvasCalls;
         equal(await fileToOriginalDataUrl(pngFile), pngFile.dataUrl);
-        equal(canvasCalls, 0);
+        equal(canvasCalls, canvasCallsBeforeOriginalRead, 'original data-URL read does not allocate a canvas');
         equal(await fileToResizedDataUrl(pngFile), resizedUrl);
+        equal(canvasCalls, canvasCallsBeforeOriginalRead + 1, 'ordinary resize allocates exactly one canvas');
         deepEqual(canvasRecords.at(-1), {
           width: 1000,
           height: 562.5,
