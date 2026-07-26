@@ -510,6 +510,10 @@
         const legacyForm = adaptLegacyHundoForm(card, normalizeOfficialName);
         const baseSpecies = normalizeHundoBaseSpecies(rawForm.base_species || legacyForm.base_species, normalizeOfficialName);
         const formId = normalizeHundoFormId(rawForm.form_id || (rawForm.base_species ? 'uncertain' : legacyForm.form_id));
+        const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
+        const canonicalOfficialName = Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)
+            ? ''
+            : officialName;
         const order = normalizeSmartHundoCoordinate(card?.order);
         const row = normalizeSmartHundoCoordinate(card?.row);
         const column = normalizeSmartHundoCoordinate(card?.column);
@@ -521,7 +525,7 @@
             row,
             column,
             visible_label: stringValue(card?.visible_label),
-            official_name: normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName),
+            official_name: officialName,
             recognition_status: normalizeRecognitionStatus(card?.recognition_status),
             species_confidence: clampConfidence(card?.species_confidence),
             base_species: baseSpecies,
@@ -550,7 +554,7 @@
             effective_rocket_state: EFFECTIVE_STATE_DEFAULTS.rocket,
             effective_background_type: EFFECTIVE_STATE_DEFAULTS.background,
             effective_form_id: 'uncertain',
-            canonical_official_name: '',
+            canonical_official_name: canonicalOfficialName,
             manual_review_reasons: [],
             raw: {
                 states: rawStates,
@@ -576,8 +580,10 @@
 
     const overlapCardSignature = (card = {}) => JSON.stringify([
         stringValue(card?.cp),
-        stripSmartHundoPresentationPrefixes(card?.official_name),
         normalizeVisibleLabel(card?.visible_label),
+        stringValue(card?.base_species),
+        stringValue(card?.effective_form_id),
+        stringValue(card?.canonical_official_name),
         stringValue(card?.effective_shiny_state),
         stringValue(card?.effective_lucky_state),
         stringValue(card?.effective_favorite_state),
@@ -845,6 +851,16 @@
                 : diagnosticEnum(source[field], values)
         ]));
     };
+    const diagnosticFormEvidence = (evidence) => {
+        const source = evidence && typeof evidence === 'object' ? evidence : {};
+        return {
+            region_visibility: diagnosticEnum(source.region_visibility, REGION_VISIBILITY_VALUES),
+            recognition_basis: diagnosticEnum(source.recognition_basis, FORM_RECOGNITION_BASIS_VALUES),
+            visual_signature: diagnosticEnum(source.visual_signature, FORM_VISUAL_SIGNATURE_VALUES),
+            key_features_visible: source.key_features_visible === true,
+            label_relationship: diagnosticEnum(source.label_relationship, FORM_LABEL_RELATIONSHIP_VALUES)
+        };
+    };
     const diagnosticCard = (card = {}) => {
         const rawStates = card?.raw?.states && typeof card.raw.states === 'object'
             ? card.raw.states
@@ -866,6 +882,12 @@
             rawEvidence[dimension] ?? card?.[field],
             enumFields
         );
+        const baseSpecies = diagnosticString(card?.base_species);
+        const diagnosticBaseSpecies = Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)
+            ? baseSpecies
+            : '';
+        const rawFormId = diagnosticEnum(card?.form_id, HUNDO_FORM_ID_VALUES);
+        const effectiveFormId = diagnosticEnum(card?.effective_form_id, HUNDO_FORM_ID_VALUES);
 
         return {
             card_id: diagnosticString(card?.card_id),
@@ -932,6 +954,14 @@
                 rocket: diagnosticEnum(card?.effective_rocket_state, ROCKET_STATE_VALUES),
                 background: diagnosticEnum(card?.effective_background_type, BACKGROUND_TYPE_VALUES)
             },
+            base_species: diagnosticBaseSpecies,
+            raw_form_id: rawFormId,
+            form_confidence: clampConfidence(card?.form_confidence),
+            form_evidence: diagnosticFormEvidence(card?.form_evidence),
+            effective_form_id: effectiveFormId,
+            canonical_official_name: HUNDO_SUPPORTED_FORM_IDS.has(effectiveFormId)
+                ? HUNDO_FORM_CANONICAL_NAMES[effectiveFormId]
+                : '',
             manual_review_reasons: diagnosticReviewReasons(card?.manual_review_reasons)
         };
     };
@@ -1039,14 +1069,21 @@
         hundo_count_uncertain: '百神總數需人工確認',
         hundo_count_conflict: '百神總數結果衝突',
         screenshot_overlap_uncertain: '截圖重疊需人工確認',
-        smart_hundo_request_failed: '百神辨識請求失敗'
+        smart_hundo_request_failed: '百神辨識請求失敗',
+        form_uncertain: '型態需人工確認',
+        form_species_mismatch: '物種與型態結果衝突',
+        form_region_not_clear: '型態主要外觀區域看不清楚',
+        form_confidence_low: '型態辨識信心不足',
+        form_label_only: '型態只有文字證據，需人工確認',
+        form_signature_mismatch: '型態與視覺證據不一致',
+        unsupported_form: '此型態尚未納入支援範圍'
     });
 
     const isHundoReviewReason = (reason) => Object.prototype.hasOwnProperty.call(HUNDO_REVIEW_REASON_MESSAGES, reason);
 
     const hasUsableRecognizedSpecies = (card = {}) => (
         card?.recognition_status === 'recognized'
-        && stripSmartHundoPresentationPrefixes(card?.official_name) !== ''
+        && stringValue(card?.canonical_official_name) !== ''
         && Number(card?.species_confidence) >= SPECIES_CONFIDENCE_THRESHOLD
     );
 
@@ -1282,15 +1319,15 @@
 
     const buildHundoDisplayName = (card = {}, normalizeOfficialName) => {
         if (!hasUsableRecognizedSpecies(card)) return '';
-        const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
-        if (!officialName) return '';
+        const canonicalOfficialName = stringValue(card?.canonical_official_name);
+        if (!canonicalOfficialName) return '';
         const prefix = [
             card?.effective_shiny_state === 'yes' ? '色違' : '',
             card?.effective_rocket_state === 'shadow' ? '暗影' : '',
             card?.effective_background_type === 'commemorative' ? '紀念背卡' : '',
             card?.effective_background_type === 'special' ? '特別背卡' : ''
         ].join('');
-        return `${prefix}${officialName}`;
+        return `${prefix}${canonicalOfficialName}`;
     };
 
     const summarizeHundoManualReview = (cards = [], screenshotReasons = []) => {
@@ -1321,9 +1358,6 @@
         let recognizedCount = 0;
 
         (Array.isArray(cards) ? cards : []).forEach(card => {
-            const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
-            if (!hasUsableRecognizedSpecies(card) || !officialName) return;
-
             const displayName = buildHundoDisplayName(card, normalizeOfficialName);
             if (!displayName) return;
             displayGroups.set(displayName, (displayGroups.get(displayName) || 0) + 1);

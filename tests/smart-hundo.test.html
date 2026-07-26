@@ -225,6 +225,7 @@
         effective_favorite_state: 'no',
         effective_rocket_state: 'normal',
         effective_background_type: 'none',
+        canonical_official_name: normalizeName(overrides.official_name ?? '超夢'),
         manual_review_reasons: [],
         ...overrides
       });
@@ -293,6 +294,24 @@
           normalizeSmartHundoCard(formCard(overrides), normalizeName, { screenshotIndex: 0 }),
           normalizeName
         );
+        const displayFormCard = (formId, overrides = {}) => {
+          const baseByForm = Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
+            .find(([, ids]) => ids.includes(formId))[0];
+          return {
+            ...validatedCard(),
+            base_species: baseByForm,
+            form_id: formId,
+            form_confidence: 0.99,
+            form_evidence: formEvidence({
+              visual_signature: formId,
+              label_relationship: 'exact_form'
+            }),
+            effective_form_id: formId,
+            canonical_official_name: HUNDO_FORM_CANONICAL_NAMES[formId],
+            official_name: baseByForm,
+            ...overrides
+          };
+        };
         const makeCards = (count, overrides = {}) => Array.from({ length: count }, (_, index) => card({
           order: index + 1,
           row: Math.floor(index / 3) + 1,
@@ -1165,7 +1184,7 @@
         });
 
         test('builds display names only from effective states', () => {
-          const modelYesButRejected = card({
+          const modelYesButRejected = validatedCard({
             official_name: '超夢',
             shiny_state: 'yes',
             effective_shiny_state: 'uncertain',
@@ -1240,6 +1259,69 @@
           });
         });
 
+        test('renders canonical form names for every supported display group', () => {
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('articuno_standard'),
+            displayFormCard('articuno_galarian')
+          ], normalizeName).pokemon_list, '急凍鳥,伽勒爾急凍鳥');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zapdos_standard'),
+            displayFormCard('zapdos_galarian')
+          ], normalizeName).pokemon_list, '閃電鳥,伽勒爾閃電鳥');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('moltres_standard'),
+            displayFormCard('moltres_galarian')
+          ], normalizeName).pokemon_list, '火焰鳥,伽勒爾火焰鳥');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zacian_standard'),
+            displayFormCard('zacian_crowned'),
+            displayFormCard('zacian_crowned')
+          ], normalizeName).pokemon_list, '蒼響,蒼響劍盾型態*2');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zygarde_10'),
+            displayFormCard('zygarde_50'),
+            displayFormCard('zygarde_complete')
+          ], normalizeName).pokemon_list, '基格爾德（10%形態）,基格爾德（50%形態）,基格爾德（完全體形態）');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('necrozma_base'),
+            displayFormCard('necrozma_dusk_mane'),
+            displayFormCard('necrozma_dawn_wings')
+          ], normalizeName).pokemon_list, '奈克洛茲瑪,奈克洛茲瑪（黃昏之鬃）,奈克洛茲瑪（拂曉之翼）');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('kyurem_base'),
+            displayFormCard('kyurem_white'),
+            displayFormCard('kyurem_white'),
+            displayFormCard('kyurem_black')
+          ], normalizeName).pokemon_list, '酋雷姆,焰白酋雷姆*2,闇黑酋雷姆');
+        });
+
+        test('uses the canonical form name after state prefixes and omits unresolved whitelist forms', () => {
+          equal(buildHundoDisplayName(displayFormCard('moltres_galarian', {
+            effective_shiny_state: 'yes',
+            effective_background_type: 'special'
+          }), normalizeName), '色違特別背卡伽勒爾火焰鳥');
+          equal(buildHundoDisplayName(displayFormCard('zacian_crowned', {
+            effective_shiny_state: 'yes',
+            effective_rocket_state: 'shadow'
+          }), normalizeName), '色違暗影蒼響劍盾型態');
+          equal(buildHundoDisplayName(displayFormCard('kyurem_black', {
+            effective_rocket_state: 'purified'
+          }), normalizeName), '闇黑酋雷姆');
+
+          const conversion = effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zacian_standard'),
+            displayFormCard('necrozma_base'),
+            displayFormCard('moltres_galarian'),
+            displayFormCard('moltres_standard', {
+              effective_form_id: 'uncertain',
+              canonical_official_name: ''
+            })
+          ], normalizeName);
+          equal(conversion.pokemon_list, '蒼響,奈克洛茲瑪,伽勒爾火焰鳥');
+          equal(conversion.pokemon_list.includes('*1'), false);
+          equal(conversion.recognized_count, 3);
+        });
+
         test('exposes the exact manual-review reason messages', () => {
           deepEqual(HUNDO_REVIEW_REASON_MESSAGES, {
             species_uncertain: '物種需人工確認',
@@ -1252,15 +1334,22 @@
             hundo_count_uncertain: '百神總數需人工確認',
             hundo_count_conflict: '百神總數結果衝突',
             screenshot_overlap_uncertain: '截圖重疊需人工確認',
-            smart_hundo_request_failed: '百神辨識請求失敗'
+            smart_hundo_request_failed: '百神辨識請求失敗',
+            form_uncertain: '型態需人工確認',
+            form_species_mismatch: '物種與型態結果衝突',
+            form_region_not_clear: '型態主要外觀區域看不清楚',
+            form_confidence_low: '型態辨識信心不足',
+            form_label_only: '型態只有文字證據，需人工確認',
+            form_signature_mismatch: '型態與視覺證據不一致',
+            unsupported_form: '此型態尚未納入支援範圍'
           });
         });
 
         test('keeps hidden states internal and groups by display name', () => {
           const cards = [
-            validatedCard({ official_name: '固拉多', effective_rocket_state: 'normal' }),
-            validatedCard({ official_name: '淨化固拉多', effective_rocket_state: 'purified' }),
-            validatedCard({ official_name: '亮晶晶固拉多', effective_lucky_state: 'yes' })
+            validatedCard({ official_name: '固拉多', canonical_official_name: '固拉多', effective_rocket_state: 'normal' }),
+            validatedCard({ official_name: '淨化固拉多', canonical_official_name: '固拉多', effective_rocket_state: 'purified' }),
+            validatedCard({ official_name: '亮晶晶固拉多', canonical_official_name: '固拉多', effective_lucky_state: 'yes' })
           ];
           equal(effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list, '固拉多*3');
         });
@@ -1300,6 +1389,21 @@
             HUNDO_REVIEW_REASON_MESSAGES.lucky_uncertain,
             HUNDO_REVIEW_REASON_MESSAGES.background_uncertain
           ]);
+        });
+
+        test('keeps each form review bucket while counting its card once', () => {
+          const summary = summarizeHundoManualReview([
+            displayFormCard('moltres_galarian', {
+              card_id: '0:2:1:1',
+              manual_review_reasons: ['form_uncertain', 'form_confidence_low', 'shiny_uncertain']
+            })
+          ]);
+          equal(summary.review_card_count, 1);
+          deepEqual(summary.review_reason_counts, {
+            form_uncertain: 1,
+            form_confidence_low: 1,
+            shiny_uncertain: 1
+          });
         });
 
         test('retains repeated screenshot review reason occurrences without adding card reviews', () => {
@@ -1494,14 +1598,20 @@
               effective_lucky_state: 'no',
               effective_favorite_state: 'no',
               effective_rocket_state: 'normal',
-              effective_background_type: 'none'
+              effective_background_type: 'none',
+              base_species: index === 0 ? '固拉多' : '超夢',
+              effective_form_id: 'not_applicable',
+              canonical_official_name: index === 0 ? '固拉多' : '超夢'
             });
             Object.assign(canonical[index], {
               effective_shiny_state: 'no',
               effective_lucky_state: 'no',
               effective_favorite_state: 'no',
               effective_rocket_state: 'normal',
-              effective_background_type: 'none'
+              effective_background_type: 'none',
+              base_species: index === 0 ? '固拉多' : '超夢',
+              effective_form_id: 'not_applicable',
+              canonical_official_name: index === 0 ? '固拉多' : '超夢'
             });
           });
 
@@ -1524,6 +1634,49 @@
           equal(decision.overlap_count, 2);
           equal(decision.direction, 'left_suffix_right_prefix');
           equal(decision.ambiguous, false);
+        });
+
+        test('keeps form identity in two-card overlap signatures without weakening the minimum', () => {
+          const sameSurfaceDifferentForms = detectScreenshotOverlap(
+            {
+              index: 1,
+              cards: [
+                displayFormCard('moltres_standard', { card_id: '1:1:1:1', cp: '100', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_galarian', { card_id: '1:2:1:2', order: 2, column: 2, cp: '200', visible_label: '火焰鳥' })
+              ]
+            },
+            {
+              index: 2,
+              cards: [
+                displayFormCard('moltres_galarian', { card_id: '2:1:1:1', cp: '100', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_standard', { card_id: '2:2:1:2', order: 2, column: 2, cp: '200', visible_label: '火焰鳥' })
+              ]
+            }
+          );
+          equal(sameSurfaceDifferentForms.overlap_count, 0);
+          equal(sameSurfaceDifferentForms.ambiguous, false);
+
+          const identicalGalarian = detectScreenshotOverlap(
+            {
+              index: 3,
+              cards: [
+                displayFormCard('moltres_standard', { card_id: '3:0:1:0', cp: '250', visible_label: '領頭' }),
+                displayFormCard('moltres_galarian', { card_id: '3:1:1:1', cp: '300', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_galarian', { card_id: '3:2:1:2', order: 2, column: 2, cp: '400', visible_label: '火焰鳥' })
+              ]
+            },
+            {
+              index: 4,
+              cards: [
+                displayFormCard('moltres_galarian', { card_id: '4:1:1:1', cp: '300', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_galarian', { card_id: '4:2:1:2', order: 2, column: 2, cp: '400', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_standard', { card_id: '4:3:1:3', order: 3, column: 3, cp: '450', visible_label: '結尾' })
+              ]
+            }
+          );
+          equal(identicalGalarian.overlap_count, 2);
+          equal(identicalGalarian.direction, 'left_suffix_right_prefix');
+          equal(identicalGalarian.ambiguous, false);
         });
 
         test('removes only a two-card suffix-prefix overlap and restores scroll order from reversed uploads', () => {
@@ -1688,11 +1841,13 @@
           deepEqual(merged.manual_review_reasons, []);
         });
 
-        test('requires CP, official name, normalized label, and all five effective states in every overlap signature', () => {
+        test('requires CP, normalized label, form identity, and all five effective states in every overlap signature', () => {
           const signatureFields = [
             ['cp', 'different-cp'],
-            ['official_name', 'DifferentName'],
             ['visible_label', 'DIFFERENT_LABEL'],
+            ['base_species', 'DifferentBase'],
+            ['effective_form_id', 'moltres_galarian'],
+            ['canonical_official_name', 'DifferentName'],
             ['effective_shiny_state', 'yes'],
             ['effective_lucky_state', 'yes'],
             ['effective_favorite_state', 'yes'],
@@ -1990,6 +2145,35 @@
           });
           equal(diagnostics.screenshots[0].cards[0].official_name, '固拉多');
           equal(diagnostics.pokemon_list, '固拉多');
+        });
+
+        test('reconstructs form diagnostics from allowlisted fields without raw form data', () => {
+          const formCardForDiagnostics = displayFormCard('moltres_galarian', {
+            raw: {
+              form: {
+                form_id: 'unsupported',
+                form_evidence: { Authorization: 'Bearer raw-form-secret' },
+                request: { body: 'data:image/png;base64,RAW_FORM_BODY' }
+              }
+            }
+          });
+          const diagnostics = shapeSmartHundoDiagnostics({
+            screenshots: [{ cards: [formCardForDiagnostics] }]
+          });
+          const safeCard = diagnostics.screenshots[0].cards[0];
+          deepEqual(safeCard.form_evidence, formEvidence({
+            visual_signature: 'moltres_galarian',
+            label_relationship: 'exact_form'
+          }));
+          equal(safeCard.base_species, '火焰鳥');
+          equal(safeCard.raw_form_id, 'moltres_galarian');
+          equal(safeCard.effective_form_id, 'moltres_galarian');
+          equal(safeCard.canonical_official_name, '伽勒爾火焰鳥');
+          const serialized = JSON.stringify(diagnostics);
+          [
+            'Authorization', 'Bearer', 'data:image/', 'raw-form-secret', 'RAW_FORM_BODY',
+            'request', 'body'
+          ].forEach(sentinel => equal(serialized.includes(sentinel), false, `form diagnostics exclude ${sentinel}`));
         });
 
         test('validates allowed diagnostic values and redacts secrets injected into allowlisted fields', () => {
@@ -2365,6 +2549,7 @@
             requestSmartHundoExtractionV2,
             requestSmartHundoWithStructuralRetry,
             smartHundoScan,
+            formatSmartHundoStatus,
             normalizeAiClassification,
             beginSmartHundoScanSession,
             markSmartHundoAiValue,
@@ -2385,6 +2570,25 @@
             setTrainerTeamStatus: typeof setTrainerTeamStatus === 'undefined' ? undefined : setTrainerTeamStatus
           });`;
         (0, eval)(pageModule);
+
+        test('renders each form review reason as a card-level status detail', () => {
+          const status = formatSmartHundoStatus({
+            countMerge: { hundo_leg: '1' },
+            conversion: { recognized_count: 1 },
+            detectedCardCount: 1,
+            reviewSummary: {
+              review_card_count: 1,
+              review_reason_counts: {
+                form_uncertain: 1,
+                form_confidence_low: 1
+              }
+            }
+          });
+          equal(
+            status,
+            '百神掃描完成：總數1，偵測1張卡片，辨識1張；共1張卡片需人工確認；1張型態需人工確認；1張型態辨識信心不足'
+          );
+        });
 
         const requiredTrainerProductionContracts = [
           'TRAINER_TEAM_SCHEMA',
