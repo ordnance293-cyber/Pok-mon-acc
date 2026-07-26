@@ -2016,7 +2016,7 @@ kyurem_base / kyurem_white / kyurem_black
    黃色尖刺羽毛、黑色鋸齒狀翼尾、標準飛鳥輪廓。
 
 4. zapdos_galarian：
-   橘紅色系、雙腿特別長而強壯、接近陸行／奔跑鳥姿態。腿部與身體結構比顏色更重要。
+   橘紅色身體、雙腿極長且強壯、明顯直立奔跑鳥／走鵑式身體結構，不是黃色尖刺飛鳥的一般型態。不得因 visible_label 只寫「閃電鳥」而回傳 zapdos_standard。
 
 5. moltres_standard：
    黃橘色鳥體，橘紅色真正火焰構成頭冠、翅膀與尾部。
@@ -2031,10 +2031,10 @@ kyurem_base / kyurem_white / kyurem_black
    嘴中明確持有大型劍，具有金藍色劍之王武裝與裝甲。
 
 9. zamazenta_standard：
-   藏瑪然特狼型本體，沒有完整盾之王大型盾牌鬃甲。
+   普通紅藍狼型本體，沒有巨大盾牌式鬃毛，也沒有大型頭部／頸部／胸前盾甲。
 
 10. zamazenta_crowned：
-    頭頸與胸前具有巨大盾牌式鬃甲及金紅藍防禦裝甲。
+    必須具有巨大盾牌式鬃毛，以及頭部、頸部、胸前明顯大型盾牌裝甲，為不可混淆的盾之王武裝。只有紅色／藍色不能證明 zamazenta_crowned。
 
 11. dialga_standard：
     標準帝牙盧卡四足龍型，身體較厚實，四肢、頸部及胸部為一般型態比例。
@@ -2075,6 +2075,168 @@ kyurem_base / kyurem_white / kyurem_black
 23. kyurem_black：
     整體偏黑，具有捷克羅姆相關黑色裝甲、大型手臂及發電機式融合構造，同時保留酋雷姆特徵。
 
+【B2-D1. 帝牙盧卡普通型態與起源型態】
+
+visible_label 只寫「帝牙盧卡」只能證明 base_species，不能證明普通型態。
+
+先觀察整體身體比例、頸胸構造與四肢，再決定 form_id。
+
+dialga_standard 的必要外觀：
+
+- 整體為較厚實、較緊湊的標準四足龍型
+- 軀幹相對短且厚
+- 四條腿為一般帝牙盧卡比例，不呈現明顯細長馬型
+- 頸部沒有起源型態那種明顯拉長感
+- 胸前與頸部為普通帝牙盧卡結構
+
+若選擇 dialga_standard，必須回傳：
+
+body_plan = dialga_standard_stocky_quadruped
+limb_layout = four_standard_legs
+fusion_host = not_applicable
+decisive_feature = standard_dialga_stocky_neck_chest
+
+dialga_origin 的必要外觀：
+
+- 整體身體明顯拉長
+- 呈現偏馬型、神獸坐騎型的四足結構
+- 頸部、喉部與胸部比普通型態更細長且不同
+- 四肢較長，整體不是普通帝牙盧卡的厚實比例
+- 起源型態的頸胸結構是關鍵，藍色本身不是證據
+
+若選擇 dialga_origin，必須回傳：
+
+body_plan = dialga_origin_elongated_equine_quadruped
+limb_layout = four_long_legs
+fusion_host = not_applicable
+decisive_feature = origin_dialga_elongated_neck_chest
+
+若畫面太小，無法可靠比較厚實四足與細長馬型：
+
+form_id = uncertain
+
+不得因 visible_label 是「帝牙盧卡」而回傳 dialga_standard。
+
+【B2-D2. 帕路奇亞普通型態與起源型態】
+
+visible_label 只寫「帕路奇亞」只能證明 base_species，不能證明普通型態。
+
+palkia_standard 的必要外觀：
+
+- 整體是直立／雙足龍型
+- 可以看到普通型態的兩隻手臂
+- 有兩條一般腿部
+- 不是四足半人馬式身體
+- 手臂是否存在是重要區分特徵
+
+若選擇 palkia_standard，必須回傳：
+
+body_plan = palkia_standard_upright_bipedal_dragon
+limb_layout = two_arms_two_legs
+fusion_host = not_applicable
+decisive_feature = standard_palkia_visible_arms
+
+palkia_origin 的必要外觀：
+
+- 整體接近四足／半人馬式身體
+- 具有四條長腿
+- 不呈現普通型態的兩隻標準手臂
+- 軀幹與四肢排列和普通帕路奇亞差異明顯
+- 白色或粉色本身不是型態證據
+
+若選擇 palkia_origin，必須回傳：
+
+body_plan = palkia_origin_centaur_quadruped
+limb_layout = four_legs_no_standard_arms
+fusion_host = not_applicable
+decisive_feature = origin_palkia_centaur_body
+
+若看不清楚手臂與四足結構：
+
+form_id = uncertain
+
+不得依文字標籤自動回傳 palkia_standard。
+
+【B2-N1. 普通奈克洛茲瑪】
+
+necrozma_base 必須是：
+
+- 以奈克洛茲瑪自己的黑色結晶直立身體為主
+- 不是索爾迦雷歐式四足獅型
+- 不是露奈雅拉式巨大月翼／蝙蝠翼型
+- 主體呈直立、角狀、結晶狀構造
+
+若選擇 necrozma_base，必須回傳：
+
+body_plan = necrozma_base_upright_crystalline
+limb_layout = upright_crystalline_limbs
+fusion_host = none
+decisive_feature = base_necrozma_crystal_body
+
+只有「看起來黑色」不能證明普通奈克洛茲瑪。
+
+【B2-N2. 奈克洛茲瑪（黃昏之鬃）】
+
+necrozma_dusk_mane 的主體必須是：
+
+- 明顯四足獅型
+- 身體結構來自索爾迦雷歐
+- 可以看到四條腿與獅型軀幹
+- 外層覆蓋奈克洛茲瑪黑色結晶裝甲
+- 不是普通直立結晶人型
+- 不是巨大月翼型
+
+若選擇 necrozma_dusk_mane，必須回傳：
+
+body_plan = necrozma_dusk_mane_quadruped_lion
+limb_layout = quadruped_lion
+fusion_host = solgaleo
+decisive_feature = dusk_mane_lion_crystal_armor
+
+判斷順序：
+
+1. 是否為四足獅型
+2. 是否具有索爾迦雷歐式主體
+3. 是否覆蓋黑色結晶裝甲
+
+不能只因為黑色或金色就判定。
+
+【B2-N3. 奈克洛茲瑪（拂曉之翼）】
+
+necrozma_dawn_wings 的主體必須是：
+
+- 明顯巨大蝙蝠翼／月亮翼型
+- 身體結構來自露奈雅拉
+- 翅膀占據外觀主要面積
+- 外層覆蓋奈克洛茲瑪黑色結晶構造
+- 不是四足獅型
+- 不是普通直立結晶人型
+
+若選擇 necrozma_dawn_wings，必須回傳：
+
+body_plan = necrozma_dawn_wings_giant_moon_wing
+limb_layout = giant_wings_no_lion_body
+fusion_host = lunala
+decisive_feature = dawn_wings_moon_wings_crystal_armor
+
+判斷順序：
+
+1. 是否為巨大月翼／蝙蝠翼主體
+2. 是否具有露奈雅拉式外觀
+3. 是否覆蓋黑色結晶構造
+
+不能只因為有黑色翅膀就判定。
+
+以下 visible_label 只能作為 base_species 證據：
+
+帝牙盧卡
+帕路奇亞
+奈克洛茲瑪
+
+它們不能證明 dialga_standard、palkia_standard 或 necrozma_base。
+
+必須從圖片中的身體結構判斷型態。
+
 不得只靠顏色判定任何型態。必須綜合基礎物種、身體結構、型態專屬部位與完整視覺外觀。
 
 若主要外觀區域看不清楚、被裁切、被遮擋，或無法可靠區分普通／特殊型態：
@@ -2097,6 +2259,21 @@ form_id = "unsupported"
 form_id = "not_applicable"
 
 【B3. form_evidence】
+
+body_plan、limb_layout、fusion_host、decisive_feature 都是必填欄位。
+
+只有以下七個型態可以使用專用身體結構證據：
+
+dialga_standard、dialga_origin、palkia_standard、palkia_origin、necrozma_base、necrozma_dusk_mane、necrozma_dawn_wings
+
+對上述七個型態，四個欄位必須使用各自 B2-D1、B2-D2、B2-N1、B2-N2、B2-N3 段落指定的精確值。
+
+對所有其他支援型態、不在十個型態白名單中的寶可夢、unsupported 與 uncertain 結果，四個欄位都必須回傳：
+
+body_plan = not_applicable
+limb_layout = not_applicable
+fusion_host = not_applicable
+decisive_feature = not_applicable
 
 region_visibility：
 
