@@ -482,6 +482,15 @@
     };
 
     const normalizeSmartHundoCard = (card = {}, normalizeOfficialName, options = {}) => {
+        const bboxContract = global.SmartHundoFormVerifier
+            ? global.SmartHundoFormVerifier.normalizeHundoBboxContract(card)
+            : {
+                card_bbox: null,
+                pokemon_bbox: null,
+                bbox_confidence: 0,
+                bbox_visibility: 'uncertain',
+                bbox_valid: false
+            };
         const screenshotIndex = normalizeCoordinate(options?.screenshotIndex);
         const formContractPresent = ['base_species', 'form_id', 'form_confidence', 'form_evidence']
             .some(field => Object.hasOwn(card || {}, field));
@@ -535,6 +544,11 @@
             form_id: formId,
             form_confidence: clampStrictConfidence(rawForm.form_confidence),
             form_evidence: rawForm.form_evidence,
+            card_bbox: bboxContract.card_bbox,
+            pokemon_bbox: bboxContract.pokemon_bbox,
+            bbox_confidence: bboxContract.bbox_confidence,
+            bbox_visibility: bboxContract.bbox_visibility,
+            bbox_valid: bboxContract.bbox_valid,
             cp: stringValue(card?.cp),
             shiny_state: normalizeIndependentState(rawStates.shiny),
             shiny_confidence: clampConfidence(rawConfidences.shiny),
@@ -586,6 +600,7 @@
         stringValue(card?.cp),
         normalizeVisibleLabel(card?.visible_label),
         stringValue(card?.base_species),
+        stringValue(card?.verified_form_id),
         stringValue(card?.effective_form_id),
         stringValue(card?.canonical_official_name),
         stringValue(card?.effective_shiny_state),
@@ -871,6 +886,67 @@
             label_relationship: diagnosticEnum(source.label_relationship, FORM_LABEL_RELATIONSHIP_VALUES)
         };
     };
+    const DIAGNOSTIC_VERIFIED_FORM_VALUES = new Set([
+        'uncertain', 'dialga_standard', 'dialga_origin', 'palkia_standard', 'palkia_origin',
+        'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'
+    ]);
+    const DIAGNOSTIC_CROP_VISIBILITY_VALUES = new Set(['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain']);
+    const DIAGNOSTIC_BODY_PLAN_VALUES = new Set([
+        'uncertain', 'dialga_stocky_wide_quadruped', 'dialga_elongated_equine_quadruped',
+        'palkia_upright_biped_with_arms', 'palkia_centaur_quadruped', 'necrozma_upright_crystalline',
+        'necrozma_quadruped_lion', 'necrozma_wide_moon_wings'
+    ]);
+    const DIAGNOSTIC_LIMB_LAYOUT_VALUES = new Set([
+        'uncertain', 'four_standard_legs', 'four_long_legs', 'two_arms_two_legs',
+        'four_legs_no_standard_arms', 'upright_crystalline_limbs', 'quadruped_lion', 'giant_wings_no_lion_body'
+    ]);
+    const DIAGNOSTIC_FUSION_HOST_VALUES = new Set(['not_applicable', 'none', 'solgaleo', 'lunala', 'uncertain']);
+    const DIAGNOSTIC_DECISIVE_FEATURE_VALUES = new Set([
+        'uncertain', 'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest',
+        'palkia_standard_visible_arms', 'palkia_origin_centaur_body', 'necrozma_base_crystal_body',
+        'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings'
+    ]);
+    const diagnosticStrictNonnegativeInteger = (value) => (
+        typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0 ? value : 0
+    );
+    const diagnosticOwnObjectValue = (value, field) => {
+        try {
+            if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return undefined;
+            const descriptor = Object.getOwnPropertyDescriptor(value, field);
+            return descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value') ? descriptor.value : undefined;
+        } catch (_error) {
+            return undefined;
+        }
+    };
+    const diagnosticBbox = (bbox) => {
+        const xMin = diagnosticOwnObjectValue(bbox, 'x_min');
+        const yMin = diagnosticOwnObjectValue(bbox, 'y_min');
+        const xMax = diagnosticOwnObjectValue(bbox, 'x_max');
+        const yMax = diagnosticOwnObjectValue(bbox, 'y_max');
+        if (![xMin, yMin, xMax, yMax].every(value => (
+            typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0 && value <= 1000
+        )) || xMin >= xMax || yMin >= yMax) return null;
+        return { x_min: xMin, y_min: yMin, x_max: xMax, y_max: yMax };
+    };
+    const diagnosticCropSourceSize = (size) => {
+        const width = diagnosticOwnObjectValue(size, 'width');
+        const height = diagnosticOwnObjectValue(size, 'height');
+        if (![width, height].every(value => (
+            typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+        ))) return null;
+        return { width, height };
+    };
+    const diagnosticVerificationEvidence = (evidence) => {
+        const value = field => diagnosticOwnObjectValue(evidence, field);
+        return {
+            crop_visibility: diagnosticEnum(value('crop_visibility'), DIAGNOSTIC_CROP_VISIBILITY_VALUES),
+            body_plan: diagnosticEnum(value('body_plan'), DIAGNOSTIC_BODY_PLAN_VALUES),
+            limb_layout: diagnosticEnum(value('limb_layout'), DIAGNOSTIC_LIMB_LAYOUT_VALUES),
+            fusion_host: diagnosticEnum(value('fusion_host'), DIAGNOSTIC_FUSION_HOST_VALUES),
+            decisive_feature: diagnosticEnum(value('decisive_feature'), DIAGNOSTIC_DECISIVE_FEATURE_VALUES),
+            key_features_visible: value('key_features_visible') === true
+        };
+    };
     const diagnosticCard = (card = {}) => {
         const rawStates = card?.raw?.states && typeof card.raw.states === 'object'
             ? card.raw.states
@@ -898,6 +974,7 @@
         const diagnosticBaseSpecies = diagnosticString(card?.base_species);
         const rawFormId = diagnosticEnum(rawForm.form_id ?? card?.form_id, HUNDO_FORM_ID_VALUES);
         const effectiveFormId = diagnosticEnum(card?.effective_form_id, HUNDO_FORM_ID_VALUES);
+        const isTargetFormCard = ['帝牙盧卡', '帕路奇亞', '奈克洛茲瑪'].includes(diagnosticBaseSpecies);
 
         return {
             card_id: diagnosticString(card?.card_id),
@@ -974,6 +1051,23 @@
                 : effectiveFormId === 'not_applicable'
                     ? diagnosticString(card?.canonical_official_name)
                     : '',
+            ...(isTargetFormCard ? {
+                primary_form_id: diagnosticEnum(card?.primary_form_id, HUNDO_FORM_ID_VALUES),
+                primary_effective_form_id: diagnosticEnum(card?.primary_effective_form_id, HUNDO_FORM_ID_VALUES),
+                primary_form_confidence: clampStrictConfidence(card?.primary_form_confidence),
+                card_bbox: diagnosticBbox(card?.card_bbox),
+                pokemon_bbox: diagnosticBbox(card?.pokemon_bbox),
+                bbox_confidence: clampStrictConfidence(card?.bbox_confidence),
+                bbox_visibility: diagnosticEnum(card?.bbox_visibility, DIAGNOSTIC_CROP_VISIBILITY_VALUES),
+                crop_source_size: diagnosticCropSourceSize(card?.crop_source_size),
+                contact_sheet_id: /^\d+:form:\d+$/.test(diagnosticString(card?.contact_sheet_id))
+                    ? diagnosticString(card?.contact_sheet_id)
+                    : '',
+                tile_id: /^T[1-6]$/.test(diagnosticString(card?.tile_id)) ? diagnosticString(card?.tile_id) : '',
+                verified_form_id: diagnosticEnum(card?.verified_form_id, DIAGNOSTIC_VERIFIED_FORM_VALUES),
+                verification_confidence: clampStrictConfidence(card?.verification_confidence),
+                verification_evidence: diagnosticVerificationEvidence(card?.verification_evidence)
+            } : {}),
             manual_review_reasons: diagnosticReviewReasons(card?.manual_review_reasons)
         };
     };
@@ -985,6 +1079,15 @@
         ambiguous: decision?.ambiguous === true,
         matched_card_ids: diagnosticStrings(decision?.matched_card_ids),
         manual_review_reasons: diagnosticReviewReasons(decision?.manual_review_reasons)
+    });
+    const diagnosticFormVerificationMetrics = (source = {}) => ({
+        target_candidate_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_candidate_count')),
+        target_verified_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_verified_count')),
+        target_review_card_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_review_card_count')),
+        contact_sheet_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'contact_sheet_count')),
+        verifier_request_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_request_count')),
+        verifier_structural_retry_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_structural_retry_count')),
+        form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-4.1-mini' ? 'gpt-4.1-mini' : ''
     });
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),
@@ -1008,7 +1111,8 @@
             finish_reason: diagnosticString(screenshot?.finish_reason),
             structural_retry_used: screenshot?.structural_retry_used === true,
             structural_retry_reason: diagnosticStructuralReasons(screenshot?.structural_retry_reason),
-            cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(diagnosticCard)
+            cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(diagnosticCard),
+            ...diagnosticFormVerificationMetrics(screenshot)
         })),
         count_candidates: (Array.isArray(session?.count_candidates) ? session.count_candidates : [])
             .filter(candidate => (
@@ -1025,7 +1129,8 @@
         overlap_decisions: (Array.isArray(session?.overlap_decisions) ? session.overlap_decisions : [])
             .map(diagnosticOverlapDecision),
         manual_review_reasons: diagnosticReviewReasons(session?.manual_review_reasons),
-        pokemon_list: diagnosticString(session?.pokemon_list)
+        pokemon_list: diagnosticString(session?.pokemon_list),
+        ...diagnosticFormVerificationMetrics(session)
     });
 
     const validateSmartHundoStructure = (result = {}, finishReason = '') => {
@@ -1088,7 +1193,17 @@
         form_confidence_low: '型態辨識信心不足',
         form_label_only: '型態只有文字證據，需人工確認',
         form_signature_mismatch: '型態與視覺證據不一致',
-        unsupported_form: '此型態尚未納入支援範圍'
+        unsupported_form: '此型態尚未納入支援範圍',
+        form_crop_missing: '找不到可用的寶可夢本體裁切區域',
+        form_crop_not_clear: '寶可夢本體裁切不完整，型態需人工確認',
+        form_crop_too_small: '寶可夢本體像素太小，型態需人工確認',
+        form_verifier_uncertain: '放大型態複核仍無法確定',
+        form_verifier_low_confidence: '放大型態複核信心不足',
+        form_verifier_species_mismatch: '型態複核物種與原卡片不一致',
+        form_verifier_evidence_mismatch: '型態複核結果與身體結構證據不一致',
+        form_verifier_invalid_result: '型態複核回傳格式或卡片對應錯誤',
+        form_verifier_structural_incomplete: '型態複核未回傳全部候選卡片',
+        form_verification_request_failed: '型態複核請求失敗'
     });
 
     const isHundoReviewReason = (reason) => Object.prototype.hasOwnProperty.call(HUNDO_REVIEW_REASON_MESSAGES, reason);
