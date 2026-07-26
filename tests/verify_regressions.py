@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "index.html"
 SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
 TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
-MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
+MANUAL_V2_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
+MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
 EXTRACTION_PROMPT_HASH = "1b061471ee97eeb1f6e0e9061acc8d6150b386fe6b46e4350b23b658a708b669"
@@ -105,10 +106,10 @@ def assert_forbidden_identifiers(source: str, forbidden: tuple[str, ...], label:
             raise AssertionError(f"{label}: forbidden identifier {identifier!r} is present")
 
 
-def assert_manual_acceptance_doc() -> None:
-    if not MANUAL_ACCEPTANCE_DOC.is_file():
-        raise AssertionError(f"manual acceptance document does not exist: {MANUAL_ACCEPTANCE_DOC}")
-    document = normalized_source(MANUAL_ACCEPTANCE_DOC)
+def assert_manual_v1_form_acceptance_doc() -> None:
+    if not MANUAL_V1_FORM_ACCEPTANCE_DOC.is_file():
+        raise AssertionError(f"manual V1 form acceptance document does not exist: {MANUAL_V1_FORM_ACCEPTANCE_DOC}")
+    document = normalized_source(MANUAL_V1_FORM_ACCEPTANCE_DOC)
     for fragment in (
         "## A. standard Articuno vs Galarian Articuno",
         "## B. standard Zapdos vs Galarian Zapdos",
@@ -130,7 +131,12 @@ def assert_manual_acceptance_doc() -> None:
         require_fragment(document, fragment, "manual acceptance document")
     if "| PASS |" in document or "| FAIL |" in document:
         raise AssertionError("manual acceptance document must leave every real-image result pending")
-    return
+
+
+def assert_manual_v2_acceptance_doc() -> None:
+    if not MANUAL_V2_ACCEPTANCE_DOC.is_file():
+        raise AssertionError(f"manual V2 acceptance document does not exist: {MANUAL_V2_ACCEPTANCE_DOC}")
+    document = normalized_source(MANUAL_V2_ACCEPTANCE_DOC)
     for fragment in (
         "hundo_leg=3\npokemon_list=鳳王,哲爾尼亞斯,雷吉奇卡斯",
         "藏瑪然特*2,拉帝亞斯,蒼響,固拉多,酋雷姆",
@@ -596,7 +602,8 @@ def main() -> int:
                 "smart hundo helper",
             ),
         ]),
-        ("manual V1 form acceptance document has pending real-image cases", assert_manual_acceptance_doc),
+        ("manual V2 acceptance document preserves pipeline cases", assert_manual_v2_acceptance_doc),
+        ("manual V1 form acceptance document has pending real-image cases", assert_manual_v1_form_acceptance_doc),
     ])
 
     failures: list[str] = []

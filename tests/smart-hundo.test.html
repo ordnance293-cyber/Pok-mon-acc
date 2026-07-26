@@ -312,12 +312,41 @@
             ...overrides
           };
         };
-        const makeCards = (count, overrides = {}) => Array.from({ length: count }, (_, index) => card({
+        const modelCard = (overrides = {}) => {
+          const officialName = String(overrides.official_name ?? '超夢');
+          const normalized = card({
+            base_species: officialName,
+            form_id: 'not_applicable',
+            form_confidence: 1,
+            form_evidence: {
+              region_visibility: 'clear',
+              recognition_basis: 'direct_visual_match',
+              visual_signature: 'not_applicable',
+              key_features_visible: true,
+              label_relationship: 'not_applicable'
+            },
+            ...overrides
+          });
+          delete normalized.purified_state;
+          delete normalized.purified_confidence;
+          delete normalized.shadow_state;
+          delete normalized.shadow_confidence;
+          return normalized;
+        };
+        const makeModelCards = (count, overrides = {}) => Array.from({ length: count }, (_, index) => modelCard({
           order: index + 1,
           row: Math.floor(index / 3) + 1,
           column: (index % 3) + 1,
           ...overrides
         }));
+        test('keeps API-shaped model fixtures on the current four-field form contract', () => {
+          const fixture = modelCard();
+          ['base_species', 'form_id', 'form_confidence', 'form_evidence'].forEach(field => {
+            equal(Object.hasOwn(fixture, field), true, field);
+          });
+          equal(Object.hasOwn(fixture, 'purified_state'), false);
+          equal(Object.hasOwn(fixture, 'shadow_state'), false);
+        });
 
         test('maps all 23 approved form IDs to exact canonical names', () => {
           const expected = {
@@ -601,6 +630,50 @@
             equal(result.canonical_official_name, officialName, officialName);
             equal(result.manual_review_reasons.some(reason => reason.startsWith('form_') || reason === 'unsupported_form'), false, officialName);
           });
+        });
+
+        test('requires an exact structured non-whitelist control tuple while preserving legacy raw-form absence', () => {
+          const structured = (overrides = {}) => normalizeSmartHundoCard(card({
+            official_name: 'Mewtwo',
+            base_species: 'Mewtwo',
+            form_id: 'not_applicable',
+            form_confidence: 1,
+            form_evidence: {
+              region_visibility: 'clear',
+              recognition_basis: 'direct_visual_match',
+              visual_signature: 'not_applicable',
+              key_features_visible: true,
+              label_relationship: 'not_applicable'
+            },
+            ...overrides
+          }), normalizeName, { screenshotIndex: 0 });
+          const valid = validateHundoPokemonForm(structured(), normalizeName);
+          equal(valid.effective_form_id, 'not_applicable');
+          equal(valid.canonical_official_name, 'Mewtwo');
+          deepEqual(valid.manual_review_reasons, []);
+
+          const malformed = [
+            [{ form_id: 'uncertain' }, 'form_uncertain'],
+            [{ form_id: 'unsupported' }, 'unsupported_form'],
+            [{ form_id: 'moltres_standard' }, 'form_species_mismatch'],
+            [{ form_evidence: { ...structured().form_evidence, visual_signature: 'other' } }, 'form_signature_mismatch']
+          ];
+          malformed.forEach(([overrides, reason]) => {
+            const result = validateHundoPokemonForm(structured(overrides), normalizeName);
+            equal(result.effective_form_id, 'uncertain', reason);
+            equal(result.canonical_official_name, '', reason);
+            equal(result.manual_review_reasons.includes(reason), true, reason);
+          });
+
+          const directMalformed = structured({ form_id: 'unsupported' });
+          delete directMalformed.raw;
+          const directResult = validateHundoPokemonForm(directMalformed, normalizeName);
+          equal(directResult.effective_form_id, 'uncertain', 'direct structured unsupported form');
+          equal(directResult.manual_review_reasons.includes('unsupported_form'), true, 'direct structured unsupported form');
+
+          const legacy = validateHundoPokemonForm(normalizedCard({ official_name: 'Mewtwo' }), normalizeName);
+          equal(legacy.effective_form_id, 'not_applicable');
+          equal(legacy.canonical_official_name, 'Mewtwo');
         });
 
         test('normalizes each required hundo query variant', () => {
@@ -1121,7 +1194,7 @@
             scan_complete: true,
             bottom_edge_checked: true,
             enumeration_confidence: 1.2,
-            cards: [card(), card()]
+            cards: [modelCard(), modelCard()]
           }, normalizeName, { screenshotIndex: 7 });
           equal(normalized.detected_card_count, 2);
           equal(normalized.scan_complete, true);
@@ -1138,7 +1211,7 @@
               scan_complete: true,
               bottom_edge_checked: true,
               enumeration_confidence: 0.99,
-              cards: makeCards(count)
+              cards: makeModelCards(count)
             }, normalizeName, { screenshotIndex: 4 });
             equal(normalized.cards.length, count, `${count} cards survive`);
             equal(normalized.detected_card_count, count, `${count} detected cards survive`);
@@ -1152,7 +1225,7 @@
             scan_complete: true,
             bottom_edge_checked: true,
             enumeration_confidence: 0.8,
-            cards: makeCards(1, {
+            cards: makeModelCards(1, {
               visible_label: 'GLO蒼響151515',
               official_name: '',
               recognition_status: 'partial',
@@ -1171,7 +1244,7 @@
             scan_complete: true,
             bottom_edge_checked: true,
             enumeration_confidence: 0.01,
-            cards: makeCards(2, {
+            cards: makeModelCards(2, {
               official_name: '',
               recognition_status: 'uncertain',
               shiny_state: 'uncertain'
@@ -3214,7 +3287,7 @@
           scan_complete: true,
           bottom_edge_checked: true,
           enumeration_confidence: 0.99,
-          cards: makeCards(count, { official_name: officialName }),
+          cards: makeModelCards(count, { official_name: officialName }),
           ...overrides
         });
         await asyncTest('retries one structurally incomplete V2 extraction and replaces every first-attempt field', async () => {
@@ -3225,7 +3298,7 @@
             const content = attempts.length === 1
               ? v2Result(15, '第一次卡片', {
                 enumeration_confidence: 0.91,
-                cards: makeCards(10, { official_name: '第一次卡片' })
+                cards: makeModelCards(10, { official_name: '第一次卡片' })
               })
               : v2Result(15, '夢幻', { enumeration_confidence: 0.97 });
             return {
@@ -3269,7 +3342,7 @@
             attempts += 1;
             const content = v2Result(1, '', {
               enumeration_confidence: 0.05,
-              cards: makeCards(1, {
+              cards: makeModelCards(1, {
                 official_name: '',
                 recognition_status: 'uncertain',
                 species_confidence: 0.05,
@@ -3307,7 +3380,7 @@
               : v2Result(4, '第二次不完整名稱', {
                 bottom_edge_checked: false,
                 enumeration_confidence: 0.22,
-                cards: makeCards(3, { official_name: '第二次不完整名稱' })
+                cards: makeModelCards(3, { official_name: '第二次不完整名稱' })
               });
             return {
               ok: true,
@@ -3659,26 +3732,7 @@
           }
           fail(`unexpected ordinary extraction prompt: ${prompt.slice(0, 120)}`);
         };
-        const nonWhitelistModelForm = {
-          base_species: '固拉多',
-          form_id: 'not_applicable',
-          form_confidence: 1,
-          form_evidence: {
-            region_visibility: 'clear',
-            recognition_basis: 'direct_visual_match',
-            visual_signature: 'not_applicable',
-            key_features_visible: true,
-            label_relationship: 'not_applicable'
-          }
-        };
-        const v2Card = (overrides = {}) => {
-          const normalized = card({ ...nonWhitelistModelForm, ...overrides });
-          delete normalized.purified_state;
-          delete normalized.purified_confidence;
-          delete normalized.shadow_state;
-          delete normalized.shadow_confidence;
-          return normalized;
-        };
+        const v2Card = modelCard;
         const structuredV2Card = (formId, overrides = {}) => {
           const baseSpecies = Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
             .find(([, formIds]) => formIds.includes(formId))[0];
@@ -4570,11 +4624,13 @@
             'form_region_not_clear',
             'unsupported_form'
           ].forEach(reason => equal(diagnostics.manual_review_reasons.includes(reason), true, `${reason} remains diagnostic`));
-          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_uncertain').length > 0, true);
-          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_species_mismatch').length > 0, true);
-          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_label_only').length > 0, true);
-          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_region_not_clear').length > 0, true);
-          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'unsupported_form').length > 0, true);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_uncertain').length, 2);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_species_mismatch').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_label_only').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_region_not_clear').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'unsupported_form').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'species_uncertain').length, 0);
+          equal(document.getElementById('aiAutoStatus').textContent.includes('共5張卡片需人工確認'), true);
         });
 
         await asyncTest('sanitizes model-polluted species names before production list and diagnostics', async () => {
@@ -4583,6 +4639,7 @@
           countResultByImage.set('POLLUTED_NAME', validCount('(1)', '1'));
           cardResultByImage.set('POLLUTED_NAME', completeCardResult([
             v2Card({
+              base_species: '固拉多',
               official_name: '色違：GLOBAL_BACKGROUND／固拉多',
               visible_label: '固拉多100',
               shiny_state: 'yes',

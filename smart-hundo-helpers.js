@@ -1254,6 +1254,25 @@
         const formEvidence = card?.form_evidence || {};
 
         if (!Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)) {
+            const hasRawFormSnapshot = card?.raw?.form && typeof card.raw.form === 'object';
+            const rawForm = hasRawFormSnapshot ? card.raw.form : {};
+            const hasStructuredForm = hasRawFormSnapshot
+                ? stringValue(rawForm.base_species) !== '' || stringValue(rawForm.form_id) !== ''
+                : Object.hasOwn(card || {}, 'base_species') || Object.hasOwn(card || {}, 'form_id') || Object.hasOwn(card || {}, 'form_evidence');
+            if (hasStructuredForm) {
+                const validationReasons = [];
+                const addValidationReason = (reason) => {
+                    if (!validationReasons.includes(reason)) validationReasons.push(reason);
+                };
+                if (formId === 'uncertain') addValidationReason('form_uncertain');
+                else if (formId === 'unsupported') addValidationReason('unsupported_form');
+                else if (HUNDO_SUPPORTED_FORM_IDS.has(formId)) addValidationReason('form_species_mismatch');
+                else if (formId !== 'not_applicable') addValidationReason('form_uncertain');
+                if (formEvidence.visual_signature !== 'not_applicable') {
+                    addValidationReason('form_signature_mismatch');
+                }
+                if (validationReasons.length > 0) return reject(...validationReasons);
+            }
             const result = {
                 ...card,
                 effective_form_id: 'not_applicable',
