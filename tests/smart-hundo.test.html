@@ -329,6 +329,7 @@
           deriveRocketStateFromEvidence,
           deriveBackgroundTypeFromEvidence,
           validateHundoCardStates,
+          validateSpecializedFormEvidence,
           validateHundoPokemonForm,
           buildHundoCanonicalOfficialName,
           normalizeHundoCountResult,
@@ -348,6 +349,21 @@
           normalizeSmartHundoCard(formCard(overrides), normalizeName, { screenshotIndex: 0 }),
           normalizeName
         );
+        const validatedSpecializedFormCard = (formId, evidenceOverrides = {}, cardOverrides = {}) => {
+          const baseSpecies = Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
+            .find(([, formIds]) => formIds.includes(formId))[0];
+          return validateHundoPokemonForm(
+            normalizeSmartHundoCard(formCard({
+              official_name: baseSpecies,
+              visible_label: baseSpecies,
+              base_species: baseSpecies,
+              form_id: formId,
+              form_evidence: formEvidenceForForm(formId, evidenceOverrides),
+              ...cardOverrides
+            }), normalizeName, { screenshotIndex: 0 }),
+            normalizeName
+          );
+        };
         const displayFormCard = (formId, overrides = {}) => {
           const baseByForm = Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
             .find(([, ids]) => ids.includes(formId))[0];
@@ -577,6 +593,108 @@
             decisive_feature: 'uncertain',
             key_features_visible: true, label_relationship: 'uncertain'
           });
+        });
+
+        test('accepts exact specialized Dialga evidence and rejects controlled mismatches', () => {
+          ['dialga_standard', 'dialga_origin'].forEach(formId => {
+            deepEqual(validateSpecializedFormEvidence(
+              formId,
+              formEvidenceForForm(formId)
+            ), { valid: true, reasons: [] }, formId);
+            const validated = validatedSpecializedFormCard(formId);
+            equal(validated.effective_form_id, formId, formId);
+            equal(validated.canonical_official_name, HUNDO_FORM_CANONICAL_NAMES[formId], formId);
+          });
+
+          const standardWithOriginBody = validatedSpecializedFormCard('dialga_standard', {
+            body_plan: expectedSpecializedFormEvidence.dialga_origin.body_plan
+          });
+          equal(standardWithOriginBody.effective_form_id, 'uncertain');
+          equal(standardWithOriginBody.canonical_official_name, '');
+          equal(standardWithOriginBody.manual_review_reasons.includes('form_body_plan_mismatch'), true);
+
+          const originWithStandardLegs = validatedSpecializedFormCard('dialga_origin', {
+            limb_layout: expectedSpecializedFormEvidence.dialga_standard.limb_layout
+          });
+          equal(originWithStandardLegs.effective_form_id, 'uncertain');
+          equal(originWithStandardLegs.manual_review_reasons.includes('form_limb_layout_mismatch'), true);
+
+          const originWithStandardFeature = validatedSpecializedFormCard('dialga_origin', {
+            decisive_feature: expectedSpecializedFormEvidence.dialga_standard.decisive_feature
+          });
+          equal(originWithStandardFeature.effective_form_id, 'uncertain');
+          equal(originWithStandardFeature.manual_review_reasons.includes('form_decisive_feature_mismatch'), true);
+        });
+
+        test('accepts exact specialized Palkia evidence and rejects body or limb mismatches', () => {
+          ['palkia_standard', 'palkia_origin'].forEach(formId => {
+            deepEqual(validateSpecializedFormEvidence(
+              formId,
+              formEvidenceForForm(formId)
+            ), { valid: true, reasons: [] }, formId);
+            equal(validatedSpecializedFormCard(formId).effective_form_id, formId, formId);
+          });
+
+          const standardWithCentaurBody = validatedSpecializedFormCard('palkia_standard', {
+            body_plan: expectedSpecializedFormEvidence.palkia_origin.body_plan
+          });
+          equal(standardWithCentaurBody.effective_form_id, 'uncertain');
+          equal(standardWithCentaurBody.manual_review_reasons.includes('form_body_plan_mismatch'), true);
+
+          const originWithStandardArms = validatedSpecializedFormCard('palkia_origin', {
+            limb_layout: expectedSpecializedFormEvidence.palkia_standard.limb_layout
+          });
+          equal(originWithStandardArms.effective_form_id, 'uncertain');
+          equal(originWithStandardArms.manual_review_reasons.includes('form_limb_layout_mismatch'), true);
+        });
+
+        test('accepts exact specialized Necrozma evidence and rejects host or body mismatches', () => {
+          ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'].forEach(formId => {
+            deepEqual(validateSpecializedFormEvidence(
+              formId,
+              formEvidenceForForm(formId)
+            ), { valid: true, reasons: [] }, formId);
+            equal(validatedSpecializedFormCard(formId).effective_form_id, formId, formId);
+          });
+
+          const duskWithLunala = validatedSpecializedFormCard('necrozma_dusk_mane', {
+            fusion_host: 'lunala'
+          });
+          equal(duskWithLunala.effective_form_id, 'uncertain');
+          equal(duskWithLunala.manual_review_reasons.includes('form_fusion_host_mismatch'), true);
+
+          const dawnWithLionBody = validatedSpecializedFormCard('necrozma_dawn_wings', {
+            body_plan: expectedSpecializedFormEvidence.necrozma_dusk_mane.body_plan
+          });
+          equal(dawnWithLionBody.effective_form_id, 'uncertain');
+          equal(dawnWithLionBody.manual_review_reasons.includes('form_body_plan_mismatch'), true);
+        });
+
+        test('requires not_applicable specialized evidence for every non-specialized form', () => {
+          deepEqual(validateSpecializedFormEvidence(
+            'moltres_galarian',
+            formEvidenceForForm('moltres_galarian')
+          ), { valid: true, reasons: [] });
+          equal(validatedFormCard().effective_form_id, 'moltres_galarian');
+
+          const unexpected = validateSpecializedFormEvidence(
+            'moltres_galarian',
+            formEvidenceForForm('moltres_galarian', {
+              body_plan: expectedSpecializedFormEvidence.dialga_origin.body_plan
+            })
+          );
+          deepEqual(unexpected, {
+            valid: false,
+            reasons: ['form_specialized_evidence_unexpected']
+          });
+          const rejected = validatedFormCard({
+            form_evidence: formEvidenceForForm('moltres_galarian', {
+              body_plan: expectedSpecializedFormEvidence.dialga_origin.body_plan
+            })
+          });
+          equal(rejected.effective_form_id, 'uncertain');
+          equal(rejected.canonical_official_name, '');
+          equal(rejected.manual_review_reasons.includes('form_specialized_evidence_unexpected'), true);
         });
 
         test('accepts clear direct visual form evidence', () => {
@@ -862,6 +980,10 @@
               region_visibility: 'clear',
               recognition_basis: 'direct_visual_match',
               visual_signature: 'not_applicable',
+              body_plan: 'not_applicable',
+              limb_layout: 'not_applicable',
+              fusion_host: 'not_applicable',
+              decisive_feature: 'not_applicable',
               key_features_visible: true,
               label_relationship: 'not_applicable'
             },
@@ -1718,6 +1840,11 @@
             form_confidence_low: '型態辨識信心不足',
             form_label_only: '型態只有文字證據，需人工確認',
             form_signature_mismatch: '型態與視覺證據不一致',
+            form_body_plan_mismatch: '型態身體結構與判斷不一致',
+            form_limb_layout_mismatch: '型態四肢結構與判斷不一致',
+            form_fusion_host_mismatch: '奈克洛茲瑪合體母體與判斷不一致',
+            form_decisive_feature_mismatch: '型態關鍵外觀特徵與判斷不一致',
+            form_specialized_evidence_unexpected: '非專用型態不應包含雙龍／奈克洛茲瑪專用證據',
             unsupported_form: '此型態尚未納入支援範圍'
           });
         });
@@ -1780,6 +1907,24 @@
             form_uncertain: 1,
             form_confidence_low: 1,
             shiny_uncertain: 1
+          });
+        });
+
+        test('counts one review card when several specialized evidence checks fail', () => {
+          const rejected = validatedSpecializedFormCard('dialga_origin', {
+            body_plan: expectedSpecializedFormEvidence.dialga_standard.body_plan,
+            limb_layout: expectedSpecializedFormEvidence.dialga_standard.limb_layout,
+            decisive_feature: expectedSpecializedFormEvidence.dialga_standard.decisive_feature
+          });
+          const fullyValidated = validateHundoCardStates(rejected);
+          const summary = summarizeHundoManualReview([fullyValidated]);
+          equal(rejected.effective_form_id, 'uncertain');
+          equal(effectiveSmartHundoCardsToPokemonList([fullyValidated]).pokemon_list, '');
+          equal(summary.review_card_count, 1);
+          deepEqual(summary.review_reason_counts, {
+            form_body_plan_mismatch: 1,
+            form_limb_layout_mismatch: 1,
+            form_decisive_feature_mismatch: 1
           });
         });
 
@@ -2590,6 +2735,10 @@
             region_visibility: 'uncertain',
             recognition_basis: 'uncertain',
             visual_signature: 'uncertain',
+            body_plan: 'uncertain',
+            limb_layout: 'uncertain',
+            fusion_host: 'uncertain',
+            decisive_feature: 'uncertain',
             key_features_visible: false,
             label_relationship: 'uncertain'
           });
@@ -2600,7 +2749,7 @@
           const serialized = JSON.stringify(diagnostics);
           [
             'Authorization', 'Bearer', 'data:image/', 'raw-form-secret', 'RAW_FORM_BODY',
-            'request', 'body'
+            '"request":', '"body":'
           ].forEach(sentinel => equal(serialized.includes(sentinel), false, `form diagnostics exclude ${sentinel}`));
         });
 
@@ -2636,12 +2785,58 @@
             region_visibility: 'uncertain',
             recognition_basis: 'uncertain',
             visual_signature: 'uncertain',
+            body_plan: 'uncertain',
+            limb_layout: 'uncertain',
+            fusion_host: 'uncertain',
+            decisive_feature: 'uncertain',
             key_features_visible: false,
             label_relationship: 'uncertain'
           });
           const serialized = JSON.stringify(diagnostics);
           ['Authorization', 'Bearer', 'raw-form-secret', 'data:image/', 'RAW_FORM_BODY'].forEach(sentinel => {
             equal(serialized.includes(sentinel), false, `non-whitelist diagnostics exclude ${sentinel}`);
+          });
+        });
+
+        test('keeps only controlled specialized evidence fields in safe diagnostics', () => {
+          const duskMane = validatedSpecializedFormCard('necrozma_dusk_mane');
+          const diagnostics = shapeSmartHundoDiagnostics({
+            screenshots: [{ cards: [{
+              ...duskMane,
+              raw: {
+                ...duskMane.raw,
+                form: {
+                  ...duskMane.raw.form,
+                  form_evidence: {
+                    ...duskMane.raw.form.form_evidence,
+                    Authorization: 'Bearer private-diagnostic-secret',
+                    payload: 'data:image/png;base64,PRIVATE_IMAGE'
+                  }
+                }
+              }
+            }] }]
+          });
+          deepEqual(diagnostics.screenshots[0].cards[0].form_evidence, {
+            region_visibility: 'clear',
+            recognition_basis: 'direct_visual_match',
+            visual_signature: 'necrozma_dusk_mane',
+            body_plan: 'necrozma_dusk_mane_quadruped_lion',
+            limb_layout: 'quadruped_lion',
+            fusion_host: 'solgaleo',
+            decisive_feature: 'dusk_mane_lion_crystal_armor',
+            key_features_visible: true,
+            label_relationship: 'base_species_only'
+          });
+          const serialized = JSON.stringify(diagnostics);
+          [
+            'Authorization',
+            'Bearer',
+            'private-diagnostic-secret',
+            '"payload":',
+            'data:image/',
+            'PRIVATE_IMAGE'
+          ].forEach(sentinel => {
+            equal(serialized.includes(sentinel), false, `specialized diagnostics exclude ${sentinel}`);
           });
         });
 
@@ -3125,6 +3320,32 @@
             status,
             '百神掃描完成：總數1，偵測1張卡片，辨識1張；共1張卡片需人工確認；1張型態需人工確認；1張型態辨識信心不足'
           );
+        });
+
+        test('renders specialized form evidence reasons as card-level status details', () => {
+          const status = formatSmartHundoStatus({
+            countMerge: { hundo_leg: '1' },
+            conversion: { recognized_count: 0 },
+            detectedCardCount: 1,
+            reviewSummary: {
+              review_card_count: 1,
+              review_reason_counts: {
+                form_body_plan_mismatch: 1,
+                form_limb_layout_mismatch: 1,
+                form_fusion_host_mismatch: 1,
+                form_decisive_feature_mismatch: 1,
+                form_specialized_evidence_unexpected: 1
+              }
+            }
+          });
+          [
+            '型態身體結構與判斷不一致',
+            '型態四肢結構與判斷不一致',
+            '奈克洛茲瑪合體母體與判斷不一致',
+            '型態關鍵外觀特徵與判斷不一致',
+            '非專用型態不應包含雙龍／奈克洛茲瑪專用證據'
+          ].forEach(message => equal(status.includes(message), true, message));
+          equal(status.includes('共1張卡片需人工確認'), true);
         });
 
         test('reports an unresolved recognized form without a species-uncertain status detail', () => {
