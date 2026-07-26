@@ -634,6 +634,8 @@
         };
 
         const OPENAI_MODEL = 'gpt-4.1-mini';
+        const HUNDO_SMART_MODEL = 'gpt-5-mini';
+        const HUNDO_SMART_REASONING_EFFORT = 'low';
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
@@ -2282,9 +2284,9 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
         ]);
 
         const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater, options = {}) => {
-            const payload = JSON.stringify({
-                model: OPENAI_MODEL,
-                temperature: 0.1,
+            const requestModel = options.model || OPENAI_MODEL;
+            const payload = {
+                model: requestModel,
                 messages: [{
                     role: 'user',
                     content: buildAiRequestContent(prompt, dataUrl, options.imageDetail || AI_IMAGE_DETAIL)
@@ -2293,7 +2295,13 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                     type: 'json_schema',
                     json_schema: jsonSchema
                 }
-            });
+            };
+            if (requestModel === HUNDO_SMART_MODEL) {
+                payload.reasoning_effort = options.reasoningEffort || HUNDO_SMART_REASONING_EFFORT;
+            } else {
+                payload.temperature = 0.1;
+            }
+            const requestBody = JSON.stringify(payload);
 
             const maxRetries = options.maxRetries ?? 3;
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -2304,7 +2312,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${apiKey}`
                         },
-                        body: payload
+                        body: requestBody
                     });
 
                     if (!resp.ok) {
@@ -2326,6 +2334,11 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                     if (!options.includeMetadata) return result;
                     return {
                         result,
+                        requested_model: String(requestModel),
+                        returned_model: String(data?.model || ''),
+                        reasoning_effort: requestModel === HUNDO_SMART_MODEL
+                            ? String(payload.reasoning_effort || '')
+                            : '',
                         finish_reason: String(data?.choices?.[0]?.finish_reason || '')
                     };
                 } catch (error) {
@@ -2414,7 +2427,12 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             originalDataUrl,
             HUNDO_SMART_SCHEMA,
             statusUpdater,
-            { imageDetail: HUNDO_SMART_IMAGE_DETAIL, includeMetadata: true }
+            {
+                model: HUNDO_SMART_MODEL,
+                reasoningEffort: HUNDO_SMART_REASONING_EFFORT,
+                imageDetail: HUNDO_SMART_IMAGE_DETAIL,
+                includeMetadata: true
+            }
         );
 
         const requestSmartHundoWithStructuralRetry = async ({

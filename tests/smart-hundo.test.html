@@ -3258,6 +3258,9 @@
         const ordinaryResult = await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA, null);
         equal(ordinaryResult.detected_card_count, 0);
         equal(Object.hasOwn(ordinaryResult, 'result'), false, 'ordinary callers retain parsed-object return');
+        equal(lastPayload.model, 'gpt-4.1-mini', 'ordinary default request uses the inexpensive model');
+        equal(lastPayload.temperature, 0.1, 'ordinary default request keeps deterministic temperature');
+        equal(Object.hasOwn(lastPayload, 'reasoning_effort'), false, 'ordinary default request omits reasoning effort');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'auto');
         equal(JSON.stringify(lastPayload).includes('test-key'), false);
         equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
@@ -3299,6 +3302,9 @@
         equal(countResponse.result.hundo_leg, '3');
         equal(countResponse.finish_reason, 'stop');
         equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_count_extractor');
+        equal(lastPayload.model, 'gpt-4.1-mini', 'hundo count stays on the inexpensive model');
+        equal(lastPayload.temperature, 0.1, 'hundo count keeps deterministic temperature');
+        equal(Object.hasOwn(lastPayload, 'reasoning_effort'), false, 'hundo count omits reasoning effort');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
         equal(lastPayload.messages[0].content[1].image_url.url.startsWith('data:image/png'), true);
         deepEqual({
@@ -3312,31 +3318,48 @@
           imageUrl: croppedCountRegion,
           detail: 'high'
         }, 'hundo-count request payload remains the origin/main fixture');
-        installStrictOpenAiFetchMock(async () => ({
-          ok: true,
-          json: async () => ({
-            choices: [{
-              finish_reason: 7,
-              message: {
-                content: JSON.stringify({
-                  detected_card_count: 0,
-                  scan_complete: true,
-                  bottom_edge_checked: true,
-                  enumeration_confidence: 1,
-                  cards: []
-                })
-              }
-            }]
-          })
-        }));
+        let metadataPayload = null;
+        installStrictOpenAiFetchMock(async ({ payload }) => {
+          metadataPayload = payload;
+          return {
+            ok: true,
+            json: async () => ({
+              model: 'gpt-5-mini-2025-08-07',
+              choices: [{
+                finish_reason: 7,
+                message: {
+                  content: JSON.stringify({
+                    detected_card_count: 0,
+                    scan_complete: true,
+                    bottom_edge_checked: true,
+                    enumeration_confidence: 1,
+                    cards: []
+                  })
+                }
+              }]
+            })
+          };
+        });
         const coercedMetadata = await requestOpenAiJsonSchema(
           'test-key',
           'metadata contract',
           originalDataUrl,
           HUNDO_SMART_SCHEMA,
           null,
-          { includeMetadata: true }
+          {
+            includeMetadata: true,
+            model: 'gpt-5-mini',
+            reasoningEffort: 'low',
+            imageDetail: 'high'
+          }
         );
+        equal(metadataPayload.model, 'gpt-5-mini', 'request-level model override controls the payload');
+        equal(metadataPayload.reasoning_effort, 'low', 'smart payload includes low reasoning effort');
+        equal(Object.hasOwn(metadataPayload, 'temperature'), false, 'smart payload omits temperature');
+        equal(metadataPayload.messages[0].content[1].image_url.detail, 'high');
+        equal(coercedMetadata.requested_model, 'gpt-5-mini');
+        equal(coercedMetadata.returned_model, 'gpt-5-mini-2025-08-07');
+        equal(coercedMetadata.reasoning_effort, 'low');
         equal(coercedMetadata.finish_reason, '7', 'metadata finish reason is always a safe string');
         await assertRejects(globalThis.fetch('https://example.invalid/never', {
           body: JSON.stringify({ response_format: { json_schema: HUNDO_COUNT_SCHEMA } })
@@ -3610,6 +3633,9 @@
           equal(attempts.length, 2, 'one logical retry makes exactly two extraction calls');
           attempts.forEach(({ payload, schemaName }) => {
             equal(schemaName, 'pokemon_go_hundo_smart_extractor_v2');
+            equal(payload.model, 'gpt-5-mini', 'initial and structural retry use the Smart Hundo model');
+            equal(payload.reasoning_effort, 'low', 'initial and structural retry use low reasoning effort');
+            equal(Object.hasOwn(payload, 'temperature'), false, 'Smart Hundo payload never sends temperature');
             equal(payload.messages[0].content[1].image_url.url, originalDataUrl);
             equal(payload.messages[0].content[1].image_url.detail, 'high');
           });
@@ -4220,6 +4246,8 @@
           equal(requests[0].imageUrl, 'data:image/png;base64,TEAM_EVIDENCE_DIRECT_REQUEST');
           equal(requests[0].detail, 'high');
           equal(requests[0].payload.model, 'gpt-4.1-mini', 'dedicated extraction keeps OPENAI_MODEL unchanged');
+          equal(requests[0].payload.temperature, 0.1, 'trainer-team keeps deterministic temperature');
+          equal(Object.hasOwn(requests[0].payload, 'reasoning_effort'), false, 'trainer-team omits reasoning effort');
           deepEqual(requests[0].payload.response_format.json_schema, TRAINER_TEAM_SCHEMA, 'request sends the exact strict schema');
           equal(response.screenshot_index, 7);
           equal(response.valid, true);
@@ -4778,6 +4806,22 @@
           equal(ordinaryRequests.length, 3, 'only non-smart jobs use ordinary extraction');
           equal(countRequests.length, 2, 'each exact job gets one logical count operation');
           equal(cardRequests.length, 2, 'each exact job gets one logical full-image card operation');
+          [...classifierRequests, ...ordinaryRequests, ...teamRequests, ...countRequests].forEach(request => {
+            equal(request.payload.model, 'gpt-4.1-mini', `${request.schemaName} stays on the ordinary model`);
+            equal(request.payload.temperature, 0.1, `${request.schemaName} keeps deterministic temperature`);
+            equal(Object.hasOwn(request.payload, 'reasoning_effort'), false, `${request.schemaName} omits reasoning effort`);
+          });
+          cardRequests.forEach(request => {
+            equal(request.payload.model, 'gpt-5-mini', 'complete Smart Hundo cards use the specialized model');
+            equal(request.payload.reasoning_effort, 'low', 'complete Smart Hundo cards use low reasoning effort');
+            equal(Object.hasOwn(request.payload, 'temperature'), false, 'complete Smart Hundo cards omit temperature');
+          });
+          equal(
+            [...classifierRequests, ...ordinaryRequests, ...teamRequests, ...countRequests]
+              .some(request => request.payload.model === 'gpt-5-mini'),
+            false,
+            'no ordinary request accidentally uses the Smart Hundo model'
+          );
           deepEqual(cardRequests.map(request => request.imageUrl), [
             'data:image/png;base64,ORIGINAL_EXACT_A',
             'data:image/png;base64,ORIGINAL_EXACT_B_RAW_OTHER'
@@ -5328,6 +5372,15 @@
           equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_request_failed), true);
           equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'), true);
           equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult);
+          const failedCardRequests = routedRequests.filter(
+            request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2'
+          );
+          equal(failedCardRequests.length > 0, true, 'failed Smart Hundo cards made a mocked request');
+          equal(
+            failedCardRequests.every(request => request.payload.model === 'gpt-5-mini'),
+            true,
+            'failed Smart Hundo card requests never silently fall back to the ordinary model'
+          );
           const serializedFailureLogs = JSON.stringify(loggedValues.slice(errorLogStart));
           equal(serializedFailureLogs.includes('SECRET_ERROR_NAME'), false, 'secret-shaped error names never reach logs');
           const cardFailureSummary = loggedValues
