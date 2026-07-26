@@ -1821,6 +1821,26 @@
           equal(conversion.recognized_count, 3);
         });
 
+        test('keeps exact Origin Dragon and Necrozma state prefixes while hiding internal states', () => {
+          equal(buildHundoDisplayName(displayFormCard('dialga_origin', {
+            effective_shiny_state: 'yes'
+          })), '色違起源帝牙盧卡');
+          equal(buildHundoDisplayName(displayFormCard('palkia_origin', {
+            effective_rocket_state: 'shadow'
+          })), '暗影起源帕路奇亞');
+          equal(buildHundoDisplayName(displayFormCard('necrozma_dusk_mane', {
+            effective_background_type: 'commemorative'
+          })), '紀念背卡奈克洛茲瑪（黃昏之鬃）');
+          equal(buildHundoDisplayName(displayFormCard('necrozma_dawn_wings', {
+            effective_background_type: 'special'
+          })), '特別背卡奈克洛茲瑪（拂曉之翼）');
+          equal(buildHundoDisplayName(displayFormCard('necrozma_dusk_mane', {
+            effective_lucky_state: 'yes',
+            effective_favorite_state: 'yes',
+            effective_rocket_state: 'purified'
+          })), '奈克洛茲瑪（黃昏之鬃）');
+        });
+
         test('exposes the exact manual-review reason messages', () => {
           deepEqual(HUNDO_REVIEW_REASON_MESSAGES, {
             species_uncertain: '物種需人工確認',
@@ -4571,6 +4591,12 @@
           cards,
           ...overrides
         });
+        const positionOracleCards = (cards) => cards.map((oracleCard, index) => ({
+          ...oracleCard,
+          order: index + 1,
+          row: Math.floor(index / 3) + 1,
+          column: (index % 3) + 1
+        }));
         let countResultByImage = new Map();
         let cardResultByImage = new Map();
         let routedRequests = [];
@@ -5380,6 +5406,170 @@
           equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
           equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
           equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
+        });
+
+        await asyncTest('matches mocked real-screen oracle 1 without a false Crowned Zamazenta', async () => {
+          resetScanScenario();
+          classificationByImage.MANUAL_ORACLE_1 = classificationByImage.EXACT_A;
+          setScanFiles(['MANUAL_ORACLE_1']);
+          countResultByImage.set('MANUAL_ORACLE_1', validCount('(7)', '7'));
+          cardResultByImage.set('MANUAL_ORACLE_1', completeCardResult(positionOracleCards([
+            v2Card({ cp: '1001', official_name: '固拉多', visible_label: '固拉多' }),
+            structuredV2Card('zamazenta_standard', {
+              cp: '1002', official_name: '藏瑪然特', visible_label: '藏瑪然特'
+            }),
+            structuredV2Card('dialga_standard', {
+              cp: '1003', official_name: '帝牙盧卡', visible_label: '帝牙盧卡'
+            }),
+            v2Card({
+              cp: '1004',
+              official_name: '蓋歐卡',
+              visible_label: '蓋歐卡',
+              shiny_state: 'yes',
+              shiny_confidence: 0.99,
+              shiny_evidence: sparkleEvidence({
+                present: true,
+                position: 'cp_area',
+                color: 'dark_blue',
+                shape: 'multiple_four_point_sparkles'
+              })
+            }),
+            structuredV2Card('kyurem_black', {
+              cp: '1005', official_name: '酋雷姆', visible_label: '酋雷姆'
+            }),
+            v2Card({ cp: '1006', official_name: '蓋歐卡', visible_label: '蓋歐卡' }),
+            structuredV2Card('dialga_standard', {
+              cp: '1007', official_name: '帝牙盧卡', visible_label: '帝牙盧卡'
+            })
+          ])));
+
+          await autoScan();
+
+          const expected = '固拉多,藏瑪然特,帝牙盧卡*2,色違蓋歐卡,闇黑酋雷姆,蓋歐卡';
+          equal(document.getElementById('g_hundos').value, expected);
+          equal(document.getElementById('g_hundos').value.includes('藏瑪然特劍盾型態'), false);
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[1].effective_form_id, 'zamazenta_standard');
+          equal(window.lastSmartHundoDiagnostics.pokemon_list, expected);
+        });
+
+        await asyncTest('matches mocked real-screen oracle 2 with exact Origin Dialga evidence', async () => {
+          resetScanScenario();
+          classificationByImage.MANUAL_ORACLE_2 = classificationByImage.EXACT_A;
+          setScanFiles(['MANUAL_ORACLE_2']);
+          countResultByImage.set('MANUAL_ORACLE_2', validCount('(5)', '5'));
+          cardResultByImage.set('MANUAL_ORACLE_2', completeCardResult(positionOracleCards([
+            v2Card({ cp: '2001', official_name: '固拉多', visible_label: '固拉多' }),
+            structuredV2Card('dialga_origin', {
+              cp: '2002', official_name: '帝牙盧卡', visible_label: '帝牙盧卡'
+            }),
+            structuredV2Card('palkia_standard', {
+              cp: '2003',
+              official_name: '帕路奇亞',
+              visible_label: '帕路奇亞',
+              shiny_state: 'yes',
+              shiny_confidence: 0.99,
+              shiny_evidence: sparkleEvidence({
+                present: true,
+                position: 'cp_area',
+                color: 'teal_blue',
+                shape: 'multiple_four_point_sparkles'
+              })
+            }),
+            v2Card({ cp: '2004', official_name: '烈空坐', visible_label: '烈空坐' }),
+            v2Card({ cp: '2005', official_name: '拉帝歐斯', visible_label: '拉帝歐斯' })
+          ])));
+
+          await autoScan();
+
+          const expected = '固拉多,起源帝牙盧卡,色違帕路奇亞,烈空坐,拉帝歐斯';
+          const originDialga = window.lastSmartHundoDiagnostics.screenshots[0].cards[1];
+          equal(document.getElementById('g_hundos').value, expected);
+          equal(originDialga.base_species, '帝牙盧卡');
+          equal(originDialga.raw_form_id, 'dialga_origin');
+          equal(originDialga.form_evidence.body_plan, 'dialga_origin_elongated_equine_quadruped');
+          equal(originDialga.form_evidence.limb_layout, 'four_long_legs');
+          equal(originDialga.form_evidence.decisive_feature, 'origin_dialga_elongated_neck_chest');
+          equal(originDialga.effective_form_id, 'dialga_origin');
+          equal(originDialga.canonical_official_name, '起源帝牙盧卡');
+        });
+
+        await asyncTest('matches mocked real-screen oracle 3 and preserves legitimate Crowned Zamazenta', async () => {
+          resetScanScenario();
+          classificationByImage.MANUAL_ORACLE_3 = classificationByImage.EXACT_A;
+          setScanFiles(['MANUAL_ORACLE_3']);
+          countResultByImage.set('MANUAL_ORACLE_3', validCount('(7)', '7'));
+          cardResultByImage.set('MANUAL_ORACLE_3', completeCardResult(positionOracleCards([
+            structuredV2Card('kyurem_black', {
+              cp: '3001', official_name: '酋雷姆', visible_label: '酋雷姆'
+            }),
+            v2Card({ cp: '3002', official_name: '固拉多', visible_label: '固拉多' }),
+            v2Card({ cp: '3003', official_name: '鳳王', visible_label: '鳳王' }),
+            structuredV2Card('zacian_standard', {
+              cp: '3004', official_name: '蒼響', visible_label: '蒼響'
+            }),
+            v2Card({ cp: '3005', official_name: '雷電雲', visible_label: '雷電雲' }),
+            v2Card({
+              cp: '3006',
+              official_name: '爆肌蚊',
+              visible_label: '爆肌蚊',
+              shiny_state: 'yes',
+              shiny_confidence: 0.99,
+              shiny_evidence: sparkleEvidence({
+                present: true,
+                position: 'cp_area',
+                color: 'dark_blue_teal',
+                shape: 'multiple_four_point_sparkles'
+              })
+            }),
+            structuredV2Card('zamazenta_crowned', {
+              cp: '3007', official_name: '藏瑪然特', visible_label: '藏瑪然特'
+            })
+          ])));
+
+          await autoScan();
+
+          const expected = '闇黑酋雷姆,固拉多,鳳王,蒼響,雷電雲,色違爆肌蚊,藏瑪然特劍盾型態';
+          equal(document.getElementById('g_hundos').value, expected);
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[0].effective_form_id, 'kyurem_black');
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[6].effective_form_id, 'zamazenta_crowned');
+        });
+
+        await asyncTest('matches mocked real-screen oracle 4 with Galarian Zapdos and Dusk Mane', async () => {
+          resetScanScenario();
+          classificationByImage.MANUAL_ORACLE_4 = classificationByImage.EXACT_A;
+          setScanFiles(['MANUAL_ORACLE_4']);
+          countResultByImage.set('MANUAL_ORACLE_4', validCount('(6)', '6'));
+          cardResultByImage.set('MANUAL_ORACLE_4', completeCardResult(positionOracleCards([
+            structuredV2Card('zapdos_galarian', {
+              cp: '4001', official_name: '閃電鳥', visible_label: '閃電鳥'
+            }),
+            v2Card({ cp: '4002', official_name: '拉帝歐斯', visible_label: '拉帝歐斯' }),
+            structuredV2Card('zacian_standard', {
+              cp: '4003', official_name: '蒼響', visible_label: '蒼響'
+            }),
+            v2Card({ cp: '4004', official_name: '鳳王', visible_label: '鳳王' }),
+            v2Card({ cp: '4005', official_name: '雷電雲', visible_label: '雷電雲' }),
+            structuredV2Card('necrozma_dusk_mane', {
+              cp: '4006', official_name: '奈克洛茲瑪', visible_label: '奈克洛茲瑪'
+            })
+          ])));
+
+          await autoScan();
+
+          const expected = '伽勒爾閃電鳥,拉帝歐斯,蒼響,鳳王,雷電雲,奈克洛茲瑪（黃昏之鬃）';
+          const galarianZapdos = window.lastSmartHundoDiagnostics.screenshots[0].cards[0];
+          const duskMane = window.lastSmartHundoDiagnostics.screenshots[0].cards[5];
+          equal(document.getElementById('g_hundos').value, expected);
+          equal(galarianZapdos.raw_form_id, 'zapdos_galarian');
+          equal(galarianZapdos.effective_form_id, 'zapdos_galarian');
+          equal(duskMane.base_species, '奈克洛茲瑪');
+          equal(duskMane.raw_form_id, 'necrozma_dusk_mane');
+          equal(duskMane.form_evidence.body_plan, 'necrozma_dusk_mane_quadruped_lion');
+          equal(duskMane.form_evidence.limb_layout, 'quadruped_lion');
+          equal(duskMane.form_evidence.fusion_host, 'solgaleo');
+          equal(duskMane.form_evidence.decisive_feature, 'dusk_mane_lion_crystal_armor');
+          equal(duskMane.effective_form_id, 'necrozma_dusk_mane');
+          equal(duskMane.canonical_official_name, '奈克洛茲瑪（黃昏之鬃）');
         });
 
         await asyncTest('keeps schema-complete non-whitelist cards in the production list', async () => {

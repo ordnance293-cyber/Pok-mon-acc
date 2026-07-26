@@ -20,6 +20,9 @@ SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
 TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
 MANUAL_V2_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
 MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
+MANUAL_GPT5_FORM_V2_ACCEPTANCE_DOC = (
+    ROOT / "docs" / "manual-tests" / "smart-hundo-gpt5-origin-necrozma-v2.md"
+)
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
 EXTRACTION_PROMPT_HASH = "1b061471ee97eeb1f6e0e9061acc8d6150b386fe6b46e4350b23b658a708b669"
@@ -199,6 +202,42 @@ def assert_manual_v2_acceptance_doc() -> None:
         "固拉多,色違固拉多,特別背卡固拉多",
     ):
         require_fragment(document, fragment, "manual acceptance document")
+
+
+def assert_manual_gpt5_form_v2_acceptance_doc() -> None:
+    if not MANUAL_GPT5_FORM_V2_ACCEPTANCE_DOC.is_file():
+        raise AssertionError(
+            f"manual GPT-5 form V2 acceptance document does not exist: "
+            f"{MANUAL_GPT5_FORM_V2_ACCEPTANCE_DOC}"
+        )
+    document = normalized_source(MANUAL_GPT5_FORM_V2_ACCEPTANCE_DOC)
+    for fragment in (
+        "完整 commit SHA",
+        "匿名圖片 ID",
+        "requested_model",
+        "returned_model",
+        "reasoning_effort",
+        "visible_label",
+        "base_species",
+        "raw form_id",
+        "form confidence",
+        "body_plan",
+        "limb_layout",
+        "fusion_host",
+        "decisive_feature",
+        "effective_form_id",
+        "canonical name",
+        "final pokemon_list",
+        "pass/fail",
+        "failure summary",
+        "固拉多,藏瑪然特,帝牙盧卡*2,色違蓋歐卡,闇黑酋雷姆,蓋歐卡",
+        "固拉多,起源帝牙盧卡,色違帕路奇亞,烈空坐,拉帝歐斯",
+        "闇黑酋雷姆,固拉多,鳳王,蒼響,雷電雲,色違爆肌蚊,藏瑪然特劍盾型態",
+        "伽勒爾閃電鳥,拉帝歐斯,蒼響,鳳王,雷電雲,奈克洛茲瑪（黃昏之鬃）",
+        "mocked tests do not prove visual accuracy",
+        "不得提交使用者的私人截圖",
+    ):
+        require_fragment(document, fragment, "manual GPT-5 form V2 acceptance document")
 
 
 def assert_hundo_form_schema(smart_schema: str) -> None:
@@ -656,6 +695,10 @@ def main() -> int:
         ]),
         ("manual V2 acceptance document preserves pipeline cases", assert_manual_v2_acceptance_doc),
         ("manual V1 form acceptance document has pending real-image cases", assert_manual_v1_form_acceptance_doc),
+        (
+            "manual GPT-5 Origin Dragon/Necrozma V2 document preserves all four pending oracles",
+            assert_manual_gpt5_form_v2_acceptance_doc,
+        ),
     ])
 
     failures: list[str] = []
