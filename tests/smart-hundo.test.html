@@ -489,6 +489,36 @@
           equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
         });
 
+        test('keeps every applicable partial-visibility rejection reason', () => {
+          const result = validatedFormCard({
+            form_confidence: 0.92,
+            form_evidence: formEvidence({
+              region_visibility: 'partially_occluded',
+              key_features_visible: false
+            })
+          });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+          equal(result.manual_review_reasons.includes('form_confidence_low'), true);
+          equal(result.manual_review_reasons.includes('form_uncertain'), true);
+        });
+
+        test('rejects invalid direct-call form evidence values', () => {
+          const normalized = normalizeSmartHundoCard(formCard(), normalizeName, { screenshotIndex: 0 });
+          const result = validateHundoPokemonForm({
+            ...normalized,
+            form_evidence: {
+              ...normalized.form_evidence,
+              recognition_basis: 'invalid',
+              region_visibility: 'invalid'
+            }
+          }, normalizeName);
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_uncertain'), true);
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+        });
+
         test('accepts clear form confidence at 0.85 and rejects 0.849', () => {
           equal(validatedFormCard({ form_confidence: 0.85 }).effective_form_id, 'moltres_galarian');
           const belowThreshold = validatedFormCard({ form_confidence: 0.849 });

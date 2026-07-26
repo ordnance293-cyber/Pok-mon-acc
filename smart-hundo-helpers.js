@@ -1212,31 +1212,38 @@
         if (formId === 'uncertain' || !HUNDO_SUPPORTED_FORM_IDS.has(formId)) return reject('form_uncertain');
         if (!HUNDO_FORMS_BY_BASE_SPECIES[baseSpecies].includes(formId)) return reject('form_species_mismatch');
         if (formEvidence.visual_signature !== formId) return reject('form_signature_mismatch');
-        if (formEvidence.label_relationship === 'conflicting') return reject('form_species_mismatch');
-        if (formEvidence.recognition_basis === 'label_only') return reject('form_label_only');
-        if (['cropped', 'not_visible', 'uncertain'].includes(formEvidence.region_visibility)) {
-            return reject('form_region_not_clear');
+        const validationReasons = [];
+        const addValidationReason = (reason) => {
+            if (!validationReasons.includes(reason)) validationReasons.push(reason);
+        };
+        const isPartiallyOccluded = formEvidence.region_visibility === 'partially_occluded';
+        if (formEvidence.label_relationship === 'conflicting') addValidationReason('form_species_mismatch');
+        if (formEvidence.recognition_basis === 'label_only') addValidationReason('form_label_only');
+        if (!['clear', 'partially_occluded'].includes(formEvidence.region_visibility)) {
+            addValidationReason('form_region_not_clear');
         }
         if (Number(card?.species_confidence) < SPECIES_CONFIDENCE_THRESHOLD) {
-            return reject('species_uncertain', 'form_uncertain');
+            addValidationReason('species_uncertain');
+            addValidationReason('form_uncertain');
         }
-        const isPartiallyOccluded = formEvidence.region_visibility === 'partially_occluded';
         const minimumFormConfidence = isPartiallyOccluded
             ? FORM_PARTIAL_VISIBILITY_THRESHOLD
             : FORM_CONFIDENCE_THRESHOLD;
         if (Number(card?.form_confidence) < minimumFormConfidence) {
-            return reject(...(isPartiallyOccluded
-                ? ['form_region_not_clear', 'form_confidence_low']
-                : ['form_confidence_low']));
+            if (isPartiallyOccluded) addValidationReason('form_region_not_clear');
+            addValidationReason('form_confidence_low');
         }
-        if (formEvidence.recognition_basis === 'uncertain' || formEvidence.key_features_visible !== true) {
-            return reject(...(isPartiallyOccluded
-                ? ['form_region_not_clear', 'form_uncertain']
-                : ['form_uncertain']));
+        if (!['direct_visual_match', 'visual_and_label'].includes(formEvidence.recognition_basis)) {
+            addValidationReason('form_uncertain');
         }
-        if (isPartiallyOccluded && formEvidence.recognition_basis !== 'direct_visual_match') {
-            return reject('form_region_not_clear');
+        if (formEvidence.key_features_visible !== true) addValidationReason('form_uncertain');
+        if (
+            isPartiallyOccluded
+            && (formEvidence.recognition_basis !== 'direct_visual_match' || formEvidence.key_features_visible !== true)
+        ) {
+            addValidationReason('form_region_not_clear');
         }
+        if (validationReasons.length > 0) return reject(...validationReasons);
 
         const result = {
             ...card,
