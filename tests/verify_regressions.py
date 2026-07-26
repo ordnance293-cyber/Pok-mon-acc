@@ -20,8 +20,8 @@ SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
 MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
-EXTRACTION_PROMPT_HASH = "b17f154fded9dcdcac7fce0b80ba5fc3c693f7f6138b9ccef85ef036a8752f27"
-EXTRACTION_PROMPT_LENGTH = 4742
+EXTRACTION_PROMPT_HASH = "1b061471ee97eeb1f6e0e9061acc8d6150b386fe6b46e4350b23b658a708b669"
+EXTRACTION_PROMPT_LENGTH = 4643
 RESIZED_IMAGE_FUNCTION_HASH = "c4baf69d9b7a67771b356642bf549806254fe48a676952986150eb616a93daf4"
 RESIZED_IMAGE_FUNCTION_LENGTH = 1276
 SAVE_ACCOUNT_HASH = "3cc797671ec130054e89fb4e8ad5ef2c08d7c5d4a1da51d6b3e06be353a56d7d"
@@ -30,6 +30,10 @@ NEW_ITEM_HASH = "5f7736d381b8c5f3914db57f5e1b9f33e358b205be918c314a3df6da6d07e2c
 NEW_ITEM_LENGTH = 1666
 GENERATE_TEXT_HASH = "9d288f3924c6a8d397546900c558f5335f0dfa5dde536249355850aff15a7eff"
 GENERATE_TEXT_LENGTH = 4589
+SMART_HUNDO_HELPERS_HASH = "7dc16a5450017b102054dfcd212737f87411948fd42fd1f17dd125631df3e72b"
+SMART_HUNDO_HELPERS_LENGTH = 52801
+SMART_HUNDO_SCHEMA_HASH = "a48c2113d70b1ef67be8f5c1bf02f258fdaae774d0e4fe982212392619f87094"
+SMART_HUNDO_SCHEMA_LENGTH = 8388
 
 
 def normalized_source(path: Path) -> str:
@@ -74,6 +78,14 @@ def require_fragment(source: str, fragment: str, label: str) -> None:
         raise AssertionError(f"{label}: missing required source fragment {fragment!r}")
 
 
+def require_occurrences(source: str, fragment: str, minimum: int, label: str) -> None:
+    actual = source.count(fragment)
+    if actual < minimum:
+        raise AssertionError(
+            f"{label}: expected at least {minimum} occurrences of {fragment!r}, got {actual}"
+        )
+
+
 def assert_forbidden(source: str, forbidden: tuple[str, ...], label: str) -> None:
     for term in forbidden:
         if term in source:
@@ -100,6 +112,58 @@ def assert_manual_acceptance_doc() -> None:
         "固拉多,色違固拉多,特別背卡固拉多",
     ):
         require_fragment(document, fragment, "manual acceptance document")
+
+
+def assert_script_before_module(source: str, script_name: str) -> None:
+    script_marker = f'<script src="{script_name}"></script>'
+    script_index = source.find(script_marker)
+    module_index = source.find('<script type="module">')
+    if script_index < 0:
+        raise AssertionError(f"missing required script {script_marker!r}")
+    if module_index < 0:
+        raise AssertionError("module script marker is missing")
+    if script_index >= module_index:
+        raise AssertionError(f"{script_name} must load before the module script")
+
+
+def assert_trainer_diagnostics_and_logging_are_safe(source: str, console_arguments: str) -> None:
+    safe_error_summary = ordinary_function_span(
+        source,
+        "        const safeTrainerTeamErrorSummary =",
+        "safe trainer-team error summary",
+    )
+    diagnostics_shape = source_span(
+        source,
+        "                    const trainerTeamDiagnostics = {",
+        "\n                    publishTrainerTeamDiagnostics(",
+        "trainer-team diagnostics shape",
+        include_end=False,
+    )
+    require_fragment(
+        source,
+        "console.warn('Trainer team operation failed', summary);",
+        "trainer-team safe logging",
+    )
+    assert_forbidden_identifiers(
+        "\n".join((safe_error_summary, diagnostics_shape, console_arguments)),
+        (
+            "apiKey", "authorization", "dataUrl", "originalDataUrl",
+            "classificationDataUrl", "trainerTeamEvidenceDataUrl",
+            "file", "request", "response", "headers", "body", "payload",
+            "credentials", "password", "firebaseConfig", "gasUrl",
+        ),
+        "trainer-team diagnostics/log source",
+    )
+    assert_forbidden(
+        "\n".join((safe_error_summary, diagnostics_shape, console_arguments)),
+        (
+            "Authorization", "data:image/", "File",
+            "credentials", "password", "firebaseConfig", "Firebase",
+            "gasUrl", "GAS",
+        ),
+        "trainer-team diagnostics/log source",
+    )
+    assert_forbidden_identifiers(console_arguments, ("error",), "console arguments")
 
 
 def main() -> int:
@@ -189,6 +253,22 @@ def main() -> int:
     ))
 
     checks.extend([
+        ("trainer-team helper loads before the production module", lambda: assert_script_before_module(
+            source,
+            "trainer-team-helpers.js",
+        )),
+        ("whole smart-hundo helper has the origin/main snapshot", lambda: assert_snapshot(
+            "whole smart-hundo helper",
+            helpers_source,
+            SMART_HUNDO_HELPERS_HASH,
+            SMART_HUNDO_HELPERS_LENGTH,
+        )),
+        ("smart-hundo schema span has the origin/main snapshot", lambda: assert_snapshot(
+            "smart-hundo schema span",
+            smart_schema,
+            SMART_HUNDO_SCHEMA_HASH,
+            SMART_HUNDO_SCHEMA_LENGTH,
+        )),
         ("ordinary classification prompt has the origin/main snapshot", lambda: assert_snapshot(
             "ordinary classification prompt",
             classification_prompt,
@@ -225,6 +305,86 @@ def main() -> int:
             require_fragment(extraction_prompt, "case 'TRAINER_PROFILE_SCREEN':", "profile extraction path"),
             require_fragment(extraction_prompt, "case 'RESOURCE_SCREEN':", "resource extraction path"),
         ]),
+        ("trainer-team strict schema and fixed-UI prompt contracts exist", lambda: [
+            require_fragment(source, "const TRAINER_TEAM_SCHEMA = {", "trainer-team schema"),
+            require_fragment(
+                source,
+                "name: 'pokemon_go_trainer_team_fixed_ui_extractor'",
+                "trainer-team schema name",
+            ),
+            require_fragment(source, "const buildTrainerTeamPrompt =", "trainer-team prompt"),
+            require_fragment(source, "model_team_candidate", "trainer-team model candidate"),
+            require_fragment(source, "arrow_or_progress_accent", "trainer-team fixed evidence"),
+            require_fragment(source, "yellow UI + blue Dialga", "trainer-team prompt counterexample"),
+            require_fragment(source, "red UI + blue/gold Zamazenta", "trainer-team prompt counterexample"),
+            require_fragment(source, "body color never overrides fixed UI", "trainer-team prompt authority rule"),
+        ]),
+        ("trainer-team native PNG and one-request contracts exist", lambda: [
+            require_fragment(source, "const buildTrainerTeamEvidenceImage =", "trainer-team evidence image"),
+            require_fragment(source, "profile_name_block: { x: 0.02, y: 0.11, width: 0.76, height: 0.22 }", "profile-name crop"),
+            require_fragment(source, "level_xp_block: { x: 0, y: 0.55, width: 1, height: 0.34 }", "level/XP crop"),
+            require_fragment(source, "canvas.toDataURL('image/png')", "trainer-team lossless PNG"),
+            require_fragment(source, "const requestTrainerTeamExtraction =", "trainer-team request"),
+            require_fragment(source, "imageDetail: 'high'", "trainer-team high image detail"),
+            require_fragment(source, "maxRetries: 1", "trainer-team one-request cap"),
+            require_fragment(source, "const runTrainerTeamScan =", "trainer-team per-screenshot scan"),
+        ]),
+        ("trainer-team ownership stale-write and diagnostics contracts exist", lambda: [
+            require_fragment(source, "const beginTrainerTeamScan =", "trainer-team scan ownership"),
+            require_fragment(source, "const markTrainerTeamAiValue =", "trainer-team AI ownership"),
+            require_fragment(source, "const handleTrainerTeamManualEdit =", "trainer-team manual ownership"),
+            require_fragment(source, "const isCurrentTrainerTeamScan =", "trainer-team stale scan guard"),
+            require_fragment(source, "const publishTrainerTeamDiagnostics =", "trainer-team diagnostics publisher"),
+            require_fragment(source, "const setTrainerTeamStatus =", "trainer-team status writer"),
+            require_fragment(source, "window.lastTrainerTeamDiagnostics", "trainer-team public diagnostics"),
+            require_fragment(source, "id=\"trainerTeamStatus\"", "trainer-team status UI"),
+        ]),
+        ("ordinary profile allowed fields are exactly level and XP", lambda: require_fragment(
+            source,
+            "TRAINER_PROFILE_SCREEN: ['level', 'xp']",
+            "ordinary profile allowed fields",
+        )),
+        ("ordinary profile expected and retry fields are exactly level and XP", lambda: require_occurrences(
+            source,
+            "TRAINER_PROFILE_SCREEN: ['level', 'xp']",
+            3,
+            "ordinary profile allowed/expected/retry lists",
+        )),
+        ("ordinary source priority and autofill give team no authority", lambda: [
+            assert_forbidden(
+                source_span(
+                    source,
+                    "        const AI_FIELD_SOURCE_PRIORITY = {",
+                    "\n        const AI_FIELD_LABELS =",
+                    "ordinary field source priority",
+                    include_end=False,
+                ),
+                ("team: { TRAINER_PROFILE_SCREEN",),
+                "ordinary field source priority",
+            ),
+            assert_forbidden(
+                source_span(
+                    source,
+                    "        const AI_AUTOFILL_FIELD_TO_INPUT = {",
+                    "\n        const AI_PROTECTED_INPUT_IDS =",
+                    "ordinary autofill mapping",
+                    include_end=False,
+                ),
+                ("team: 'g_team'",),
+                "ordinary autofill mapping",
+            ),
+        ]),
+        ("ordinary required-field coverage gives team no authority", lambda: assert_forbidden(
+            source_span(
+                source,
+                "        const AI_REQUIRED_VALIDATION_FIELDS = [",
+                "\n        const AI_REQUIRED_VALIDATION_PASSES =",
+                "ordinary required-field coverage",
+                include_end=False,
+            ),
+            ("'team'",),
+            "ordinary required-field coverage",
+        )),
         ("OpenAI endpoint, model, and image-processing settings remain locked", lambda: [
             require_fragment(
                 source,
@@ -277,6 +437,9 @@ def main() -> int:
             (
                 "purified", "shadow_state", "purified_state",
                 "lastSmartHundoDiagnostics", "lastSmartHundoScanResult",
+                "lastTrainerTeamDiagnostics", "trainerTeamDiagnostics",
+                "fixed_ui_evidence", "model_team_candidate",
+                "effective_color", "validation_reasons", "conflicts",
             ),
             "Firebase/GAS save path",
         )),
@@ -313,6 +476,9 @@ def main() -> int:
                 "console arguments",
             ),
         ]),
+        ("trainer-team diagnostics and logs exclude sensitive structures", lambda: (
+            assert_trainer_diagnostics_and_logging_are_safe(source, console_arguments)
+        )),
         ("manual V2 acceptance document has required exact outcomes", assert_manual_acceptance_doc),
     ])
 
@@ -334,6 +500,9 @@ def main() -> int:
         forbidden = (
             "purified", "shadow_state", "purified_state",
             "lastSmartHundoDiagnostics", "lastSmartHundoScanResult",
+            "lastTrainerTeamDiagnostics", "trainerTeamDiagnostics",
+            "fixed_ui_evidence", "model_team_candidate",
+            "effective_color", "validation_reasons", "conflicts",
         )
         leaking = [payload for payload in gas_objects if any(term in payload for term in forbidden)]
         if leaking:
