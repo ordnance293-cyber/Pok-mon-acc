@@ -77,6 +77,50 @@
         奈克洛茲瑪: Object.freeze(['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings']),
         酋雷姆: Object.freeze(['kyurem_base', 'kyurem_white', 'kyurem_black'])
     });
+    const REQUIRED_SPECIALIZED_FORM_EVIDENCE = Object.freeze({
+        dialga_standard: Object.freeze({
+            body_plan: 'dialga_standard_stocky_quadruped',
+            limb_layout: 'four_standard_legs',
+            fusion_host: 'not_applicable',
+            decisive_feature: 'standard_dialga_stocky_neck_chest'
+        }),
+        dialga_origin: Object.freeze({
+            body_plan: 'dialga_origin_elongated_equine_quadruped',
+            limb_layout: 'four_long_legs',
+            fusion_host: 'not_applicable',
+            decisive_feature: 'origin_dialga_elongated_neck_chest'
+        }),
+        palkia_standard: Object.freeze({
+            body_plan: 'palkia_standard_upright_bipedal_dragon',
+            limb_layout: 'two_arms_two_legs',
+            fusion_host: 'not_applicable',
+            decisive_feature: 'standard_palkia_visible_arms'
+        }),
+        palkia_origin: Object.freeze({
+            body_plan: 'palkia_origin_centaur_quadruped',
+            limb_layout: 'four_legs_no_standard_arms',
+            fusion_host: 'not_applicable',
+            decisive_feature: 'origin_palkia_centaur_body'
+        }),
+        necrozma_base: Object.freeze({
+            body_plan: 'necrozma_base_upright_crystalline',
+            limb_layout: 'upright_crystalline_limbs',
+            fusion_host: 'none',
+            decisive_feature: 'base_necrozma_crystal_body'
+        }),
+        necrozma_dusk_mane: Object.freeze({
+            body_plan: 'necrozma_dusk_mane_quadruped_lion',
+            limb_layout: 'quadruped_lion',
+            fusion_host: 'solgaleo',
+            decisive_feature: 'dusk_mane_lion_crystal_armor'
+        }),
+        necrozma_dawn_wings: Object.freeze({
+            body_plan: 'necrozma_dawn_wings_giant_moon_wing',
+            limb_layout: 'giant_wings_no_lion_body',
+            fusion_host: 'lunala',
+            decisive_feature: 'dawn_wings_moon_wings_crystal_armor'
+        })
+    });
     const FORM_CONTROL_IDS = new Set(['not_applicable', 'uncertain', 'unsupported']);
     const HUNDO_SUPPORTED_FORM_IDS = new Set(Object.keys(HUNDO_FORM_CANONICAL_NAMES));
     const HUNDO_FORM_ID_VALUES = new Set([...FORM_CONTROL_IDS, ...HUNDO_SUPPORTED_FORM_IDS]);
@@ -100,6 +144,49 @@
         'unreadable',
         'not_applicable',
         'uncertain'
+    ]);
+    const BODY_PLAN_VALUES = new Set([
+        'not_applicable',
+        'uncertain',
+        'other',
+        'dialga_standard_stocky_quadruped',
+        'dialga_origin_elongated_equine_quadruped',
+        'palkia_standard_upright_bipedal_dragon',
+        'palkia_origin_centaur_quadruped',
+        'necrozma_base_upright_crystalline',
+        'necrozma_dusk_mane_quadruped_lion',
+        'necrozma_dawn_wings_giant_moon_wing'
+    ]);
+    const LIMB_LAYOUT_VALUES = new Set([
+        'not_applicable',
+        'uncertain',
+        'other',
+        'four_standard_legs',
+        'four_long_legs',
+        'two_arms_two_legs',
+        'four_legs_no_standard_arms',
+        'upright_crystalline_limbs',
+        'quadruped_lion',
+        'giant_wings_no_lion_body'
+    ]);
+    const FUSION_HOST_VALUES = new Set([
+        'not_applicable',
+        'uncertain',
+        'none',
+        'solgaleo',
+        'lunala'
+    ]);
+    const DECISIVE_FEATURE_VALUES = new Set([
+        'not_applicable',
+        'uncertain',
+        'other',
+        'standard_dialga_stocky_neck_chest',
+        'origin_dialga_elongated_neck_chest',
+        'standard_palkia_visible_arms',
+        'origin_palkia_centaur_body',
+        'base_necrozma_crystal_body',
+        'dusk_mane_lion_crystal_armor',
+        'dawn_wings_moon_wings_crystal_armor'
     ]);
     const HUNDO_FORM_ALIASES = Object.freeze({
         急凍鳥: Object.freeze({ base_species: '急凍鳥' }),
@@ -458,11 +545,19 @@
         const regionVisibility = stringValue(evidence?.region_visibility).toLowerCase();
         const recognitionBasis = stringValue(evidence?.recognition_basis).toLowerCase();
         const visualSignature = stringValue(evidence?.visual_signature).toLowerCase();
+        const bodyPlan = stringValue(evidence?.body_plan).toLowerCase();
+        const limbLayout = stringValue(evidence?.limb_layout).toLowerCase();
+        const fusionHost = stringValue(evidence?.fusion_host).toLowerCase();
+        const decisiveFeature = stringValue(evidence?.decisive_feature).toLowerCase();
         const labelRelationship = stringValue(evidence?.label_relationship).toLowerCase();
         return {
             region_visibility: REGION_VISIBILITY_VALUES.has(regionVisibility) ? regionVisibility : 'uncertain',
             recognition_basis: FORM_RECOGNITION_BASIS_VALUES.has(recognitionBasis) ? recognitionBasis : 'uncertain',
             visual_signature: FORM_VISUAL_SIGNATURE_VALUES.has(visualSignature) ? visualSignature : 'uncertain',
+            body_plan: BODY_PLAN_VALUES.has(bodyPlan) ? bodyPlan : 'uncertain',
+            limb_layout: LIMB_LAYOUT_VALUES.has(limbLayout) ? limbLayout : 'uncertain',
+            fusion_host: FUSION_HOST_VALUES.has(fusionHost) ? fusionHost : 'uncertain',
+            decisive_feature: DECISIVE_FEATURE_VALUES.has(decisiveFeature) ? decisiveFeature : 'uncertain',
             key_features_visible: evidence?.key_features_visible === true,
             label_relationship: FORM_LABEL_RELATIONSHIP_VALUES.has(labelRelationship) ? labelRelationship : 'uncertain'
         };
@@ -1433,6 +1528,7 @@
         adaptLegacyRocketState,
         HUNDO_FORM_CANONICAL_NAMES,
         HUNDO_FORMS_BY_BASE_SPECIES,
+        REQUIRED_SPECIALIZED_FORM_EVIDENCE,
         normalizeHundoBaseSpecies,
         normalizeHundoFormId,
         normalizeHundoFormEvidence,

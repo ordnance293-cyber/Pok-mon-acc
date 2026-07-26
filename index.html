@@ -998,10 +998,53 @@
                                                 'not_applicable', 'other', 'uncertain'
                                             ]
                                         },
+                                        body_plan: {
+                                            type: 'string',
+                                            enum: [
+                                                'not_applicable', 'uncertain', 'other',
+                                                'dialga_standard_stocky_quadruped',
+                                                'dialga_origin_elongated_equine_quadruped',
+                                                'palkia_standard_upright_bipedal_dragon',
+                                                'palkia_origin_centaur_quadruped',
+                                                'necrozma_base_upright_crystalline',
+                                                'necrozma_dusk_mane_quadruped_lion',
+                                                'necrozma_dawn_wings_giant_moon_wing'
+                                            ]
+                                        },
+                                        limb_layout: {
+                                            type: 'string',
+                                            enum: [
+                                                'not_applicable', 'uncertain', 'other',
+                                                'four_standard_legs', 'four_long_legs', 'two_arms_two_legs',
+                                                'four_legs_no_standard_arms', 'upright_crystalline_limbs',
+                                                'quadruped_lion', 'giant_wings_no_lion_body'
+                                            ]
+                                        },
+                                        fusion_host: {
+                                            type: 'string',
+                                            enum: ['not_applicable', 'uncertain', 'none', 'solgaleo', 'lunala']
+                                        },
+                                        decisive_feature: {
+                                            type: 'string',
+                                            enum: [
+                                                'not_applicable', 'uncertain', 'other',
+                                                'standard_dialga_stocky_neck_chest',
+                                                'origin_dialga_elongated_neck_chest',
+                                                'standard_palkia_visible_arms',
+                                                'origin_palkia_centaur_body',
+                                                'base_necrozma_crystal_body',
+                                                'dusk_mane_lion_crystal_armor',
+                                                'dawn_wings_moon_wings_crystal_armor'
+                                            ]
+                                        },
                                         key_features_visible: { type: 'boolean' },
                                         label_relationship: { type: 'string', enum: ['exact_form', 'base_species_only', 'custom_nickname', 'conflicting', 'unreadable', 'not_applicable', 'uncertain'] }
                                     },
-                                    required: ['region_visibility', 'recognition_basis', 'visual_signature', 'key_features_visible', 'label_relationship']
+                                    required: [
+                                        'region_visibility', 'recognition_basis', 'visual_signature',
+                                        'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature',
+                                        'key_features_visible', 'label_relationship'
+                                    ]
                                 },
                                 cp: { type: 'string' },
                                 shiny_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },

@@ -40,8 +40,8 @@ HUNDO_COUNT_PROMPT_HASH = "d93623450e28e7da3672ed22cd9b5c4b7a2f6d2cdb5609e58f463
 HUNDO_COUNT_PROMPT_LENGTH = 856
 TRAINER_TEAM_HELPERS_HASH = "bb34294f7f5359292add2cb930f73250b5eb91e5037f90e9fefd63e3c193aa18"
 TRAINER_TEAM_HELPERS_LENGTH = 12158
-SMART_HUNDO_SCHEMA_HASH = "35636fba67d8b7e27f26c6cec802ff9fa1645eed647a8487dbba8eee2954a203"
-SMART_HUNDO_SCHEMA_LENGTH = 12032
+SMART_HUNDO_SCHEMA_HASH = "b98182bfcad2bcb0a20f33c212010742a5bbc0c4759326af7449009266e588ce"
+SMART_HUNDO_SCHEMA_LENGTH = 15045
 
 
 def normalized_source(path: Path) -> str:
@@ -420,7 +420,7 @@ def main() -> int:
             TRAINER_TEAM_HELPERS_HASH,
             TRAINER_TEAM_HELPERS_LENGTH,
         )),
-        ("smart-hundo schema span has the origin/main snapshot", lambda: assert_snapshot(
+        ("smart-hundo schema span has the approved specialized-evidence snapshot", lambda: assert_snapshot(
             "smart-hundo schema span",
             smart_schema,
             SMART_HUNDO_SCHEMA_HASH,

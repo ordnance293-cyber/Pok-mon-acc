@@ -168,8 +168,61 @@
         region_visibility: 'clear',
         recognition_basis: 'direct_visual_match',
         visual_signature: 'moltres_galarian',
+        body_plan: 'not_applicable',
+        limb_layout: 'not_applicable',
+        fusion_host: 'not_applicable',
+        decisive_feature: 'not_applicable',
         key_features_visible: true,
         label_relationship: 'base_species_only',
+        ...overrides
+      });
+      const expectedSpecializedFormEvidence = {
+        dialga_standard: {
+          body_plan: 'dialga_standard_stocky_quadruped',
+          limb_layout: 'four_standard_legs',
+          fusion_host: 'not_applicable',
+          decisive_feature: 'standard_dialga_stocky_neck_chest'
+        },
+        dialga_origin: {
+          body_plan: 'dialga_origin_elongated_equine_quadruped',
+          limb_layout: 'four_long_legs',
+          fusion_host: 'not_applicable',
+          decisive_feature: 'origin_dialga_elongated_neck_chest'
+        },
+        palkia_standard: {
+          body_plan: 'palkia_standard_upright_bipedal_dragon',
+          limb_layout: 'two_arms_two_legs',
+          fusion_host: 'not_applicable',
+          decisive_feature: 'standard_palkia_visible_arms'
+        },
+        palkia_origin: {
+          body_plan: 'palkia_origin_centaur_quadruped',
+          limb_layout: 'four_legs_no_standard_arms',
+          fusion_host: 'not_applicable',
+          decisive_feature: 'origin_palkia_centaur_body'
+        },
+        necrozma_base: {
+          body_plan: 'necrozma_base_upright_crystalline',
+          limb_layout: 'upright_crystalline_limbs',
+          fusion_host: 'none',
+          decisive_feature: 'base_necrozma_crystal_body'
+        },
+        necrozma_dusk_mane: {
+          body_plan: 'necrozma_dusk_mane_quadruped_lion',
+          limb_layout: 'quadruped_lion',
+          fusion_host: 'solgaleo',
+          decisive_feature: 'dusk_mane_lion_crystal_armor'
+        },
+        necrozma_dawn_wings: {
+          body_plan: 'necrozma_dawn_wings_giant_moon_wing',
+          limb_layout: 'giant_wings_no_lion_body',
+          fusion_host: 'lunala',
+          decisive_feature: 'dawn_wings_moon_wings_crystal_armor'
+        }
+      };
+      const formEvidenceForForm = (formId, overrides = {}) => formEvidence({
+        ...(expectedSpecializedFormEvidence[formId] || {}),
+        visual_signature: formId,
         ...overrides
       });
       const cyanPurificationEvidence = () => ({
@@ -251,6 +304,7 @@
           adaptLegacyRocketState,
           HUNDO_FORM_CANONICAL_NAMES,
           HUNDO_FORMS_BY_BASE_SPECIES,
+          REQUIRED_SPECIALIZED_FORM_EVIDENCE,
           normalizeHundoBaseSpecies,
           normalizeHundoFormId,
           normalizeHundoFormEvidence,
@@ -302,8 +356,7 @@
             base_species: baseByForm,
             form_id: formId,
             form_confidence: 0.99,
-            form_evidence: formEvidence({
-              visual_signature: formId,
+            form_evidence: formEvidenceForForm(formId, {
               label_relationship: 'exact_form'
             }),
             effective_form_id: formId,
@@ -322,6 +375,10 @@
               region_visibility: 'clear',
               recognition_basis: 'direct_visual_match',
               visual_signature: 'not_applicable',
+              body_plan: 'not_applicable',
+              limb_layout: 'not_applicable',
+              fusion_host: 'not_applicable',
+              decisive_feature: 'not_applicable',
               key_features_visible: true,
               label_relationship: 'not_applicable'
             },
@@ -409,6 +466,11 @@
           equal(ownership.size, 23);
           equal(ownership.get('moltres_galarian'), '火焰鳥');
           equal(HUNDO_FORMS_BY_BASE_SPECIES['火焰鳥'].includes('dialga_origin'), false);
+          deepEqual(REQUIRED_SPECIALIZED_FORM_EVIDENCE, expectedSpecializedFormEvidence);
+          equal(Object.isFrozen(REQUIRED_SPECIALIZED_FORM_EVIDENCE), true);
+          Object.values(REQUIRED_SPECIALIZED_FORM_EVIDENCE).forEach(evidence => {
+            equal(Object.isFrozen(evidence), true);
+          });
           const whitelistSpecies = Object.keys(expectedCompatibility);
           Object.entries(expectedCompatibility).forEach(([literalOwner, formIds]) => {
             formIds.forEach(formId => {
@@ -418,7 +480,7 @@
                   visible_label: baseSpecies,
                   base_species: baseSpecies,
                   form_id: formId,
-                  form_evidence: formEvidence({ visual_signature: formId })
+                  form_evidence: formEvidenceForForm(formId)
                 }), normalizeName, { screenshotIndex: 0 }),
                 normalizeName
               );
@@ -487,23 +549,32 @@
           equal(illegalCombination.form_id, 'dialga_origin');
         });
 
-        test('normalizes form evidence to its five controlled fields', () => {
+        test('normalizes form evidence to its nine controlled fields', () => {
           const normalized = normalizeHundoFormEvidence({
             region_visibility: 'cropped', recognition_basis: 'label_only', visual_signature: 'other',
+            body_plan: 'dialga_origin_elongated_equine_quadruped', limb_layout: 'four_long_legs',
+            fusion_host: 'lunala', decisive_feature: 'origin_dialga_elongated_neck_chest',
             key_features_visible: 'yes', label_relationship: 'custom_nickname', unexpected: 'discarded'
           });
           deepEqual(Object.keys(normalized), [
-            'region_visibility', 'recognition_basis', 'visual_signature', 'key_features_visible', 'label_relationship'
+            'region_visibility', 'recognition_basis', 'visual_signature', 'body_plan', 'limb_layout',
+            'fusion_host', 'decisive_feature', 'key_features_visible', 'label_relationship'
           ]);
           deepEqual(normalized, {
             region_visibility: 'cropped', recognition_basis: 'label_only', visual_signature: 'other',
+            body_plan: 'dialga_origin_elongated_equine_quadruped', limb_layout: 'four_long_legs',
+            fusion_host: 'lunala', decisive_feature: 'origin_dialga_elongated_neck_chest',
             key_features_visible: false, label_relationship: 'custom_nickname'
           });
           deepEqual(normalizeHundoFormEvidence({
             region_visibility: 'invalid', recognition_basis: 'invalid', visual_signature: 'invalid',
+            body_plan: 'horse', limb_layout: 'legs', fusion_host: 'moon',
+            decisive_feature: 'looks origin',
             key_features_visible: true, label_relationship: 'invalid'
           }), {
             region_visibility: 'uncertain', recognition_basis: 'uncertain', visual_signature: 'uncertain',
+            body_plan: 'uncertain', limb_layout: 'uncertain', fusion_host: 'uncertain',
+            decisive_feature: 'uncertain',
             key_features_visible: true, label_relationship: 'uncertain'
           });
         });
@@ -3443,6 +3514,45 @@
                 'kyurem_white', 'kyurem_black', 'not_applicable', 'other', 'uncertain'
               ]
             },
+            body_plan: {
+              type: 'string',
+              enum: [
+                'not_applicable', 'uncertain', 'other',
+                'dialga_standard_stocky_quadruped',
+                'dialga_origin_elongated_equine_quadruped',
+                'palkia_standard_upright_bipedal_dragon',
+                'palkia_origin_centaur_quadruped',
+                'necrozma_base_upright_crystalline',
+                'necrozma_dusk_mane_quadruped_lion',
+                'necrozma_dawn_wings_giant_moon_wing'
+              ]
+            },
+            limb_layout: {
+              type: 'string',
+              enum: [
+                'not_applicable', 'uncertain', 'other',
+                'four_standard_legs', 'four_long_legs', 'two_arms_two_legs',
+                'four_legs_no_standard_arms', 'upright_crystalline_limbs',
+                'quadruped_lion', 'giant_wings_no_lion_body'
+              ]
+            },
+            fusion_host: {
+              type: 'string',
+              enum: ['not_applicable', 'uncertain', 'none', 'solgaleo', 'lunala']
+            },
+            decisive_feature: {
+              type: 'string',
+              enum: [
+                'not_applicable', 'uncertain', 'other',
+                'standard_dialga_stocky_neck_chest',
+                'origin_dialga_elongated_neck_chest',
+                'standard_palkia_visible_arms',
+                'origin_palkia_centaur_body',
+                'base_necrozma_crystal_body',
+                'dusk_mane_lion_crystal_armor',
+                'dawn_wings_moon_wings_crystal_armor'
+              ]
+            },
             key_features_visible: { type: 'boolean' },
             label_relationship: {
               type: 'string',
@@ -3451,6 +3561,7 @@
           },
           required: [
             'region_visibility', 'recognition_basis', 'visual_signature',
+            'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature',
             'key_features_visible', 'label_relationship'
           ]
         });
@@ -4066,8 +4177,7 @@
             base_species: baseSpecies,
             form_id: formId,
             form_confidence: 0.98,
-            form_evidence: formEvidence({
-              visual_signature: formId,
+            form_evidence: formEvidenceForForm(formId, {
               label_relationship: 'base_species_only'
             }),
             ...overrides
