@@ -600,6 +600,7 @@
         stringValue(card?.cp),
         normalizeVisibleLabel(card?.visible_label),
         stringValue(card?.base_species),
+        stringValue(card?.verified_form_id),
         stringValue(card?.effective_form_id),
         stringValue(card?.canonical_official_name),
         stringValue(card?.effective_shiny_state),

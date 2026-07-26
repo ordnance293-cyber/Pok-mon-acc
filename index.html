@@ -2529,7 +2529,11 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                     contactSheets.push({
                         contact_sheet_id: batch.contact_sheet_id,
                         contact_sheet_data_url: canvas.toDataURL('image/png'),
-                        verification_jobs: jobs
+                        verification_jobs: jobs,
+                        crop_source_sizes: Object.fromEntries(jobs.map(job => [
+                            job.card_id,
+                            cropsByCardId.get(job.card_id).crop_source_size
+                        ]))
                     });
                 } catch (error) {
                     cropFailures.push(...jobs.map(job => smartHundoCropFailure(job)));
@@ -2703,12 +2707,15 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
             contactSheetDataUrl,
             verificationJobs,
             statusUpdater,
-            requestOptions = {}
+            requestOptions = {},
+            isCurrentRun = () => true
         } = {}) => {
             if (typeof contactSheetDataUrl !== 'string' || !/^data:image\/png;base64,/.test(contactSheetDataUrl)) {
                 throw new Error('invalid form verification contact sheet');
             }
-            const prompt = buildSmartHundoFormVerifierPrompt(verificationJobs);
+            const prompt = buildSmartHundoFormVerifierPrompt(verificationJobs, {
+                structuralRetry: requestOptions.structuralRetry === true
+            });
             return requestOpenAiJsonSchema(
                 apiKey,
                 prompt,
@@ -2723,6 +2730,85 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                     retryParseErrors: false
                 }
             );
+        };
+
+        const requestSmartHundoFormVerificationWithStructuralRetry = async ({
+            apiKey,
+            contactSheetDataUrl,
+            verificationJobs,
+            statusUpdater,
+            requestOptions = {},
+            isCurrentRun = () => true
+        } = {}) => {
+            const verifier = globalThis.SmartHundoFormVerifier;
+            if (!verifier) throw new Error('Smart Hundo form verifier is unavailable');
+            const runAttempt = async structuralRetry => {
+                const response = await requestSmartHundoFormVerification({
+                    apiKey,
+                    contactSheetDataUrl,
+                    verificationJobs,
+                    statusUpdater,
+                    requestOptions: { ...requestOptions, structuralRetry }
+                });
+                const result = verifier.normalizeHundoFormVerifierResult(response?.result);
+                const finishReason = String(response?.finish_reason || '');
+                return {
+                    result,
+                    finish_reason: finishReason,
+                    structure: verifier.validateHundoFormVerifierStructure(result, verificationJobs, finishReason)
+                };
+            };
+            let firstAttempt;
+            try {
+                firstAttempt = await runAttempt(false);
+            } catch (error) {
+                if (error?.reasonCode !== 'openai_json_parse_error') throw error;
+                firstAttempt = {
+                    result: { cards: [] },
+                    finish_reason: '',
+                    structure: {
+                        complete: false,
+                        retry_reasons: ['openai_json_parse_error']
+                    }
+                };
+            }
+            if (!isCurrentRun()) {
+                return {
+                    ...firstAttempt,
+                    attempt_count: 1,
+                    structural_retry_used: false,
+                    structural_retry_reasons: [],
+                    stale: true
+                };
+            }
+            if (firstAttempt.structure.complete) {
+                return {
+                    ...firstAttempt,
+                    attempt_count: 1,
+                    structural_retry_used: false,
+                    structural_retry_reasons: []
+                };
+            }
+            let secondAttempt;
+            try {
+                secondAttempt = await runAttempt(true);
+            } catch (error) {
+                if (error?.reasonCode !== 'openai_json_parse_error') throw error;
+                secondAttempt = {
+                    result: { cards: [] },
+                    finish_reason: '',
+                    structure: {
+                        complete: false,
+                        retry_reasons: ['openai_json_parse_error']
+                    }
+                };
+            }
+            return {
+                ...secondAttempt,
+                attempt_count: 2,
+                structural_retry_used: true,
+                structural_retry_reasons: firstAttempt.structure.retry_reasons.slice()
+            };
         };
 
         const safeTrainerTeamErrorSummary = (operationFailure, stage = 'trainer_team', reasonCode = 'trainer_team_request_failed') => {
@@ -2854,13 +2940,116 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
             };
         };
 
+        const runSmartHundoFormVerification = async ({
+            apiKey,
+            originalDataUrl,
+            imageIndex,
+            cards,
+            statusUpdater,
+            isCurrentRun = () => true
+        } = {}) => {
+            const verifier = globalThis.SmartHundoFormVerifier;
+            const helpers = globalThis.SmartHundoHelpers;
+            if (!verifier || !helpers) throw new Error('Smart Hundo form verification helpers are unavailable');
+            const planned = verifier.planTargetHundoFormCandidates(cards, { screenshotIndex: imageIndex });
+            let finalCards = planned.cards;
+            const metrics = {
+                target_candidate_count: planned.target_candidate_count,
+                target_verified_count: 0,
+                target_review_card_count: 0,
+                contact_sheet_count: 0,
+                verifier_request_count: 0,
+                verifier_structural_retry_count: 0,
+                form_verify_model: HUNDO_FORM_VERIFY_MODEL
+            };
+            if (planned.target_candidate_count === 0) {
+                metrics.target_review_card_count = finalCards.filter(card => (
+                    verifier.isTargetHundoFormBaseSpecies(card?.base_species)
+                    && card?.verification_status !== 'verified'
+                )).length;
+                return { cards: finalCards, metrics, stale: false };
+            }
+            const crops = await buildSmartHundoFormContactSheets(originalDataUrl, planned.candidates);
+            if (!isCurrentRun()) return { cards: finalCards, metrics, stale: true };
+            if (Array.isArray(crops.crop_failures) && crops.crop_failures.length > 0) {
+                const failuresByReason = new Map();
+                crops.crop_failures.forEach(failure => {
+                    const reason = failure?.reason === 'form_crop_too_small'
+                        ? 'form_crop_too_small'
+                        : 'form_crop_missing';
+                    const cardIds = failuresByReason.get(reason) || [];
+                    cardIds.push(failure?.card_id);
+                    failuresByReason.set(reason, cardIds);
+                });
+                failuresByReason.forEach((cardIds, reason) => {
+                    finalCards = verifier.markHundoFormVerificationFailure(finalCards, cardIds, reason, 'failed');
+                });
+            }
+            const sheets = Array.isArray(crops.contact_sheets) ? crops.contact_sheets : [];
+            metrics.contact_sheet_count = sheets.length;
+            for (const sheet of sheets) {
+                if (!isCurrentRun()) return { cards: finalCards, metrics, stale: true };
+                const jobs = sheet.verification_jobs;
+                const jobIds = jobs.map(job => job.card_id);
+                const annotatedCards = finalCards.map(card => {
+                    if (!jobIds.includes(card?.card_id)) return card;
+                    const job = jobs.find(value => value.card_id === card.card_id);
+                    return {
+                        ...card,
+                        crop_source_size: sheet.crop_source_sizes?.[card.card_id],
+                        contact_sheet_id: sheet.contact_sheet_id,
+                        tile_id: job?.tile_id
+                    };
+                });
+                metrics.verifier_request_count += 1;
+                try {
+                    const attempt = await requestSmartHundoFormVerificationWithStructuralRetry({
+                        apiKey,
+                        contactSheetDataUrl: sheet.contact_sheet_data_url,
+                        verificationJobs: jobs,
+                        statusUpdater,
+                        isCurrentRun
+                    });
+                    if (!isCurrentRun()) return { cards: finalCards, metrics, stale: true };
+                    if (attempt.structural_retry_used) {
+                        metrics.verifier_request_count += 1;
+                        metrics.verifier_structural_retry_count += 1;
+                    }
+                    const onlySheetCards = annotatedCards.filter(card => jobIds.includes(card?.card_id));
+                    const merged = verifier.mergeHundoFormVerificationResults(
+                        onlySheetCards,
+                        jobs,
+                        attempt.result,
+                        attempt.structure,
+                        helpers.HUNDO_FORM_CANONICAL_NAMES
+                    );
+                    const mergedById = new Map(merged.map(card => [card.card_id, card]));
+                    finalCards = annotatedCards.map(card => mergedById.get(card?.card_id) || card);
+                } catch (_error) {
+                    if (!isCurrentRun()) return { cards: finalCards, metrics, stale: true };
+                    finalCards = verifier.markHundoFormVerificationFailure(
+                        annotatedCards,
+                        jobIds,
+                        'form_verification_request_failed',
+                        'request_failed'
+                    );
+                }
+            }
+            metrics.target_verified_count = finalCards.filter(card => card?.verification_status === 'verified').length;
+            metrics.target_review_card_count = finalCards.filter(card => (
+                verifier.isTargetHundoFormBaseSpecies(card?.base_species)
+                && card?.verification_status !== 'verified'
+            )).length;
+            return { cards: finalCards, metrics, stale: false };
+        };
+
         const smartHundoScan = async ({
             apiKey,
             originalDataUrl,
             imageIndex,
             classification,
             statusUpdater,
-            isCurrentRun = () => false
+            isCurrentRun = () => true
         } = {}) => {
             const helpers = globalThis.SmartHundoHelpers;
             if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
@@ -2931,6 +3120,28 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
             const validatedCards = cardResult.cards.map(card => helpers.validateHundoCardStates(
                 helpers.validateHundoPokemonForm(card, normalizePokemonBaseName)
             ));
+            const formVerification = cardSettlement.status === 'fulfilled'
+                ? await runSmartHundoFormVerification({
+                    apiKey,
+                    originalDataUrl,
+                    imageIndex,
+                    cards: validatedCards,
+                    statusUpdater: (attempt, maxRetries) => statusUpdater?.('form_verifier', attempt, maxRetries),
+                    isCurrentRun
+                })
+                : {
+                    cards: validatedCards,
+                    stale: false,
+                    metrics: {
+                        target_candidate_count: 0,
+                        target_verified_count: 0,
+                        target_review_card_count: 0,
+                        contact_sheet_count: 0,
+                        verifier_request_count: 0,
+                        verifier_structural_retry_count: 0,
+                        form_verify_model: HUNDO_FORM_VERIFY_MODEL
+                    }
+                };
             const manualReviewReasons = [];
             if (
                 cardExtraction
@@ -2951,14 +3162,15 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                 card_operation_succeeded: cardSettlement.status === 'fulfilled',
                 card_result: {
                     ...cardResult,
-                    cards: validatedCards
+                    cards: formVerification.cards
                 },
                 finish_reason: cardExtraction?.finish_reason || '',
                 structure: cardExtraction?.structure || helpers.validateSmartHundoStructure(cardResult, ''),
                 structural_retry_used: cardExtraction?.structural_retry_used === true,
                 structural_retry_reason: cardExtraction?.structural_retry_reason || [],
                 request_failures: requestFailures,
-                manual_review_reasons: manualReviewReasons
+                manual_review_reasons: manualReviewReasons,
+                ...formVerification.metrics
             };
         };
 

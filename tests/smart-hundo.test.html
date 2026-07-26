@@ -2235,6 +2235,7 @@
             ['cp', 'different-cp'],
             ['visible_label', 'DIFFERENT_LABEL'],
             ['base_species', 'DifferentBase'],
+            ['verified_form_id', 'dialga_origin'],
             ['effective_form_id', 'moltres_galarian'],
             ['canonical_official_name', 'DifferentName'],
             ['effective_shiny_state', 'yes'],
@@ -3081,6 +3082,8 @@
             buildAiRequestContent,
             requestOpenAiJsonSchema,
             requestSmartHundoFormVerification: typeof requestSmartHundoFormVerification === 'undefined' ? undefined : requestSmartHundoFormVerification,
+            requestSmartHundoFormVerificationWithStructuralRetry: typeof requestSmartHundoFormVerificationWithStructuralRetry === 'undefined' ? undefined : requestSmartHundoFormVerificationWithStructuralRetry,
+            runSmartHundoFormVerification: typeof runSmartHundoFormVerification === 'undefined' ? undefined : runSmartHundoFormVerification,
             requestHundoCountExtraction,
             requestSmartHundoExtractionV2,
             requestSmartHundoWithStructuralRetry,
@@ -4434,6 +4437,7 @@
         });
         let countResultByImage = new Map();
         let cardResultByImage = new Map();
+        let verifiedFormByCardId = new Map();
         let routedRequests = [];
         let requestStageEvents = [];
         let failedOperations = new Set();
@@ -4519,6 +4523,21 @@
               : configured;
             return openAiResponse(content, () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
+          if (schemaName === 'pokemon_go_smart_hundo_form_verifier_v2') {
+            const cards = [...prompt.matchAll(/(T\d+) \| card_id=([^\s]+) \| base_species=([^\s]+) \| candidates=([^\s]+)/g)].flatMap(match => {
+              const verified_form_id = verifiedFormByCardId.get(match[2])
+                || (verifiedFormByCardId.size === 1 ? [...verifiedFormByCardId.values()][0] : null);
+              if (!verified_form_id) return [];
+              const evidence = globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE[verified_form_id];
+              return {
+                tile_id: match[1], card_id: match[2], base_species: match[3], verified_form_id,
+                verification_confidence: 0.97, crop_visibility: 'clear', body_plan: evidence.body_plan,
+                limb_layout: evidence.limb_layout, fusion_host: evidence.fusion_host,
+                decisive_feature: evidence.decisive_feature, key_features_visible: true
+              };
+            });
+            return openAiResponse({ cards }, () => requestStageEvents.push({ event: 'finish', schemaName }));
+          }
           if (schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor') {
             const identity = imageUrl.match(/TEAM_EVIDENCE_(.+)$/)?.[1];
             if (identity === delayedTrainerTeamIdentity && !delayedTrainerTeamReleased) {
@@ -4559,6 +4578,7 @@
           requestStageEvents = [];
           countResultByImage = new Map();
           cardResultByImage = new Map();
+          verifiedFormByCardId = new Map();
           failedOperations = new Set();
           failedOperationErrorNames = new Map();
           failedClassificationIdentities = new Set();
@@ -5238,6 +5258,7 @@
             }),
             { ...galarianMoltres, order: 3, row: 1, column: 3 }
           ]));
+          verifiedFormByCardId.set('0:2:1:2', 'necrozma_base');
 
           await autoScan();
 
@@ -5251,7 +5272,43 @@
           equal(window.lastSmartHundoDiagnostics.pokemon_list, expected);
         });
 
-        await asyncTest('keeps unresolved, mismatch, label-only, cropped, and unsupported forms diagnostic-only in production', async () => {
+        await asyncTest('starts Stage 2 only after the final Stage 1 structural replacement', async () => {
+          resetScanScenario();
+          classificationByImage.STAGE1_FINAL_RETRY = classificationByImage.EXACT_A;
+          setScanFiles(['STAGE1_FINAL_RETRY']);
+          countResultByImage.set('STAGE1_FINAL_RETRY', validCount('(1)', '1'));
+          cardResultByImage.set('STAGE1_FINAL_RETRY', [
+            completeCardResult([structuredV2Card('dialga_standard')], {
+              detected_card_count: 2,
+              scan_complete: false
+            }),
+            completeCardResult([structuredV2Card('dialga_origin')])
+          ]);
+          verifiedFormByCardId.set('0:1:1:1', 'dialga_standard');
+
+          const scan = await smartHundoScan({
+            apiKey: 'test-key',
+            originalDataUrl: 'data:image/png;base64,ORIGINAL_STAGE1_FINAL_RETRY',
+            imageIndex: 0,
+            classification: classificationByImage.STAGE1_FINAL_RETRY
+          });
+
+          const extractionEvents = requestStageEvents
+            .map((event, index) => ({ ...event, index }))
+            .filter(event => event.schemaName === 'pokemon_go_hundo_smart_extractor_v2');
+          const verifierStart = requestStageEvents.findIndex(event => (
+            event.event === 'start' && event.schemaName === 'pokemon_go_smart_hundo_form_verifier_v2'
+          ));
+          deepEqual(extractionEvents.map(event => event.event), ['start', 'finish', 'start', 'finish']);
+          equal(extractionEvents[3].index < verifierStart, true, 'all final Stage 1 work completes before Stage 2 begins');
+          const finalCard = scan.card_result.cards[0];
+          equal(finalCard.primary_form_id, 'dialga_origin');
+          equal(finalCard.primary_effective_form_id, 'dialga_origin');
+          equal(finalCard.verified_form_id, 'dialga_standard');
+          equal(finalCard.effective_form_id, 'dialga_standard');
+        });
+
+        await asyncTest('keeps unresolved, mismatch, label-only, and cropped forms diagnostic-only while Stage 2 replaces stale unsupported-form review', async () => {
           resetScanScenario();
           classificationByImage.FORM_REVIEW_CASES = classificationByImage.EXACT_A;
           setScanFiles(['FORM_REVIEW_CASES']);
@@ -5300,16 +5357,15 @@
             'form_uncertain',
             'form_species_mismatch',
             'form_label_only',
-            'form_region_not_clear',
-            'unsupported_form'
+            'form_region_not_clear'
           ].forEach(reason => equal(diagnostics.manual_review_reasons.includes(reason), true, `${reason} remains diagnostic`));
           equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_uncertain').length, 2);
           equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_species_mismatch').length, 1);
           equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_label_only').length, 1);
           equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_region_not_clear').length, 1);
-          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'unsupported_form').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'unsupported_form').length, 0);
           equal(diagnostics.manual_review_reasons.filter(reason => reason === 'species_uncertain').length, 0);
-          equal(document.getElementById('aiAutoStatus').textContent.includes('共5張卡片需人工確認'), true);
+          equal(document.getElementById('aiAutoStatus').textContent.includes('共4張卡片需人工確認'), true);
         });
 
         await asyncTest('sanitizes model-polluted species names before production list and diagnostics', async () => {
@@ -5913,6 +5969,33 @@
           requestOptions: { maxRetries: 1 },
           ...overrides
         });
+        const runtimeTargetCard = (index, overrides = {}) => ({
+          card_id: `0:${index + 1}:1:1`, screenshot_index: 0, order: index + 1, row: 1, column: index + 1,
+          base_species: globalThis.SmartHundoFormVerifier.TARGET_HUNDO_FORM_BASE_SPECIES[0],
+          recognition_status: 'recognized', species_confidence: 0.99,
+          form_id: 'dialga_standard', form_confidence: 0.99, form_evidence: {}, effective_form_id: 'dialga_standard',
+          canonical_official_name: 'stage-one-name', visible_label: `target-${index + 1}`, cp: String(1000 + index),
+          card_bbox: { x_min: 0, y_min: 0, x_max: 1000, y_max: 1000 },
+          pokemon_bbox: { x_min: 200, y_min: 200, x_max: 800, y_max: 800 },
+          bbox_confidence: 0.99, bbox_visibility: 'clear', manual_review_reasons: [],
+          effective_shiny_state: 'false', effective_lucky_state: 'false', effective_favorite_state: 'false',
+          effective_rocket_state: 'false', effective_background_type: 'none',
+          ...overrides
+        });
+        const verifierCardForJob = (job, formId = 'dialga_origin', overrides = {}) => {
+          const evidence = globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE[formId];
+          return {
+            tile_id: job.tile_id, card_id: job.card_id, base_species: job.base_species,
+            verified_form_id: formId, verification_confidence: 0.97, crop_visibility: 'clear',
+            body_plan: evidence.body_plan, limb_layout: evidence.limb_layout,
+            fusion_host: evidence.fusion_host, decisive_feature: evidence.decisive_feature,
+            key_features_visible: true, ...overrides
+          };
+        };
+        const verifierCardsFromPrompt = (payload, formId = 'dialga_origin', overrides = {}) => (
+          [...payload.messages[0].content[0].text.matchAll(/(T\d+) \| card_id=([^\s]+) \| base_species=([^\s]+)/g)]
+            .map(match => verifierCardForJob({ tile_id: match[1], card_id: match[2], base_species: match[3] }, formId, overrides))
+        );
 
         await asyncTest('defines the strict limited-candidate verifier schema', async () => {
           const fields = ['tile_id', 'card_id', 'base_species', 'verified_form_id', 'verification_confidence', 'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible'];
@@ -6030,6 +6113,311 @@
             try { await requestFormVerifier({ requestOptions: { maxRetries: 2 } }); fail('content JSON failure must reject'); }
             catch (error) { equal(error.reasonCode, 'openai_json_parse_error'); }
             equal(fetchCount, 1);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('retries a structurally incomplete form-verifier sheet exactly once and replaces it', async () => {
+          const runner = globalThis.requestSmartHundoFormVerificationWithStructuralRetry;
+          equal(typeof runner, 'function');
+          const jobs = formVerifierJobs().slice(0, 1);
+          const evidence = globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE.dialga_origin;
+          const complete = {
+            cards: [{
+              tile_id: jobs[0].tile_id,
+              card_id: jobs[0].card_id,
+              base_species: jobs[0].base_species,
+              verified_form_id: 'dialga_origin',
+              verification_confidence: 0.97,
+              crop_visibility: 'clear',
+              body_plan: evidence.body_plan,
+              limb_layout: evidence.limb_layout,
+              fusion_host: evidence.fusion_host,
+              decisive_feature: evidence.decisive_feature,
+              key_features_visible: true
+            }]
+          };
+          const previousFetch = globalThis.fetch;
+          let requests = 0;
+          try {
+            installStrictOpenAiFetchMock(async ({ schemaName }) => {
+              equal(schemaName, 'pokemon_go_smart_hundo_form_verifier_v2');
+              requests += 1;
+              const result = requests === 1 ? { cards: [] } : complete;
+              return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(result) } }] }) };
+            });
+            const outcome = await runner({
+              apiKey: 'test-key',
+              contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY',
+              verificationJobs: jobs,
+              requestOptions: { maxRetries: 1 }
+            });
+            equal(requests, 2);
+            equal(outcome.attempt_count, 2);
+            equal(outcome.structural_retry_used, true);
+            equal(outcome.result.cards[0].verified_form_id, 'dialga_origin');
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('retries one form-verifier parse failure structurally but never needs a transport retry', async () => {
+          const runner = globalThis.requestSmartHundoFormVerificationWithStructuralRetry;
+          const jobs = formVerifierJobs().slice(0, 1);
+          const evidence = globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE.dialga_origin;
+          const previousFetch = globalThis.fetch;
+          let requests = 0;
+          try {
+            installStrictOpenAiFetchMock(async () => {
+              requests += 1;
+              const content = requests === 1 ? '{bad json}' : JSON.stringify({ cards: [{
+                tile_id: jobs[0].tile_id, card_id: jobs[0].card_id, base_species: jobs[0].base_species,
+                verified_form_id: 'dialga_origin', verification_confidence: 0.97, crop_visibility: 'clear',
+                body_plan: evidence.body_plan, limb_layout: evidence.limb_layout, fusion_host: evidence.fusion_host,
+                decisive_feature: evidence.decisive_feature, key_features_visible: true
+              }] });
+              return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content } }] }) };
+            });
+            const outcome = await runner({ apiKey: 'test-key', contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY', verificationJobs: jobs });
+            equal(requests, 2);
+            equal(outcome.structural_retry_used, true);
+            equal(outcome.structural_retry_reasons.includes('openai_json_parse_error'), true);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('returns an exhausted structural result when both form-verifier attempts fail to parse', async () => {
+          const runner = globalThis.requestSmartHundoFormVerificationWithStructuralRetry;
+          const previousFetch = globalThis.fetch;
+          let requests = 0;
+          try {
+            installStrictOpenAiFetchMock(async () => {
+              requests += 1;
+              return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '{bad json}' } }] }) };
+            });
+            const outcome = await runner({ apiKey: 'test-key', contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY', verificationJobs: formVerifierJobs().slice(0, 1) });
+            equal(requests, 2);
+            equal(outcome.structural_retry_used, true);
+            equal(outcome.structure.complete, false);
+            equal(outcome.structure.retry_reasons.includes('openai_json_parse_error'), true);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('does not issue a semantic retry after the form-verifier session becomes stale', async () => {
+          const runner = globalThis.requestSmartHundoFormVerificationWithStructuralRetry;
+          const previousFetch = globalThis.fetch;
+          let requests = 0;
+          try {
+            installStrictOpenAiFetchMock(async () => {
+              requests += 1;
+              return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ cards: [] }) } }] }) };
+            });
+            const outcome = await runner({
+              apiKey: 'test-key', contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY',
+              verificationJobs: formVerifierJobs().slice(0, 1), isCurrentRun: () => requests === 0
+            });
+            equal(requests, 1);
+            equal(outcome.stale, true);
+            equal(outcome.attempt_count, 1);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('retries duplicate mappings once but never retries complete uncertain or low-confidence verifier results', async () => {
+          const runner = globalThis.requestSmartHundoFormVerificationWithStructuralRetry;
+          const jobs = formVerifierJobs();
+          const previousFetch = globalThis.fetch;
+          try {
+            let requests = 0;
+            installStrictOpenAiFetchMock(async () => {
+              requests += 1;
+              const cards = requests === 1
+                ? [verifierCardForJob(jobs[0]), { ...verifierCardForJob(jobs[0]), card_id: jobs[1].card_id }]
+                : jobs.map(job => verifierCardForJob(job));
+              return openAiResponse({ cards });
+            });
+            const duplicate = await runner({ apiKey: 'test-key', contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY', verificationJobs: jobs });
+            equal(requests, 2, 'duplicate mapping receives one semantic retry');
+            equal(duplicate.structural_retry_used, true);
+            equal(duplicate.structural_retry_reasons.includes('duplicate_tile'), true);
+
+            for (const [formId, confidence] of [['uncertain', 0], ['dialga_origin', 0.89]]) {
+              requests = 0;
+              installStrictOpenAiFetchMock(async () => {
+                requests += 1;
+                return openAiResponse({ cards: jobs.map(job => verifierCardForJob(job, 'dialga_origin', {
+                  verified_form_id: formId,
+                  verification_confidence: confidence
+                })) });
+              });
+              const complete = await runner({ apiKey: 'test-key', contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY', verificationJobs: jobs });
+              equal(requests, 1, `${formId} complete result has no semantic retry`);
+              equal(complete.structural_retry_used, false);
+              equal(complete.structure.complete, true);
+            }
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('fails closed after two incomplete verifier results and never semantically retries a transport failure', async () => {
+          const runner = globalThis.runSmartHundoFormVerification;
+          const previousFetch = globalThis.fetch;
+          try {
+            let requests = 0;
+            installStrictOpenAiFetchMock(async () => {
+              requests += 1;
+              return openAiResponse({ cards: [] });
+            });
+            const incomplete = await runner({
+              apiKey: 'test-key', originalDataUrl, imageIndex: 0,
+              cards: [runtimeTargetCard(0), runtimeTargetCard(1)]
+            });
+            equal(requests, 2);
+            equal(incomplete.metrics.verifier_request_count, 2);
+            equal(incomplete.metrics.verifier_structural_retry_count, 1);
+            incomplete.cards.forEach(card => {
+              equal(card.verification_status, 'structural_incomplete');
+              equal(card.effective_form_id, 'uncertain');
+              equal(card.manual_review_reasons.includes('form_verifier_structural_incomplete'), true);
+            });
+
+            requests = 0;
+            installStrictOpenAiFetchMock(async () => {
+              requests += 1;
+              return { ok: false, status: 400, json: async () => ({ error: { message: 'bad verifier request' } }) };
+            });
+            const transport = await runner({ apiKey: 'test-key', originalDataUrl, imageIndex: 0, cards: [runtimeTargetCard(0)] });
+            equal(requests, 3, 'the default transport retry remains internal to one logical verifier call');
+            equal(transport.metrics.verifier_request_count, 1);
+            equal(transport.metrics.verifier_structural_retry_count, 0);
+            equal(transport.cards[0].verification_status, 'request_failed');
+            equal(transport.cards[0].manual_review_reasons.includes('form_verification_request_failed'), true);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('uses final Stage 2 authority while preserving protected cards, all five states, and safe annotations', async () => {
+          const runner = globalThis.runSmartHundoFormVerification;
+          const target = runtimeTargetCard(0, {
+            effective_shiny_state: 'yes', effective_lucky_state: 'no', effective_favorite_state: 'yes',
+            effective_rocket_state: 'shadow', effective_background_type: 'commemorative',
+            manual_review_reasons: ['form_confidence_low']
+          });
+          const protectedForms = [
+            'articuno_galarian', 'zapdos_galarian', 'moltres_galarian', 'zacian_standard',
+            'zamazenta_standard', 'zygarde_50', 'kyurem_base'
+          ];
+          const protectedCards = protectedForms.map((formId, index) => {
+            const base_species = Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
+              .find(([, formIds]) => formIds.includes(formId))[0];
+            return runtimeTargetCard(index + 1, {
+              base_species, form_id: formId, effective_form_id: formId,
+              canonical_official_name: HUNDO_FORM_CANONICAL_NAMES[formId]
+            });
+          });
+          const protectedSnapshot = JSON.parse(JSON.stringify(protectedCards));
+          const stateSnapshot = {
+            shiny: target.effective_shiny_state, lucky: target.effective_lucky_state, favorite: target.effective_favorite_state,
+            rocket: target.effective_rocket_state, background: target.effective_background_type
+          };
+          const previousFetch = globalThis.fetch;
+          try {
+            installStrictOpenAiFetchMock(async ({ payload }) => openAiResponse({ cards: verifierCardsFromPrompt(payload) }));
+            const result = await runner({ apiKey: 'test-key', originalDataUrl, imageIndex: 0, cards: [target, ...protectedCards] });
+            equal(result.metrics.verifier_request_count, 1);
+            equal(result.cards[0].verified_form_id, 'dialga_origin');
+            equal(result.cards[0].effective_form_id, 'dialga_origin');
+            equal(result.cards[0].canonical_official_name, globalThis.SmartHundoHelpers.HUNDO_FORM_CANONICAL_NAMES.dialga_origin);
+            equal(result.cards[0].manual_review_reasons.some(reason => [
+              'form_uncertain', 'form_species_mismatch', 'form_region_not_clear', 'form_confidence_low',
+              'form_label_only', 'form_signature_mismatch', 'unsupported_form'
+            ].includes(reason)), false, 'valid Stage 2 authority removes stale Stage 1 form-review reasons');
+            deepEqual({
+              shiny: result.cards[0].effective_shiny_state, lucky: result.cards[0].effective_lucky_state,
+              favorite: result.cards[0].effective_favorite_state, rocket: result.cards[0].effective_rocket_state,
+              background: result.cards[0].effective_background_type
+            }, stateSnapshot);
+            deepEqual(result.cards.slice(1), protectedSnapshot);
+            equal(globalThis.SmartHundoHelpers.smartHundoCardsToPokemonList(result.cards).pokemon_list.includes(
+              globalThis.SmartHundoHelpers.HUNDO_FORM_CANONICAL_NAMES.dialga_origin
+            ), true, 'final verified canonical name drives grouping');
+            ['crop_source_size', 'contact_sheet_id', 'tile_id'].forEach(key => equal(Object.hasOwn(result.cards[0], key), true));
+            equal(JSON.stringify(result.cards[0]).includes('data:image/'), false, 'card metadata omits image URLs');
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('isolates one failed contact sheet after one successful sheet and never falls back from failed verifier verdicts', async () => {
+          const runner = globalThis.runSmartHundoFormVerification;
+          const cards = Array.from({ length: 7 }, (_value, index) => runtimeTargetCard(index));
+          const previousFetch = globalThis.fetch;
+          try {
+            let requests = 0;
+            installStrictOpenAiFetchMock(async ({ payload }) => {
+              requests += 1;
+              if (requests >= 2) return { ok: false, status: 400, json: async () => ({ error: { message: 'bad verifier request' } }) };
+              return openAiResponse({ cards: verifierCardsFromPrompt(payload) });
+            });
+            const result = await runner({ apiKey: 'test-key', originalDataUrl, imageIndex: 0, cards });
+            equal(requests, 4, 'the failed sheet uses only its internal transport retries');
+            equal(result.metrics.verifier_request_count, 2);
+            result.cards.slice(0, 6).forEach(card => equal(card.verification_status, 'verified'));
+            equal(result.cards[6].verification_status, 'request_failed');
+            equal(result.cards[6].effective_form_id, 'uncertain');
+            equal(result.cards[6].canonical_official_name, '');
+
+            for (const [label, overrides, reason] of [
+              ['uncertain', { verified_form_id: 'uncertain', verification_confidence: 0 }, 'form_verifier_uncertain'],
+              ['low', { verification_confidence: 0.89 }, 'form_verifier_low_confidence'],
+              ['evidence', { body_plan: 'dialga_stocky_wide_quadruped' }, 'form_verifier_evidence_mismatch'],
+              ['species', { base_species: globalThis.SmartHundoFormVerifier.TARGET_HUNDO_FORM_BASE_SPECIES[1] }, 'form_verifier_species_mismatch']
+            ]) {
+              installStrictOpenAiFetchMock(async ({ payload }) => openAiResponse({ cards: verifierCardsFromPrompt(payload, 'dialga_origin', overrides) }));
+              const failed = await runner({ apiKey: 'test-key', originalDataUrl, imageIndex: 0, cards: [runtimeTargetCard(0)] });
+              equal(failed.cards[0].effective_form_id, 'uncertain', `${label} cannot fall back to Stage 1`);
+              equal(failed.cards[0].manual_review_reasons.includes(reason), true, `${label} preserves its controlled review reason`);
+            }
+
+            const cropFailure = await runner({
+              apiKey: 'test-key', originalDataUrl, imageIndex: 0,
+              cards: [runtimeTargetCard(0, { pokemon_bbox: { x_min: 200, y_min: 200, x_max: 201, y_max: 201 } })]
+            });
+            equal(cropFailure.metrics.verifier_request_count, 0);
+            equal(cropFailure.cards[0].effective_form_id, 'uncertain');
+            equal(cropFailure.cards[0].manual_review_reasons.includes('form_crop_too_small'), true);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('batches zero, one, six, and seven target cards into zero, one, one, and two verifier requests', async () => {
+          const runner = globalThis.runSmartHundoFormVerification;
+          equal(typeof runner, 'function');
+          const targetSpecies = globalThis.SmartHundoFormVerifier.TARGET_HUNDO_FORM_BASE_SPECIES[0];
+          const targetCard = index => ({
+            card_id: `0:${index + 1}:1:1`, screenshot_index: 0, order: index + 1, row: 1, column: index + 1,
+            base_species: targetSpecies, recognition_status: 'recognized', species_confidence: 0.99,
+            form_id: 'dialga_standard', form_confidence: 0.99, form_evidence: {}, effective_form_id: 'dialga_standard',
+            canonical_official_name: 'stage-one-name', visible_label: `target-${index + 1}`, cp: String(1000 + index),
+            card_bbox: { x_min: 0, y_min: 0, x_max: 1000, y_max: 1000 },
+            pokemon_bbox: { x_min: 200, y_min: 200, x_max: 800, y_max: 800 },
+            bbox_confidence: 0.99, bbox_visibility: 'clear', manual_review_reasons: [],
+            effective_shiny_state: 'false', effective_lucky_state: 'false', effective_favorite_state: 'false',
+            effective_rocket_state: 'false', effective_background_type: 'none'
+          });
+          const previousFetch = globalThis.fetch;
+          try {
+            for (const [count, expectedRequests] of [[0, 0], [1, 1], [6, 1], [7, 2]]) {
+              let requests = 0;
+              installStrictOpenAiFetchMock(async ({ schemaName, payload }) => {
+                equal(schemaName, 'pokemon_go_smart_hundo_form_verifier_v2');
+                requests += 1;
+                const prompt = payload.messages[0].content[0].text;
+                const jobs = [...prompt.matchAll(/(T\d+) \| card_id=([^\s]+) \| base_species=([^\s]+)/g)].map((match) => ({
+                  tile_id: match[1],
+                  card_id: match[2],
+                  base_species: match[3],
+                  verified_form_id: 'dialga_origin', verification_confidence: 0.97, crop_visibility: 'clear',
+                  body_plan: 'dialga_elongated_equine_quadruped', limb_layout: 'four_long_legs',
+                  fusion_host: 'not_applicable', decisive_feature: 'dialga_origin_elongated_neck_chest', key_features_visible: true
+                }));
+                return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ cards: jobs }) } }] }) };
+              });
+              const result = await runner({ apiKey: 'test-key', originalDataUrl, imageIndex: 0, cards: Array.from({ length: count }, (_value, index) => targetCard(index)) });
+              equal(requests, expectedRequests, `${count} target verifier request count`);
+              equal(result.metrics.verifier_request_count, expectedRequests);
+              equal(result.metrics.contact_sheet_count, expectedRequests);
+            }
           } finally { globalThis.fetch = previousFetch; }
         });
 
