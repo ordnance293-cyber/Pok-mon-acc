@@ -3137,7 +3137,7 @@
             '全圖由上到下、每列由左到右', '超過 10 張仍必須繼續掃描到底部邊緣',
             '完整可見與部分可見', '每一張都各自輸出', '不得把相鄰卡片的符號或狀態轉移',
             '合法重複的寶可夢仍是不同卡片', '不得發明',
-            '身體輪廓、頭部、四肢、翅膀、尾巴、角、裝甲', 'visible_label 只能作為次要證據',
+            '整體身體結構', '頭部', '四肢', '翅膀', '尾巴', '武器', '裝甲', 'visible_label 只能作為次要證據',
             'GLO蒼響151515', 'official_name 留空', 'recognition_status 填 uncertain',
             '焰白酋雷姆', '闇黑酋雷姆', '蒼響劍王', '藏瑪然特盾王', '起源型態', '融合型態',
             'dark-blue／teal 的 multiple_four_point_sparkles', 'CP area',
@@ -3151,34 +3151,81 @@
             'region_visibility', 'clear', 'partially_occluded', 'cropped',
             '顏色或身體顏色本身永遠不足'
           ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `V2 smart prompt protects ${fragment}`));
+          const b2 = smartPrompt.slice(
+            smartPrompt.indexOf('【B2. 基礎物種與型態辨識】'),
+            smartPrompt.indexOf('【B3. form_evidence】')
+          );
+          const b3 = smartPrompt.slice(
+            smartPrompt.indexOf('【B3. form_evidence】'),
+            smartPrompt.indexOf('【C. 五維狀態 evidence 共通規則】')
+          );
+          const approvedFormVisualDetails = [
+            ['articuno_standard', '藍色冰鳥、寬大藍翼、長條帶狀尾羽與冰系羽毛特徵。'],
+            ['articuno_galarian', '深紫／黑紫色系，眼部有明顯面罩感，羽翼、頭冠與尾部結構不同於一般急凍鳥。不能只因為紫色就判定。'],
+            ['zapdos_standard', '黃色尖刺羽毛、黑色鋸齒狀翼尾、標準飛鳥輪廓。'],
+            ['zapdos_galarian', '橘紅色系、雙腿特別長而強壯、接近陸行／奔跑鳥姿態。腿部與身體結構比顏色更重要。'],
+            ['moltres_standard', '黃橘色鳥體，橘紅色真正火焰構成頭冠、翅膀與尾部。'],
+            ['moltres_galarian', '黑色／深色鳥體，桃紅、洋紅、深紅色氣場式火焰翅膀與尾部。不能只看深色或紅色。'],
+            ['zacian_standard', '蒼響狼型本體，沒有嘴持大型劍，也沒有完整劍之王裝甲。'],
+            ['zacian_crowned', '嘴中明確持有大型劍，具有金藍色劍之王武裝與裝甲。'],
+            ['zamazenta_standard', '藏瑪然特狼型本體，沒有完整盾之王大型盾牌鬃甲。'],
+            ['zamazenta_crowned', '頭頸與胸前具有巨大盾牌式鬃甲及金紅藍防禦裝甲。'],
+            ['dialga_standard', '標準帝牙盧卡四足龍型，身體較厚實，四肢、頸部及胸部為一般型態比例。'],
+            ['dialga_origin', '身體比例明顯拉長，偏馬型／起源四足結構，頸胸、喉部與四肢構造不同於一般帝牙盧卡。'],
+            ['palkia_standard', '標準直立／雙足龍型，可看見一般型態手臂與腿部結構。'],
+            ['palkia_origin', '接近四足／半人馬式起源結構，肢體與軀幹配置和一般型態差異明顯。'],
+            ['zygarde_10', '四足犬型，身體低而長，呈黑綠色狗型結構。'],
+            ['zygarde_50', '長條蛇型／眼鏡蛇型，上半身直立，下半身為蛇形。'],
+            ['zygarde_complete', '巨大直立人形／機甲型，中央軀幹與左右大型延伸構造明顯。'],
+            ['necrozma_base', '黑色結晶狀直立本體，不是四足獅型，也不是大型翼型。'],
+            ['necrozma_dusk_mane', '以索爾迦雷歐般四足獅型為主，覆蓋奈克洛茲瑪黑色結晶裝甲。'],
+            ['necrozma_dawn_wings', '以露奈雅拉般巨大蝙蝠／月翼型為主，覆蓋奈克洛茲瑪黑色結晶構造。'],
+            ['kyurem_base', '灰色冰晶龍型，沒有完整萊希拉姆或捷克羅姆融合結構。'],
+            ['kyurem_white', '整體偏白，具有萊希拉姆相關白色羽毛、翼狀與融合結構，同時保留酋雷姆特徵。'],
+            ['kyurem_black', '整體偏黑，具有捷克羅姆相關黑色裝甲、大型手臂及發電機式融合構造，同時保留酋雷姆特徵。']
+          ];
+          equal(approvedFormVisualDetails.length, 23, 'locks every approved form visual discriminator');
+          approvedFormVisualDetails.forEach(([formId, detail], index) => {
+            const approvedLine = `${index + 1}. ${formId}：\n${' '.repeat(index < 9 ? 3 : 4)}${detail}`;
+            equal(b2.includes(approvedLine), true, `exact approved B2 line for ${formId}`);
+          });
           [
-            '【B2. 基礎物種與型態辨識】', '【B3. form_evidence】',
-            '急凍鳥', '閃電鳥', '火焰鳥', '蒼響', '藏瑪然特', '帝牙盧卡', '帕路奇亞', '基格爾德', '奈克洛茲瑪', '酋雷姆',
-            'articuno_standard', 'articuno_galarian', 'zapdos_standard', 'zapdos_galarian',
-            'moltres_standard', 'moltres_galarian', 'zacian_standard', 'zacian_crowned',
-            'zamazenta_standard', 'zamazenta_crowned', 'dialga_standard', 'dialga_origin',
-            'palkia_standard', 'palkia_origin', 'zygarde_10', 'zygarde_50', 'zygarde_complete',
-            'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'kyurem_base',
-            'kyurem_white', 'kyurem_black',
-            'base_species = "火焰鳥"', 'form_id = "moltres_galarian"',
-            'recognition_basis = "label_only"', 'form_id = "uncertain"',
-            '不得自動退回 standard', 'Ultra Necrozma', 'form_id = "unsupported"',
-            '完整身體結構', '頭部', '翅膀', '尾巴', '四肢', '武器', '裝甲', '姿勢', '比例', '型態專屬部件', '顏色分布', '標籤只能作為次要證據'
-          ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `form prompt protects ${fragment}`));
+            '每張卡片都必須先辨識 base_species，再辨識 form_id。',
+            '你是直接觀看完整原始圖片中的寶可夢外觀，不是只抄寫 visible_label，也不是只根據單一顏色判斷。',
+            '不得因 visible_label 只有「火焰鳥」就自動回傳 moltres_standard。',
+            '若主要外觀區域看不清楚、被裁切、被遮擋，或無法可靠區分普通／特殊型態：',
+            'form_id = "uncertain"', 'form_id = "unsupported"', 'form_id = "not_applicable"'
+          ].forEach(fragment => equal(b2.includes(fragment), true, `approved B2 rule ${fragment}`));
           [
-            '淡藍色大型鳥身、長尾羽、頭部冠羽', '白灰鳥身、黑色眼罩般臉部與較長細腿',
-            '尖銳黃羽、短粗鳥腿', '橙黑配色、長而粗壯的奔跑腿，翅膀相對短小',
-            '橘紅火焰翅膀與長火焰尾羽', '黑紅鳥身、火焰般紅色頭冠與流線長尾',
-            '口銜寶劍', '前胸大型盾牌與濃密鬃毛',
-            '四足藍色恐龍般身軀、背部金屬突起與側面菱形', '蛇形、四肢融合的起源身軀',
-            '四足粉白珍珠裝甲與雙肩圓盤', '蛇形、四肢融合的起源珍珠身軀',
-            '犬科、四足、細長身體', '蛇形長軀幹與六角斑點', '巨大人形、雙足與翼狀鰭',
-            '黑色稜柱、細長四肢，無融合宿主', '獅子身軀與日輪特徵', '蝙蝠翼與月輪特徵',
-            '灰藍殘缺龍、冰刺與空缺的能量尾部', '白色龍形、雷希拉姆特徵與渦輪火焰尾部', '深色龍形、捷克羅姆特徵與渦輪電力尾部',
-            '先在完整原始圖片中逐卡判定 base_species，再判定 form_id',
-            '單一顏色永遠不足以判定型態', 'visual_signature 必須與 form_id 完全相同',
-            'key_features_visible 必須為 true', '不得輸出推理過程'
-          ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `controlled form visual guidance protects ${fragment}`));
+            'clear：主要外觀與型態特徵完整可辨識',
+            'partially_occluded：部分被遮住，但仍看到部分特徵',
+            'cropped：主要身體或關鍵型態部位被截圖邊緣裁切',
+            'not_visible：無法看到足夠寶可夢本體',
+            'uncertain：無法判斷可見程度',
+            'direct_visual_match：主要由圖片完整外觀直接辨識',
+            'visual_and_label：圖片與文字共同支持',
+            'label_only：只有文字支持，圖片不足',
+            'exact_form：文字直接指出相同完整型態',
+            'base_species_only：文字只顯示基礎物種',
+            'custom_nickname：文字是暱稱、IV 或其他自訂內容',
+            'conflicting：可讀文字和圖片顯示不同基礎物種',
+            'unreadable：文字看不清楚',
+            'not_applicable：不適用', 'uncertain：無法判斷',
+            'key_features_visible 只有在該型態的關鍵部位確實可見時才能為 true。',
+            '只輸出 strict JSON，不要輸出推理過程或額外說明。'
+          ].forEach(fragment => equal(b3.includes(fragment), true, `approved B3 rule ${fragment}`));
+          [
+            '若圖片顯示白名單外型態：\n\nform_id = "unsupported"\nvisual_signature = "other"',
+            '對不在十個型態白名單中的其他寶可夢：\n\nform_id = "not_applicable"\nvisual_signature = "not_applicable"',
+            '若型態證據不足：\n\nform_id = "uncertain"\nvisual_signature = "uncertain"'
+          ].forEach(tuple => equal(b3.includes(tuple), true, `exact approved B3 control tuple ${tuple}`));
+          [
+            '白灰鳥身、黑色眼罩般臉部與較長細腿',
+            '蛇形、四肢融合的起源身軀',
+            '四足粉白珍珠裝甲與雙肩圓盤',
+            '蛇形、四肢融合的起源珍珠身軀',
+            '火焰般紅色頭冠與流線長尾'
+          ].forEach(fragment => equal(b2.includes(fragment), false, `B2 excludes unapproved guidance ${fragment}`));
         });
         const v2Result = (count, officialName, overrides = {}) => ({
           detected_card_count: count,
