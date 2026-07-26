@@ -171,6 +171,10 @@
         return Math.min(1, Math.max(0, number));
     };
 
+    const clampStrictConfidence = value => (
+        typeof value === 'number' && Number.isFinite(value) ? clampConfidence(value) : 0
+    );
+
     const normalizeHundoCountResult = (result = {}) => ({
         hundo_leg: String(result?.hundo_leg ?? '').normalize('NFKC').trim(),
         raw_count_text: String(result?.raw_count_text ?? '').normalize('NFKC'),
@@ -526,10 +530,10 @@
             visible_label: stringValue(card?.visible_label),
             official_name: officialName,
             recognition_status: normalizeRecognitionStatus(card?.recognition_status),
-            species_confidence: clampConfidence(card?.species_confidence),
+            species_confidence: clampStrictConfidence(card?.species_confidence),
             base_species: baseSpecies,
             form_id: formId,
-            form_confidence: clampConfidence(rawForm.form_confidence),
+            form_confidence: clampStrictConfidence(rawForm.form_confidence),
             form_evidence: rawForm.form_evidence,
             cp: stringValue(card?.cp),
             shiny_state: normalizeIndependentState(rawStates.shiny),
@@ -1249,11 +1253,8 @@
         const baseSpecies = card?.base_species;
         const formId = card?.form_id;
         const formEvidence = card?.form_evidence || {};
-        const strictConfidence = value => (
-            typeof value === 'number' && Number.isFinite(value) ? clampConfidence(value) : 0
-        );
-        const speciesConfidence = strictConfidence(card?.species_confidence);
-        const formConfidence = strictConfidence(card?.form_confidence);
+        const speciesConfidence = clampStrictConfidence(card?.species_confidence);
+        const formConfidence = clampStrictConfidence(card?.form_confidence);
 
         if (!Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)) {
             const hasRawFormSnapshot = card?.raw?.form && typeof card.raw.form === 'object';

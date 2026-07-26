@@ -676,6 +676,55 @@
           });
         });
 
+        test('preserves strict species confidence types through normalization and validation', () => {
+          [
+            ['missing', undefined],
+            ['nonnumeric string', 'not-a-number'],
+            ['numeric string', '0.99'],
+            ['boolean', true],
+            ['array', [0.99]],
+            ['NaN', Number.NaN],
+            ['Infinity', Number.POSITIVE_INFINITY]
+          ].forEach(([label, speciesConfidence]) => {
+            const result = validateHundoPokemonForm(
+              normalizeSmartHundoCard(
+                formCard({ species_confidence: speciesConfidence }),
+                normalizeName,
+                { screenshotIndex: 0 }
+              ),
+              normalizeName
+            );
+            equal(result.effective_form_id, 'uncertain', label);
+            equal(result.canonical_official_name, '', label);
+            equal(result.manual_review_reasons.includes('species_uncertain'), true, label);
+            equal(result.manual_review_reasons.includes('form_uncertain'), true, label);
+          });
+        });
+
+        test('preserves strict form confidence types through normalization and validation', () => {
+          [
+            ['missing', undefined],
+            ['nonnumeric string', 'not-a-number'],
+            ['numeric string', '0.99'],
+            ['boolean', true],
+            ['array', [0.99]],
+            ['NaN', Number.NaN],
+            ['Infinity', Number.POSITIVE_INFINITY]
+          ].forEach(([label, formConfidence]) => {
+            const result = validateHundoPokemonForm(
+              normalizeSmartHundoCard(
+                formCard({ form_confidence: formConfidence }),
+                normalizeName,
+                { screenshotIndex: 0 }
+              ),
+              normalizeName
+            );
+            equal(result.effective_form_id, 'uncertain', label);
+            equal(result.canonical_official_name, '', label);
+            equal(result.manual_review_reasons.includes('form_confidence_low'), true, label);
+          });
+        });
+
         test('rejects mismatched visual signature', () => {
           const result = validatedFormCard({ form_evidence: formEvidence({ visual_signature: 'moltres_standard' }) });
           equal(result.effective_form_id, 'uncertain');
