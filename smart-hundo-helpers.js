@@ -77,6 +77,50 @@
         奈克洛茲瑪: Object.freeze(['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings']),
         酋雷姆: Object.freeze(['kyurem_base', 'kyurem_white', 'kyurem_black'])
     });
+    const REQUIRED_SPECIALIZED_FORM_EVIDENCE = Object.freeze({
+        dialga_standard: Object.freeze({
+            body_plan: 'dialga_standard_stocky_quadruped',
+            limb_layout: 'four_standard_legs',
+            fusion_host: 'not_applicable',
+            decisive_feature: 'standard_dialga_stocky_neck_chest'
+        }),
+        dialga_origin: Object.freeze({
+            body_plan: 'dialga_origin_elongated_equine_quadruped',
+            limb_layout: 'four_long_legs',
+            fusion_host: 'not_applicable',
+            decisive_feature: 'origin_dialga_elongated_neck_chest'
+        }),
+        palkia_standard: Object.freeze({
+            body_plan: 'palkia_standard_upright_bipedal_dragon',
+            limb_layout: 'two_arms_two_legs',
+            fusion_host: 'not_applicable',
+            decisive_feature: 'standard_palkia_visible_arms'
+        }),
+        palkia_origin: Object.freeze({
+            body_plan: 'palkia_origin_centaur_quadruped',
+            limb_layout: 'four_legs_no_standard_arms',
+            fusion_host: 'not_applicable',
+            decisive_feature: 'origin_palkia_centaur_body'
+        }),
+        necrozma_base: Object.freeze({
+            body_plan: 'necrozma_base_upright_crystalline',
+            limb_layout: 'upright_crystalline_limbs',
+            fusion_host: 'none',
+            decisive_feature: 'base_necrozma_crystal_body'
+        }),
+        necrozma_dusk_mane: Object.freeze({
+            body_plan: 'necrozma_dusk_mane_quadruped_lion',
+            limb_layout: 'quadruped_lion',
+            fusion_host: 'solgaleo',
+            decisive_feature: 'dusk_mane_lion_crystal_armor'
+        }),
+        necrozma_dawn_wings: Object.freeze({
+            body_plan: 'necrozma_dawn_wings_giant_moon_wing',
+            limb_layout: 'giant_wings_no_lion_body',
+            fusion_host: 'lunala',
+            decisive_feature: 'dawn_wings_moon_wings_crystal_armor'
+        })
+    });
     const FORM_CONTROL_IDS = new Set(['not_applicable', 'uncertain', 'unsupported']);
     const HUNDO_SUPPORTED_FORM_IDS = new Set(Object.keys(HUNDO_FORM_CANONICAL_NAMES));
     const HUNDO_FORM_ID_VALUES = new Set([...FORM_CONTROL_IDS, ...HUNDO_SUPPORTED_FORM_IDS]);
@@ -100,6 +144,49 @@
         'unreadable',
         'not_applicable',
         'uncertain'
+    ]);
+    const BODY_PLAN_VALUES = new Set([
+        'not_applicable',
+        'uncertain',
+        'other',
+        'dialga_standard_stocky_quadruped',
+        'dialga_origin_elongated_equine_quadruped',
+        'palkia_standard_upright_bipedal_dragon',
+        'palkia_origin_centaur_quadruped',
+        'necrozma_base_upright_crystalline',
+        'necrozma_dusk_mane_quadruped_lion',
+        'necrozma_dawn_wings_giant_moon_wing'
+    ]);
+    const LIMB_LAYOUT_VALUES = new Set([
+        'not_applicable',
+        'uncertain',
+        'other',
+        'four_standard_legs',
+        'four_long_legs',
+        'two_arms_two_legs',
+        'four_legs_no_standard_arms',
+        'upright_crystalline_limbs',
+        'quadruped_lion',
+        'giant_wings_no_lion_body'
+    ]);
+    const FUSION_HOST_VALUES = new Set([
+        'not_applicable',
+        'uncertain',
+        'none',
+        'solgaleo',
+        'lunala'
+    ]);
+    const DECISIVE_FEATURE_VALUES = new Set([
+        'not_applicable',
+        'uncertain',
+        'other',
+        'standard_dialga_stocky_neck_chest',
+        'origin_dialga_elongated_neck_chest',
+        'standard_palkia_visible_arms',
+        'origin_palkia_centaur_body',
+        'base_necrozma_crystal_body',
+        'dusk_mane_lion_crystal_armor',
+        'dawn_wings_moon_wings_crystal_armor'
     ]);
     const HUNDO_FORM_ALIASES = Object.freeze({
         急凍鳥: Object.freeze({ base_species: '急凍鳥' }),
@@ -458,11 +545,19 @@
         const regionVisibility = stringValue(evidence?.region_visibility).toLowerCase();
         const recognitionBasis = stringValue(evidence?.recognition_basis).toLowerCase();
         const visualSignature = stringValue(evidence?.visual_signature).toLowerCase();
+        const bodyPlan = stringValue(evidence?.body_plan).toLowerCase();
+        const limbLayout = stringValue(evidence?.limb_layout).toLowerCase();
+        const fusionHost = stringValue(evidence?.fusion_host).toLowerCase();
+        const decisiveFeature = stringValue(evidence?.decisive_feature).toLowerCase();
         const labelRelationship = stringValue(evidence?.label_relationship).toLowerCase();
         return {
             region_visibility: REGION_VISIBILITY_VALUES.has(regionVisibility) ? regionVisibility : 'uncertain',
             recognition_basis: FORM_RECOGNITION_BASIS_VALUES.has(recognitionBasis) ? recognitionBasis : 'uncertain',
             visual_signature: FORM_VISUAL_SIGNATURE_VALUES.has(visualSignature) ? visualSignature : 'uncertain',
+            body_plan: BODY_PLAN_VALUES.has(bodyPlan) ? bodyPlan : 'uncertain',
+            limb_layout: LIMB_LAYOUT_VALUES.has(limbLayout) ? limbLayout : 'uncertain',
+            fusion_host: FUSION_HOST_VALUES.has(fusionHost) ? fusionHost : 'uncertain',
+            decisive_feature: DECISIVE_FEATURE_VALUES.has(decisiveFeature) ? decisiveFeature : 'uncertain',
             key_features_visible: evidence?.key_features_visible === true,
             label_relationship: FORM_LABEL_RELATIONSHIP_VALUES.has(labelRelationship) ? labelRelationship : 'uncertain'
         };
@@ -837,6 +932,47 @@
         return DIAGNOSTIC_FORBIDDEN_VALUE_PATTERN.test(normalized) ? '' : normalized;
     };
     const diagnosticString = sanitizeDiagnosticString;
+    const DIAGNOSTIC_REASONING_EFFORT_VALUES = new Set(['low']);
+    const diagnosticModelIdentifier = (value) => {
+        const model = diagnosticString(value).trim();
+        return /^[a-z0-9][a-z0-9._:-]{0,99}$/i.test(model) ? model : '';
+    };
+    const diagnosticModelMetadata = (metadata = {}, includeReasoningEffort = false) => {
+        const source = metadata && typeof metadata === 'object' ? metadata : {};
+        const shaped = {
+            requested_model: diagnosticModelIdentifier(source.requested_model),
+            returned_model: diagnosticModelIdentifier(source.returned_model)
+        };
+        if (includeReasoningEffort) {
+            shaped.reasoning_effort = diagnosticEnum(
+                source.reasoning_effort,
+                DIAGNOSTIC_REASONING_EFFORT_VALUES,
+                ''
+            );
+        }
+        return shaped;
+    };
+    const diagnosticModelRouting = (models = {}) => {
+        const source = models && typeof models === 'object' ? models : {};
+        return {
+            classification: diagnosticModelIdentifier(source.classification),
+            hundo_count: diagnosticModelIdentifier(source.hundo_count),
+            smart_cards: diagnosticModelIdentifier(source.smart_cards),
+            smart_cards_reasoning_effort: diagnosticEnum(
+                source.smart_cards_reasoning_effort,
+                DIAGNOSTIC_REASONING_EFFORT_VALUES,
+                ''
+            )
+        };
+    };
+    const diagnosticScreenshotModels = (models = {}) => {
+        const source = models && typeof models === 'object' ? models : {};
+        return {
+            classification: diagnosticModelMetadata(source.classification),
+            hundo_count: diagnosticModelMetadata(source.hundo_count),
+            smart_cards: diagnosticModelMetadata(source.smart_cards, true)
+        };
+    };
     const diagnosticNonnegativeInteger = (value) => {
         const number = Number(value);
         return Number.isInteger(number) && number >= 0 ? number : 0;
@@ -867,6 +1003,10 @@
             region_visibility: diagnosticEnum(source.region_visibility, REGION_VISIBILITY_VALUES),
             recognition_basis: diagnosticEnum(source.recognition_basis, FORM_RECOGNITION_BASIS_VALUES),
             visual_signature: diagnosticEnum(source.visual_signature, FORM_VISUAL_SIGNATURE_VALUES),
+            body_plan: diagnosticEnum(source.body_plan, BODY_PLAN_VALUES),
+            limb_layout: diagnosticEnum(source.limb_layout, LIMB_LAYOUT_VALUES),
+            fusion_host: diagnosticEnum(source.fusion_host, FUSION_HOST_VALUES),
+            decisive_feature: diagnosticEnum(source.decisive_feature, DECISIVE_FEATURE_VALUES),
             key_features_visible: source.key_features_visible === true,
             label_relationship: diagnosticEnum(source.label_relationship, FORM_LABEL_RELATIONSHIP_VALUES)
         };
@@ -988,6 +1128,7 @@
     });
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),
+        models: diagnosticModelRouting(session?.models),
         screenshots: (Array.isArray(session?.screenshots) ? session.screenshots : []).map(screenshot => ({
             index: diagnosticNonnegativeInteger(screenshot?.index),
             classification: {
@@ -1008,6 +1149,7 @@
             finish_reason: diagnosticString(screenshot?.finish_reason),
             structural_retry_used: screenshot?.structural_retry_used === true,
             structural_retry_reason: diagnosticStructuralReasons(screenshot?.structural_retry_reason),
+            models: diagnosticScreenshotModels(screenshot?.models),
             cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(diagnosticCard)
         })),
         count_candidates: (Array.isArray(session?.count_candidates) ? session.count_candidates : [])
@@ -1082,12 +1224,18 @@
         hundo_count_conflict: '百神總數結果衝突',
         screenshot_overlap_uncertain: '截圖重疊需人工確認',
         smart_hundo_request_failed: '百神辨識請求失敗',
+        smart_hundo_model_request_failed: '百神智慧卡片辨識請求失敗',
         form_uncertain: '型態需人工確認',
         form_species_mismatch: '物種與型態結果衝突',
         form_region_not_clear: '型態主要外觀區域看不清楚',
         form_confidence_low: '型態辨識信心不足',
         form_label_only: '型態只有文字證據，需人工確認',
         form_signature_mismatch: '型態與視覺證據不一致',
+        form_body_plan_mismatch: '型態身體結構與判斷不一致',
+        form_limb_layout_mismatch: '型態四肢結構與判斷不一致',
+        form_fusion_host_mismatch: '奈克洛茲瑪合體母體與判斷不一致',
+        form_decisive_feature_mismatch: '型態關鍵外觀特徵與判斷不一致',
+        form_specialized_evidence_unexpected: '非專用型態不應包含雙龍／奈克洛茲瑪專用證據',
         unsupported_form: '此型態尚未納入支援範圍'
     });
 
@@ -1221,8 +1369,39 @@
         'form_confidence_low',
         'form_label_only',
         'form_signature_mismatch',
+        'form_body_plan_mismatch',
+        'form_limb_layout_mismatch',
+        'form_fusion_host_mismatch',
+        'form_decisive_feature_mismatch',
+        'form_specialized_evidence_unexpected',
         'unsupported_form'
     ]);
+    const SPECIALIZED_FORM_EVIDENCE_REASON_BY_FIELD = Object.freeze({
+        body_plan: 'form_body_plan_mismatch',
+        limb_layout: 'form_limb_layout_mismatch',
+        fusion_host: 'form_fusion_host_mismatch',
+        decisive_feature: 'form_decisive_feature_mismatch'
+    });
+
+    const validateSpecializedFormEvidence = (formId, evidence = {}) => {
+        const requiredEvidence = REQUIRED_SPECIALIZED_FORM_EVIDENCE[formId];
+        const fields = Object.keys(SPECIALIZED_FORM_EVIDENCE_REASON_BY_FIELD);
+        if (!requiredEvidence) {
+            const hasUnexpectedEvidence = fields.some(field => evidence?.[field] !== 'not_applicable');
+            return {
+                valid: !hasUnexpectedEvidence,
+                reasons: hasUnexpectedEvidence ? ['form_specialized_evidence_unexpected'] : []
+            };
+        }
+
+        const reasons = fields
+            .filter(field => evidence?.[field] !== requiredEvidence[field])
+            .map(field => SPECIALIZED_FORM_EVIDENCE_REASON_BY_FIELD[field]);
+        return {
+            valid: reasons.length === 0,
+            reasons
+        };
+    };
 
     const buildHundoCanonicalOfficialName = (card = {}, normalizeOfficialName) => {
         if (HUNDO_SUPPORTED_FORM_IDS.has(card?.effective_form_id)) {
@@ -1286,6 +1465,12 @@
                 if (structuredVisualSignature !== 'not_applicable') {
                     addValidationReason('form_signature_mismatch');
                 }
+                const structuredFormEvidence = hasRawFormSnapshot
+                    ? rawForm.form_evidence
+                    : formEvidence;
+                validateSpecializedFormEvidence(structuredFormId, structuredFormEvidence)
+                    .reasons
+                    .forEach(addValidationReason);
                 if (validationReasons.length > 0) return reject(...validationReasons);
             }
             const result = {
@@ -1333,6 +1518,9 @@
         ) {
             addValidationReason('form_region_not_clear');
         }
+        validateSpecializedFormEvidence(formId, formEvidence)
+            .reasons
+            .forEach(addValidationReason);
         if (validationReasons.length > 0) return reject(...validationReasons);
 
         const result = {
@@ -1433,6 +1621,7 @@
         adaptLegacyRocketState,
         HUNDO_FORM_CANONICAL_NAMES,
         HUNDO_FORMS_BY_BASE_SPECIES,
+        REQUIRED_SPECIALIZED_FORM_EVIDENCE,
         normalizeHundoBaseSpecies,
         normalizeHundoFormId,
         normalizeHundoFormEvidence,
@@ -1460,6 +1649,7 @@
         deriveRocketStateFromEvidence,
         deriveBackgroundTypeFromEvidence,
         validateHundoCardStates,
+        validateSpecializedFormEvidence,
         validateHundoPokemonForm,
         buildHundoCanonicalOfficialName,
         HUNDO_REVIEW_REASON_MESSAGES,
