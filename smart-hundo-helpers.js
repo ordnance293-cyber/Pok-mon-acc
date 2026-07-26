@@ -588,61 +588,25 @@
         stringValue(card?.effective_background_type)
     ]);
 
-    const legacyOverlapCardSignature = (card = {}) => JSON.stringify([
-        stringValue(card?.cp),
-        normalizeVisibleLabel(card?.visible_label),
-        stripSmartHundoPresentationPrefixes(card?.official_name),
-        stringValue(card?.effective_shiny_state),
-        stringValue(card?.effective_lucky_state),
-        stringValue(card?.effective_favorite_state),
-        stringValue(card?.effective_rocket_state),
-        stringValue(card?.effective_background_type)
-    ]);
-
-    const hasStructuredHundoForm = (card = {}) => {
-        const rawForm = card?.raw?.form && typeof card.raw.form === 'object'
-            ? card.raw.form
-            : {};
-        return stringValue(rawForm.base_species) !== '' || stringValue(rawForm.form_id) !== '';
-    };
-
     const hasUsableCanonicalOverlapIdentity = (card = {}) => (
         stringValue(card?.cp) !== ''
         && normalizeVisibleLabel(card?.visible_label) !== ''
         && stringValue(card?.canonical_official_name) !== ''
     );
 
-    const hasUsableLegacyUnstructuredOverlapIdentity = (card = {}, options = {}) => (
-        options?.allowLegacyUnstructuredCards === true
-        && !hasStructuredHundoForm(card)
-        &&
-        stringValue(card?.cp) !== ''
-        && stripSmartHundoPresentationPrefixes(card?.official_name) !== ''
-        && normalizeVisibleLabel(card?.visible_label) !== ''
-    );
+    const hasUsableOverlapIdentity = (card = {}) => hasUsableCanonicalOverlapIdentity(card);
 
-    const hasUsableOverlapIdentity = (card = {}, options = {}) => (
-        hasUsableCanonicalOverlapIdentity(card)
-        || hasUsableLegacyUnstructuredOverlapIdentity(card, options)
-    );
-
-    const overlapCardsMatch = (leftCard = {}, rightCard = {}, options = {}) => {
+    const overlapCardsMatch = (leftCard = {}, rightCard = {}) => {
         if (
             hasUsableCanonicalOverlapIdentity(leftCard)
             && hasUsableCanonicalOverlapIdentity(rightCard)
         ) {
             return overlapCardSignature(leftCard) === overlapCardSignature(rightCard);
         }
-        if (
-            hasUsableLegacyUnstructuredOverlapIdentity(leftCard, options)
-            && hasUsableLegacyUnstructuredOverlapIdentity(rightCard, options)
-        ) {
-            return legacyOverlapCardSignature(leftCard) === legacyOverlapCardSignature(rightCard);
-        }
         return false;
     };
 
-    const boundaryOverlapCount = (suffixCards, prefixCards, options = {}) => {
+    const boundaryOverlapCount = (suffixCards, prefixCards) => {
         const maximum = Math.min(suffixCards.length, prefixCards.length);
         for (let count = maximum; count >= 1; count -= 1) {
             const suffixStart = suffixCards.length - count;
@@ -650,9 +614,9 @@
                 const suffixCard = suffixCards[suffixStart + index];
                 const prefixCard = prefixCards[index];
                 return (
-                    hasUsableOverlapIdentity(suffixCard, options)
-                    && hasUsableOverlapIdentity(prefixCard, options)
-                    && overlapCardsMatch(suffixCard, prefixCard, options)
+                    hasUsableOverlapIdentity(suffixCard)
+                    && hasUsableOverlapIdentity(prefixCard)
+                    && overlapCardsMatch(suffixCard, prefixCard)
                 );
             }).every(Boolean);
             if (matches) return count;
@@ -662,11 +626,11 @@
 
     const uniqueCardIds = (cards = []) => [...new Set(cards.map(card => stringValue(card?.card_id)).filter(Boolean))];
 
-    const detectScreenshotOverlap = (left = {}, right = {}, options = {}) => {
+    const detectScreenshotOverlap = (left = {}, right = {}) => {
         const leftCards = Array.isArray(left?.cards) ? left.cards : [];
         const rightCards = Array.isArray(right?.cards) ? right.cards : [];
-        const forwardCount = boundaryOverlapCount(leftCards, rightCards, options);
-        const reverseCount = boundaryOverlapCount(rightCards, leftCards, options);
+        const forwardCount = boundaryOverlapCount(leftCards, rightCards);
+        const reverseCount = boundaryOverlapCount(rightCards, leftCards);
         const forwardIds = uniqueCardIds(rightCards.slice(0, forwardCount));
         const reverseIds = uniqueCardIds(leftCards.slice(0, reverseCount));
         const competingDirections = forwardCount > 0 && reverseCount > 0;
@@ -717,7 +681,7 @@
         manual_review_reasons: ['screenshot_overlap_uncertain']
     });
 
-    const mergeSmartHundoScreenshots = (screenshots = [], normalizeOfficialName, options = {}) => {
+    const mergeSmartHundoScreenshots = (screenshots = [], normalizeOfficialName) => {
         const screenshotList = Array.isArray(screenshots) ? screenshots : [];
         const comparisonScreenshots = screenshotList.map(screenshot => ({
             cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(card => ({
@@ -734,8 +698,7 @@
                     rightIndex,
                     decision: detectScreenshotOverlap(
                         comparisonScreenshots[leftIndex],
-                        comparisonScreenshots[rightIndex],
-                        options
+                        comparisonScreenshots[rightIndex]
                     )
                 });
             }
@@ -1386,22 +1349,6 @@
         return `${prefix}${canonicalOfficialName}`;
     };
 
-    const buildHundoDisplayPrefix = (card = {}, normalizeOfficialName) => {
-        const marker = '__SMART_HUNDO_DISPLAY_PREFIX_MARKER__';
-        const displayName = buildHundoDisplayName({
-            ...card,
-            canonical_official_name: marker
-        }, normalizeOfficialName);
-        return displayName.endsWith(marker) ? displayName.slice(0, -marker.length) : '';
-    };
-
-    const buildLegacyUnstructuredHundoDisplayName = (card = {}, normalizeOfficialName) => {
-        if (!hasConfidentRecognizedBaseSpecies(card) || hasStructuredHundoForm(card)) return '';
-        const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
-        if (!officialName) return '';
-        return `${buildHundoDisplayPrefix(card, normalizeOfficialName)}${officialName}`;
-    };
-
     const summarizeHundoManualReview = (cards = [], screenshotReasons = []) => {
         const reviewCardIds = new Set();
         const reviewReasonCounts = {};
@@ -1425,17 +1372,12 @@
         };
     };
 
-    const smartHundoCardsToPokemonList = (cards = [], normalizeOfficialName, options = {}) => {
+    const smartHundoCardsToPokemonList = (cards = [], normalizeOfficialName) => {
         const displayGroups = new Map();
         let recognizedCount = 0;
 
         (Array.isArray(cards) ? cards : []).forEach(card => {
-            const displayName = buildHundoDisplayName(card, normalizeOfficialName)
-                // TEMPORARY Phase 3 bridge; remove at the Phase 5 form-first cutover.
-                // A legacy name is never accepted as proof for a card carrying structured form fields.
-                || (options?.allowLegacyUnstructuredCards === true
-                    ? buildLegacyUnstructuredHundoDisplayName(card, normalizeOfficialName)
-                    : '');
+            const displayName = buildHundoDisplayName(card, normalizeOfficialName);
             if (!displayName) return;
             displayGroups.set(displayName, (displayGroups.get(displayName) || 0) + 1);
             recognizedCount += 1;

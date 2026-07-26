@@ -1072,29 +1072,47 @@
           equal(validated.manual_review_reasons.includes('background_uncertain'), true);
         });
 
-        test('uses species confidence in the downstream recognition gate without inventing a name', () => {
-          const belowThreshold = validateHundoCardStates(normalizedCard({
-            official_name: '固拉多',
-            recognition_status: 'recognized',
-            species_confidence: 0.799
-          }));
-          const atThreshold = validateHundoCardStates(normalizedCard({
-            official_name: '固拉多',
-            recognition_status: 'recognized',
-            species_confidence: 0.80
-          }));
-          const legacyCompatibility = { allowLegacyUnstructuredCards: true };
-          const belowConversion = effectiveSmartHundoCardsToPokemonList(
-            [belowThreshold], normalizeName, legacyCompatibility
-          );
-          const atConversion = effectiveSmartHundoCardsToPokemonList(
-            [atThreshold], normalizeName, legacyCompatibility
-          );
-          equal(belowThreshold.official_name, '固拉多');
-          equal(belowThreshold.recognition_status, 'recognized');
+        test('uses species confidence in the downstream structured-form recognition gate', () => {
+          const belowThreshold = validateHundoCardStates(validateHundoPokemonForm(
+            normalizeSmartHundoCard(formCard({ species_confidence: 0.799 }), normalizeName, { screenshotIndex: 0 }),
+            normalizeName
+          ));
+          const atThreshold = validateHundoCardStates(validateHundoPokemonForm(
+            normalizeSmartHundoCard(formCard({ species_confidence: 0.80 }), normalizeName, { screenshotIndex: 0 }),
+            normalizeName
+          ));
+          const belowConversion = effectiveSmartHundoCardsToPokemonList([belowThreshold], normalizeName);
+          const atConversion = effectiveSmartHundoCardsToPokemonList([atThreshold], normalizeName);
           equal(belowConversion.pokemon_list, '');
           equal(belowConversion.review_reason_counts.species_uncertain, 1);
-          equal(atConversion.pokemon_list, '固拉多');
+          equal(atConversion.pokemon_list, HUNDO_FORM_CANONICAL_NAMES.moltres_galarian);
+        });
+
+        test('accepts a structured form at the exact species confidence threshold', () => {
+          const result = validateHundoPokemonForm(normalizeSmartHundoCard(formCard({
+            species_confidence: 0.80
+          }), normalizeName, { screenshotIndex: 0 }), normalizeName);
+          equal(result.effective_form_id, 'moltres_galarian');
+          equal(result.canonical_official_name, HUNDO_FORM_CANONICAL_NAMES.moltres_galarian);
+          equal(result.manual_review_reasons.includes('species_uncertain'), false);
+        });
+
+        test('repeated form validation preserves and deduplicates existing state and screenshot reasons', () => {
+          const first = validateHundoPokemonForm({
+            ...validatedFormCard(),
+            manual_review_reasons: [
+              'shiny_uncertain',
+              'incomplete_card_enumeration',
+              'shiny_uncertain',
+              'form_uncertain'
+            ]
+          }, normalizeName);
+          const second = validateHundoPokemonForm(first, normalizeName);
+          deepEqual(second.manual_review_reasons, [
+            'shiny_uncertain',
+            'incomplete_card_enumeration'
+          ]);
+          equal(second.effective_form_id, 'moltres_galarian');
         });
 
         test('normalizes the five-dimension screenshot root without deduplicating coordinates', () => {
@@ -1424,21 +1442,6 @@
           equal(summary.review_reason_counts.species_uncertain, undefined);
         });
 
-        test('does not let the temporary legacy bridge display structured unresolved form cards', () => {
-          const structuredUnresolved = normalizeSmartHundoCard(
-            formCard({ form_id: 'uncertain' }),
-            normalizeName,
-            { screenshotIndex: 0 }
-          );
-          const conversion = effectiveSmartHundoCardsToPokemonList(
-            [structuredUnresolved],
-            normalizeName,
-            { allowLegacyUnstructuredCards: true }
-          );
-          equal(conversion.pokemon_list, '');
-          equal(conversion.recognized_count, 0);
-        });
-
         test('retains repeated screenshot review reason occurrences without adding card reviews', () => {
           const summary = summarizeHundoManualReview([], [
             'incomplete_card_enumeration',
@@ -1747,27 +1750,6 @@
             buildHundoDisplayName(structured, normalizeName),
             HUNDO_FORM_CANONICAL_NAMES.moltres_galarian
           );
-        });
-
-        test('keeps legacy bridge overlap identity tied to its sanitized official name', () => {
-          const legacyCard = (cardId, order, cp, officialName) => ({
-            ...validatedCard({
-              card_id: cardId,
-              order,
-              cp,
-              visible_label: `same-${cp}`,
-              official_name: officialName,
-              canonical_official_name: ''
-            }),
-            raw: { form: { base_species: '', form_id: '' } }
-          });
-          const decision = detectScreenshotOverlap(
-            { cards: [legacyCard('7:1:1:1', 1, '900', 'Plain A'), legacyCard('7:2:1:2', 2, '901', 'Plain B')] },
-            { cards: [legacyCard('8:1:1:1', 1, '900', 'Special A'), legacyCard('8:2:1:2', 2, '901', 'Special B')] },
-            { allowLegacyUnstructuredCards: true }
-          );
-          equal(decision.overlap_count, 0);
-          equal(decision.ambiguous, false);
         });
 
         test('removes only a two-card suffix-prefix overlap and restores scroll order from reversed uploads', () => {
@@ -3677,13 +3659,40 @@
           }
           fail(`unexpected ordinary extraction prompt: ${prompt.slice(0, 120)}`);
         };
+        const nonWhitelistModelForm = {
+          base_species: '固拉多',
+          form_id: 'not_applicable',
+          form_confidence: 1,
+          form_evidence: {
+            region_visibility: 'clear',
+            recognition_basis: 'direct_visual_match',
+            visual_signature: 'not_applicable',
+            key_features_visible: true,
+            label_relationship: 'not_applicable'
+          }
+        };
         const v2Card = (overrides = {}) => {
-          const normalized = card(overrides);
+          const normalized = card({ ...nonWhitelistModelForm, ...overrides });
           delete normalized.purified_state;
           delete normalized.purified_confidence;
           delete normalized.shadow_state;
           delete normalized.shadow_confidence;
           return normalized;
+        };
+        const structuredV2Card = (formId, overrides = {}) => {
+          const baseSpecies = Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
+            .find(([, formIds]) => formIds.includes(formId))[0];
+          return v2Card({
+            official_name: baseSpecies,
+            base_species: baseSpecies,
+            form_id: formId,
+            form_confidence: 0.98,
+            form_evidence: formEvidence({
+              visual_signature: formId,
+              label_relationship: 'base_species_only'
+            }),
+            ...overrides
+          });
         };
         const completeCardResult = (cards, overrides = {}) => ({
           detected_card_count: cards.length,
@@ -4458,19 +4467,114 @@
           equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
         });
 
-        await asyncTest('uses the Phase 5 transitional bridge for legacy unstructured V2 whitelist cards', async () => {
+        await asyncTest('keeps schema-complete non-whitelist cards in the production list', async () => {
           resetScanScenario();
           classificationByImage.LEGACY_WHITELIST = classificationByImage.EXACT_A;
           setScanFiles(['LEGACY_WHITELIST']);
-          countResultByImage.set('LEGACY_WHITELIST', validCount('(1)', '1'));
+          countResultByImage.set('LEGACY_WHITELIST', validCount('(5)', '5'));
           cardResultByImage.set('LEGACY_WHITELIST', completeCardResult([
-            v2Card({ official_name: 'Pikachu', visible_label: 'Pikachu 100', cp: '1234' })
+            v2Card({ official_name: 'Mewtwo', visible_label: 'Mewtwo 100', cp: '1234' }),
+            v2Card({ order: 2, column: 2, official_name: 'Groudon', visible_label: 'Groudon 100', cp: '1235' }),
+            v2Card({ order: 3, column: 3, official_name: 'Kyogre', visible_label: 'Kyogre 100', cp: '1236' }),
+            v2Card({ order: 4, row: 2, official_name: 'Ho-Oh', visible_label: 'Ho-Oh 100', cp: '1237' }),
+            v2Card({ order: 5, row: 2, column: 2, official_name: 'Xerneas', visible_label: 'Xerneas 100', cp: '1238' })
           ]));
 
           await autoScan();
 
-          equal(document.getElementById('g_hundos').value, 'Pikachu');
-          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[0].canonical_official_name, '');
+          equal(document.getElementById('g_hundos').value, 'Mewtwo,Groudon,Kyogre,Ho-Oh,Xerneas');
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[0].canonical_official_name, 'Mewtwo');
+        });
+
+        await asyncTest('validates structured Galarian Moltres and the requested three-card form list in production', async () => {
+          resetScanScenario();
+          classificationByImage.FORM_GALARIAN_MOLTRES = classificationByImage.EXACT_A;
+          setScanFiles(['FORM_GALARIAN_MOLTRES']);
+          countResultByImage.set('FORM_GALARIAN_MOLTRES', validCount('(3)', '3'));
+          const galarianMoltres = structuredV2Card('moltres_galarian', {
+            cp: '1460',
+            visible_label: Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
+              .find(([, ids]) => ids.includes('moltres_galarian'))[0]
+          });
+          cardResultByImage.set('FORM_GALARIAN_MOLTRES', completeCardResult([
+            structuredV2Card('zacian_standard', { order: 1, row: 1, column: 1, cp: '3829', visible_label: 'Zacian' }),
+            structuredV2Card('necrozma_base', { order: 2, row: 1, column: 2, cp: '4212', visible_label: 'Necrozma' }),
+            { ...galarianMoltres, order: 3, row: 1, column: 3 }
+          ]));
+
+          await autoScan();
+
+          const expected = [
+            HUNDO_FORM_CANONICAL_NAMES.zacian_standard,
+            HUNDO_FORM_CANONICAL_NAMES.necrozma_base,
+            HUNDO_FORM_CANONICAL_NAMES.moltres_galarian
+          ].join(',');
+          const moltresDiagnostic = window.lastSmartHundoDiagnostics.screenshots[0].cards[2];
+          equal(document.getElementById('g_hundos').value, expected);
+          equal(moltresDiagnostic.base_species, galarianMoltres.base_species);
+          equal(moltresDiagnostic.raw_form_id, 'moltres_galarian');
+          equal(moltresDiagnostic.effective_form_id, 'moltres_galarian');
+          equal(moltresDiagnostic.canonical_official_name, HUNDO_FORM_CANONICAL_NAMES.moltres_galarian);
+          equal(window.lastSmartHundoDiagnostics.pokemon_list, expected);
+        });
+
+        await asyncTest('keeps unresolved, mismatch, label-only, cropped, and unsupported forms diagnostic-only in production', async () => {
+          resetScanScenario();
+          classificationByImage.FORM_REVIEW_CASES = classificationByImage.EXACT_A;
+          setScanFiles(['FORM_REVIEW_CASES']);
+          countResultByImage.set('FORM_REVIEW_CASES', validCount('(5)', '5'));
+          cardResultByImage.set('FORM_REVIEW_CASES', completeCardResult([
+            structuredV2Card('moltres_galarian', {
+              cp: '1',
+              form_id: 'uncertain',
+              form_evidence: formEvidence({ visual_signature: 'uncertain', recognition_basis: 'uncertain', key_features_visible: false })
+            }),
+            structuredV2Card('moltres_galarian', {
+              order: 2,
+              column: 2,
+              cp: '2',
+              form_id: 'dialga_origin',
+              form_evidence: formEvidence({ visual_signature: 'dialga_origin' })
+            }),
+            structuredV2Card('moltres_galarian', {
+              order: 3,
+              column: 3,
+              cp: '3',
+              form_evidence: formEvidence({ recognition_basis: 'label_only' })
+            }),
+            structuredV2Card('moltres_galarian', {
+              order: 4,
+              row: 2,
+              cp: '4',
+              form_evidence: formEvidence({ region_visibility: 'cropped' })
+            }),
+            structuredV2Card('necrozma_base', {
+              order: 5,
+              row: 2,
+              column: 2,
+              cp: '5',
+              form_id: 'unsupported',
+              form_evidence: formEvidence({ visual_signature: 'other' })
+            })
+          ]));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '');
+          const diagnostics = window.lastSmartHundoDiagnostics;
+          equal(diagnostics.screenshots[0].cards.length, 5);
+          [
+            'form_uncertain',
+            'form_species_mismatch',
+            'form_label_only',
+            'form_region_not_clear',
+            'unsupported_form'
+          ].forEach(reason => equal(diagnostics.manual_review_reasons.includes(reason), true, `${reason} remains diagnostic`));
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_uncertain').length > 0, true);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_species_mismatch').length > 0, true);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_label_only').length > 0, true);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_region_not_clear').length > 0, true);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'unsupported_form').length > 0, true);
         });
 
         await asyncTest('sanitizes model-polluted species names before production list and diagnostics', async () => {

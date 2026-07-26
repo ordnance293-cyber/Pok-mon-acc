@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "index.html"
 SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
 TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
-MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
+MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
 EXTRACTION_PROMPT_HASH = "1b061471ee97eeb1f6e0e9061acc8d6150b386fe6b46e4350b23b658a708b669"
@@ -110,6 +110,28 @@ def assert_manual_acceptance_doc() -> None:
         raise AssertionError(f"manual acceptance document does not exist: {MANUAL_ACCEPTANCE_DOC}")
     document = normalized_source(MANUAL_ACCEPTANCE_DOC)
     for fragment in (
+        "## A. standard Articuno vs Galarian Articuno",
+        "## B. standard Zapdos vs Galarian Zapdos",
+        "## C. standard Moltres vs Galarian Moltres",
+        "## D. standard Zacian vs Crowned Zacian",
+        "## E. standard Zamazenta vs Crowned Zamazenta",
+        "## F. standard Dialga vs Origin Dialga",
+        "## G. standard Palkia vs Origin Palkia",
+        "## H. all three Zygarde forms",
+        "## I. all three supported Necrozma forms",
+        "## J. all three Kyurem forms",
+        "## K. 蒼響 / 奈克洛茲瑪 / 伽勒爾火焰鳥",
+        "full commit SHA", "anonymized screenshot ID", "visible label", "base_species",
+        "raw form_id", "form confidence", "form evidence", "effective form_id",
+        "canonical official name", "final pokemon_list", "pass/fail", "failure summary",
+        "待人工執行",
+        "mocked browser tests verify data flow and validation boundaries only; they do not prove visual-recognition accuracy on real images",
+    ):
+        require_fragment(document, fragment, "manual acceptance document")
+    if "| PASS |" in document or "| FAIL |" in document:
+        raise AssertionError("manual acceptance document must leave every real-image result pending")
+    return
+    for fragment in (
         "hundo_leg=3\npokemon_list=鳳王,哲爾尼亞斯,雷吉奇卡斯",
         "藏瑪然特*2,拉帝亞斯,蒼響,固拉多,酋雷姆",
         "鳳王*2,閃電鳥,蒼響,蓋歐卡,炎帝",
@@ -119,6 +141,36 @@ def assert_manual_acceptance_doc() -> None:
         "固拉多,色違固拉多,特別背卡固拉多",
     ):
         require_fragment(document, fragment, "manual acceptance document")
+
+
+def assert_hundo_form_schema(smart_schema: str) -> None:
+    expected_form_ids = [
+        "not_applicable", "uncertain", "unsupported",
+        "articuno_standard", "articuno_galarian",
+        "zapdos_standard", "zapdos_galarian",
+        "moltres_standard", "moltres_galarian",
+        "zacian_standard", "zacian_crowned",
+        "zamazenta_standard", "zamazenta_crowned",
+        "dialga_standard", "dialga_origin",
+        "palkia_standard", "palkia_origin",
+        "zygarde_10", "zygarde_50", "zygarde_complete",
+        "necrozma_base", "necrozma_dusk_mane", "necrozma_dawn_wings",
+        "kyurem_base", "kyurem_white", "kyurem_black",
+    ]
+    match = re.search(
+        r"form_id:\s*\{\s*type:\s*'string',\s*enum:\s*\[(.*?)\]\s*\}",
+        smart_schema,
+        flags=re.DOTALL,
+    )
+    if not match:
+        raise AssertionError("form_id enum is missing")
+    actual_form_ids = re.findall(r"'([^']+)'", match.group(1))
+    if actual_form_ids != expected_form_ids:
+        raise AssertionError(f"form_id enum must contain exactly 26 IDs, got {actual_form_ids!r}")
+    if "maxItems" in smart_schema:
+        raise AssertionError("smart hundo cards must not impose maxItems")
+    for field in ("base_species", "form_id", "form_confidence", "form_evidence"):
+        require_fragment(smart_schema, f"{field}:", "smart hundo form schema")
 
 
 def assert_script_before_module(source: str, script_name: str) -> None:
@@ -483,6 +535,8 @@ def main() -> int:
             save_account,
             (
                 "purified", "shadow_state", "purified_state",
+                "base_species", "form_id", "form_confidence", "form_evidence",
+                "effective_form_id", "canonical_official_name",
                 "lastSmartHundoDiagnostics", "lastSmartHundoScanResult",
                 "lastTrainerTeamDiagnostics", "trainerTeamDiagnostics",
                 "fixed_ui_evidence", "model_team_candidate",
@@ -490,10 +544,11 @@ def main() -> int:
             ),
             "Firebase/GAS save path",
         )),
-        ("V2 smart schema contains only the five-dimension card contract", lambda: (
+        ("V2 smart schema contains the strict form and five-dimension card contract", lambda: (
             require_fragment(smart_schema, "name: 'pokemon_go_hundo_smart_extractor_v2'", "V2 smart schema"),
             require_fragment(smart_schema, "rocket_state:", "V2 rocket dimension"),
             require_fragment(smart_schema, "background_type:", "V2 background dimension"),
+            assert_hundo_form_schema(smart_schema),
             assert_forbidden_identifiers(
                 smart_schema,
                 ("hundo_leg", "shadow_state", "purified_state", "global"),
@@ -503,6 +558,13 @@ def main() -> int:
         ("smart diagnostics and logs exclude sensitive structures", lambda: [
             require_fragment(safe_error_summary, "reasonCode:", "safe error summary"),
             require_fragment(source, "console.warn('Smart hundo operation failed', summary);", "smart warning"),
+            *[
+                require_fragment(smart_diagnostics_shape, field, "safe smart form diagnostics")
+                for field in (
+                    "base_species", "raw_form_id", "form_confidence", "form_evidence",
+                    "effective_form_id", "canonical_official_name",
+                )
+            ],
             assert_forbidden_identifiers(
                 "\n".join((
                     safe_error_summary,
@@ -526,7 +588,15 @@ def main() -> int:
         ("trainer-team diagnostics and logs exclude sensitive structures", lambda: (
             assert_trainer_diagnostics_and_logging_are_safe(source, console_arguments)
         )),
-        ("manual V2 acceptance document has required exact outcomes", assert_manual_acceptance_doc),
+        ("Phase 3 legacy form bridge is removed from production and helpers", lambda: [
+            assert_forbidden(source, ("allowLegacyUnstructuredCards",), "production source"),
+            assert_forbidden(
+                helpers_source,
+                ("allowLegacyUnstructuredCards", "legacyOverlapCardSignature", "buildLegacyUnstructuredHundoDisplayName"),
+                "smart hundo helper",
+            ),
+        ]),
+        ("manual V1 form acceptance document has pending real-image cases", assert_manual_acceptance_doc),
     ])
 
     failures: list[str] = []
@@ -546,6 +616,8 @@ def main() -> int:
     else:
         forbidden = (
             "purified", "shadow_state", "purified_state",
+            "base_species", "form_id", "form_confidence", "form_evidence",
+            "effective_form_id", "canonical_official_name",
             "lastSmartHundoDiagnostics", "lastSmartHundoScanResult",
             "lastTrainerTeamDiagnostics", "trainerTeamDiagnostics",
             "fixed_ui_evidence", "model_team_candidate",
