@@ -17,6 +17,7 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "index.html"
 SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
+TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
 MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
@@ -30,8 +31,14 @@ NEW_ITEM_HASH = "5f7736d381b8c5f3914db57f5e1b9f33e358b205be918c314a3df6da6d07e2c
 NEW_ITEM_LENGTH = 1666
 GENERATE_TEXT_HASH = "9d288f3924c6a8d397546900c558f5335f0dfa5dde536249355850aff15a7eff"
 GENERATE_TEXT_LENGTH = 4589
-SMART_HUNDO_HELPERS_HASH = "7dc16a5450017b102054dfcd212737f87411948fd42fd1f17dd125631df3e72b"
-SMART_HUNDO_HELPERS_LENGTH = 52801
+HUNDO_COUNT_HELPERS_HASH = "218f80f1c30bc6247f214cc62e7a2959b3c16d33b061c01af1445a669e38152d"
+HUNDO_COUNT_HELPERS_LENGTH = 4332
+HUNDO_COUNT_SCHEMA_HASH = "98a1d9191cf3aef23a34b2613edace96db7ae0664e9a26e422ef63c91e60eac5"
+HUNDO_COUNT_SCHEMA_LENGTH = 1128
+HUNDO_COUNT_PROMPT_HASH = "d93623450e28e7da3672ed22cd9b5c4b7a2f6d2cdb5609e58f4637a92e33b307"
+HUNDO_COUNT_PROMPT_LENGTH = 856
+TRAINER_TEAM_HELPERS_HASH = "bb34294f7f5359292add2cb930f73250b5eb91e5037f90e9fefd63e3c193aa18"
+TRAINER_TEAM_HELPERS_LENGTH = 12158
 SMART_HUNDO_SCHEMA_HASH = "a48c2113d70b1ef67be8f5c1bf02f258fdaae774d0e4fe982212392619f87094"
 SMART_HUNDO_SCHEMA_LENGTH = 8388
 
@@ -169,6 +176,7 @@ def assert_trainer_diagnostics_and_logging_are_safe(source: str, console_argumen
 def main() -> int:
     source = normalized_source(INDEX_HTML)
     helpers_source = normalized_source(SMART_HUNDO_HELPERS)
+    trainer_helpers_source = normalized_source(TRAINER_TEAM_HELPERS)
     checks: list[tuple[str, Callable[[], object]]] = []
 
     classification_prompt = source_span(
@@ -225,6 +233,27 @@ def main() -> int:
         "V2 smart-hundo schema",
         include_end=False,
     )
+    hundo_count_helpers = source_span(
+        helpers_source,
+        "    const normalizeHundoCountResult =",
+        "\n    const normalizeCoordinate =",
+        "hundo-count helpers",
+        include_end=False,
+    )
+    hundo_count_schema = source_span(
+        source,
+        "        const HUNDO_COUNT_SCHEMA = {",
+        "\n        const HUNDO_SMART_SCHEMA =",
+        "hundo-count schema",
+        include_end=False,
+    )
+    hundo_count_prompt = source_span(
+        source,
+        "        const buildHundoCountPrompt =",
+        "\n        const fileToOriginalDataUrl =",
+        "hundo-count prompt",
+        include_end=False,
+    )
     safe_error_summary = source_span(
         source,
         "        const safeSmartHundoErrorSummary =",
@@ -257,11 +286,29 @@ def main() -> int:
             source,
             "trainer-team-helpers.js",
         )),
-        ("whole smart-hundo helper has the origin/main snapshot", lambda: assert_snapshot(
-            "whole smart-hundo helper",
-            helpers_source,
-            SMART_HUNDO_HELPERS_HASH,
-            SMART_HUNDO_HELPERS_LENGTH,
+        ("hundo-count helpers have the origin/main snapshot", lambda: assert_snapshot(
+            "hundo-count helpers",
+            hundo_count_helpers,
+            HUNDO_COUNT_HELPERS_HASH,
+            HUNDO_COUNT_HELPERS_LENGTH,
+        )),
+        ("hundo-count schema has the origin/main snapshot", lambda: assert_snapshot(
+            "hundo-count schema",
+            hundo_count_schema,
+            HUNDO_COUNT_SCHEMA_HASH,
+            HUNDO_COUNT_SCHEMA_LENGTH,
+        )),
+        ("hundo-count prompt has the origin/main snapshot", lambda: assert_snapshot(
+            "hundo-count prompt",
+            hundo_count_prompt,
+            HUNDO_COUNT_PROMPT_HASH,
+            HUNDO_COUNT_PROMPT_LENGTH,
+        )),
+        ("whole trainer-team helper has the origin/main snapshot", lambda: assert_snapshot(
+            "whole trainer-team helper",
+            trainer_helpers_source,
+            TRAINER_TEAM_HELPERS_HASH,
+            TRAINER_TEAM_HELPERS_LENGTH,
         )),
         ("smart-hundo schema span has the origin/main snapshot", lambda: assert_snapshot(
             "smart-hundo schema span",

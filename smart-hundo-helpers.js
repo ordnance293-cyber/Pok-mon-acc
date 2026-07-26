@@ -38,6 +38,111 @@
     const HUNDO_COUNT_ACTIVE_TAB_VALUES = new Set(['pokemon', 'egg', 'unknown']);
     const HUNDO_COUNT_SOURCE_VALUES = new Set(['pokemon_search_result_summary', 'other', 'uncertain']);
     const HUNDO_COUNT_POSITION_VALUES = new Set(['associated_with_active_pokemon_tab', 'other', 'uncertain']);
+    const HUNDO_FORM_CANONICAL_NAMES = Object.freeze({
+        articuno_standard: '急凍鳥',
+        articuno_galarian: '伽勒爾急凍鳥',
+        zapdos_standard: '閃電鳥',
+        zapdos_galarian: '伽勒爾閃電鳥',
+        moltres_standard: '火焰鳥',
+        moltres_galarian: '伽勒爾火焰鳥',
+        zacian_standard: '蒼響',
+        zacian_crowned: '蒼響劍盾型態',
+        zamazenta_standard: '藏瑪然特',
+        zamazenta_crowned: '藏瑪然特劍盾型態',
+        dialga_standard: '帝牙盧卡',
+        dialga_origin: '起源帝牙盧卡',
+        palkia_standard: '帕路奇亞',
+        palkia_origin: '起源帕路奇亞',
+        zygarde_10: '基格爾德（10%形態）',
+        zygarde_50: '基格爾德（50%形態）',
+        zygarde_complete: '基格爾德（完全體形態）',
+        necrozma_base: '奈克洛茲瑪',
+        necrozma_dusk_mane: '奈克洛茲瑪（黃昏之鬃）',
+        necrozma_dawn_wings: '奈克洛茲瑪（拂曉之翼）',
+        kyurem_base: '酋雷姆',
+        kyurem_white: '焰白酋雷姆',
+        kyurem_black: '闇黑酋雷姆'
+    });
+    const HUNDO_FORMS_BY_BASE_SPECIES = Object.freeze({
+        急凍鳥: Object.freeze(['articuno_standard', 'articuno_galarian']),
+        閃電鳥: Object.freeze(['zapdos_standard', 'zapdos_galarian']),
+        火焰鳥: Object.freeze(['moltres_standard', 'moltres_galarian']),
+        蒼響: Object.freeze(['zacian_standard', 'zacian_crowned']),
+        藏瑪然特: Object.freeze(['zamazenta_standard', 'zamazenta_crowned']),
+        帝牙盧卡: Object.freeze(['dialga_standard', 'dialga_origin']),
+        帕路奇亞: Object.freeze(['palkia_standard', 'palkia_origin']),
+        基格爾德: Object.freeze(['zygarde_10', 'zygarde_50', 'zygarde_complete']),
+        奈克洛茲瑪: Object.freeze(['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings']),
+        酋雷姆: Object.freeze(['kyurem_base', 'kyurem_white', 'kyurem_black'])
+    });
+    const FORM_CONTROL_IDS = new Set(['not_applicable', 'uncertain', 'unsupported']);
+    const HUNDO_SUPPORTED_FORM_IDS = new Set(Object.keys(HUNDO_FORM_CANONICAL_NAMES));
+    const HUNDO_FORM_ID_VALUES = new Set([...FORM_CONTROL_IDS, ...HUNDO_SUPPORTED_FORM_IDS]);
+    const FORM_VISUAL_SIGNATURE_VALUES = new Set([
+        ...HUNDO_SUPPORTED_FORM_IDS,
+        'not_applicable',
+        'other',
+        'uncertain'
+    ]);
+    const FORM_RECOGNITION_BASIS_VALUES = new Set([
+        'direct_visual_match',
+        'visual_and_label',
+        'label_only',
+        'uncertain'
+    ]);
+    const FORM_LABEL_RELATIONSHIP_VALUES = new Set([
+        'exact_form',
+        'base_species_only',
+        'custom_nickname',
+        'conflicting',
+        'unreadable',
+        'not_applicable',
+        'uncertain'
+    ]);
+    const HUNDO_FORM_ALIASES = Object.freeze({
+        急凍鳥: Object.freeze({ base_species: '急凍鳥' }),
+        伽勒爾急凍鳥: Object.freeze({ base_species: '急凍鳥', candidate_form_id: 'articuno_galarian' }),
+        閃電鳥: Object.freeze({ base_species: '閃電鳥' }),
+        伽勒爾閃電鳥: Object.freeze({ base_species: '閃電鳥', candidate_form_id: 'zapdos_galarian' }),
+        火焰鳥: Object.freeze({ base_species: '火焰鳥' }),
+        伽勒爾火焰鳥: Object.freeze({ base_species: '火焰鳥', candidate_form_id: 'moltres_galarian' }),
+        蒼響: Object.freeze({ base_species: '蒼響' }),
+        蒼響劍王: Object.freeze({ base_species: '蒼響', candidate_form_id: 'zacian_crowned' }),
+        '蒼響（劍之王）': Object.freeze({ base_species: '蒼響', candidate_form_id: 'zacian_crowned' }),
+        '蒼響(劍之王)': Object.freeze({ base_species: '蒼響', candidate_form_id: 'zacian_crowned' }),
+        蒼響劍盾型態: Object.freeze({ base_species: '蒼響', candidate_form_id: 'zacian_crowned' }),
+        藏瑪然特: Object.freeze({ base_species: '藏瑪然特' }),
+        藏瑪然特盾王: Object.freeze({ base_species: '藏瑪然特', candidate_form_id: 'zamazenta_crowned' }),
+        '藏瑪然特（盾之王）': Object.freeze({ base_species: '藏瑪然特', candidate_form_id: 'zamazenta_crowned' }),
+        '藏瑪然特(盾之王)': Object.freeze({ base_species: '藏瑪然特', candidate_form_id: 'zamazenta_crowned' }),
+        藏瑪然特劍盾型態: Object.freeze({ base_species: '藏瑪然特', candidate_form_id: 'zamazenta_crowned' }),
+        帝牙盧卡: Object.freeze({ base_species: '帝牙盧卡' }),
+        '帝牙盧卡（起源形態）': Object.freeze({ base_species: '帝牙盧卡', candidate_form_id: 'dialga_origin' }),
+        '帝牙盧卡(起源形態)': Object.freeze({ base_species: '帝牙盧卡', candidate_form_id: 'dialga_origin' }),
+        起源型態帝牙盧卡: Object.freeze({ base_species: '帝牙盧卡', candidate_form_id: 'dialga_origin' }),
+        起源帝牙盧卡: Object.freeze({ base_species: '帝牙盧卡', candidate_form_id: 'dialga_origin' }),
+        帕路奇亞: Object.freeze({ base_species: '帕路奇亞' }),
+        '帕路奇亞（起源形態）': Object.freeze({ base_species: '帕路奇亞', candidate_form_id: 'palkia_origin' }),
+        '帕路奇亞(起源形態)': Object.freeze({ base_species: '帕路奇亞', candidate_form_id: 'palkia_origin' }),
+        起源型態帕路奇亞: Object.freeze({ base_species: '帕路奇亞', candidate_form_id: 'palkia_origin' }),
+        起源帕路奇亞: Object.freeze({ base_species: '帕路奇亞', candidate_form_id: 'palkia_origin' }),
+        基格爾德: Object.freeze({ base_species: '基格爾德' }),
+        '基格爾德（10%形態）': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_10' }),
+        '基格爾德(10%形態)': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_10' }),
+        '基格爾德（50%形態）': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_50' }),
+        '基格爾德(50%形態)': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_50' }),
+        '基格爾德（完全體形態）': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_complete' }),
+        '基格爾德(完全體形態)': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_complete' }),
+        奈克洛茲瑪: Object.freeze({ base_species: '奈克洛茲瑪' }),
+        '奈克洛茲瑪（黃昏之鬃）': Object.freeze({ base_species: '奈克洛茲瑪', candidate_form_id: 'necrozma_dusk_mane' }),
+        '奈克洛茲瑪(黃昏之鬃)': Object.freeze({ base_species: '奈克洛茲瑪', candidate_form_id: 'necrozma_dusk_mane' }),
+        '奈克洛茲瑪（拂曉之翼）': Object.freeze({ base_species: '奈克洛茲瑪', candidate_form_id: 'necrozma_dawn_wings' }),
+        '奈克洛茲瑪(拂曉之翼)': Object.freeze({ base_species: '奈克洛茲瑪', candidate_form_id: 'necrozma_dawn_wings' }),
+        酋雷姆: Object.freeze({ base_species: '酋雷姆' }),
+        焰白酋雷姆: Object.freeze({ base_species: '酋雷姆', candidate_form_id: 'kyurem_white' }),
+        炎白酋雷姆: Object.freeze({ base_species: '酋雷姆', candidate_form_id: 'kyurem_white' }),
+        闇黑酋雷姆: Object.freeze({ base_species: '酋雷姆', candidate_form_id: 'kyurem_black' })
+    });
 
     const stringValue = (value) => value === undefined || value === null ? '' : String(value).trim();
 
@@ -330,6 +435,46 @@
         return stripSmartHundoPresentationPrefixes(normalizeWith(normalizer, sanitized));
     };
 
+    const normalizeHundoBaseSpecies = (value, normalizeOfficialName) => {
+        const sanitized = stripSmartHundoPresentationPrefixes(value);
+        const directAlias = HUNDO_FORM_ALIASES[sanitized];
+        if (directAlias) return directAlias.base_species;
+        const normalized = stripSmartHundoPresentationPrefixes(normalizeWith(normalizeOfficialName, sanitized));
+        return HUNDO_FORM_ALIASES[normalized]?.base_species || normalized;
+    };
+
+    const normalizeHundoFormId = (value) => {
+        const formId = value === undefined || value === null ? '' : String(value).toLowerCase();
+        return HUNDO_FORM_ID_VALUES.has(formId) ? formId : 'uncertain';
+    };
+
+    const normalizeHundoFormEvidence = (evidence = {}) => {
+        const regionVisibility = stringValue(evidence?.region_visibility).toLowerCase();
+        const recognitionBasis = stringValue(evidence?.recognition_basis).toLowerCase();
+        const visualSignature = stringValue(evidence?.visual_signature).toLowerCase();
+        const labelRelationship = stringValue(evidence?.label_relationship).toLowerCase();
+        return {
+            region_visibility: REGION_VISIBILITY_VALUES.has(regionVisibility) ? regionVisibility : 'uncertain',
+            recognition_basis: FORM_RECOGNITION_BASIS_VALUES.has(recognitionBasis) ? recognitionBasis : 'uncertain',
+            visual_signature: FORM_VISUAL_SIGNATURE_VALUES.has(visualSignature) ? visualSignature : 'uncertain',
+            key_features_visible: evidence?.key_features_visible === true,
+            label_relationship: FORM_LABEL_RELATIONSHIP_VALUES.has(labelRelationship) ? labelRelationship : 'uncertain'
+        };
+    };
+
+    const adaptLegacyHundoForm = (card = {}, normalizeOfficialName) => {
+        const legacyValue = stringValue(card?.official_name) || stringValue(card?.base_species);
+        const sanitized = stripSmartHundoPresentationPrefixes(legacyValue);
+        const alias = HUNDO_FORM_ALIASES[sanitized];
+        const baseSpecies = normalizeHundoBaseSpecies(legacyValue, normalizeOfficialName);
+        return {
+            base_species: baseSpecies,
+            form_id: alias?.candidate_form_id || (Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)
+                ? 'uncertain'
+                : 'not_applicable')
+        };
+    };
+
     const normalizeSmartHundoCard = (card = {}, normalizeOfficialName, options = {}) => {
         const screenshotIndex = normalizeCoordinate(options?.screenshotIndex);
         const hasRocketState = card?.rocket_state !== undefined && card?.rocket_state !== null;
@@ -354,6 +499,15 @@
             rocket: normalizeRocketEvidence(card?.rocket_evidence),
             background: normalizeBackgroundEvidence(card?.background_evidence)
         };
+        const rawForm = {
+            base_species: stringValue(card?.base_species),
+            form_id: card?.form_id === undefined || card?.form_id === null ? '' : String(card?.form_id).toLowerCase(),
+            form_confidence: card?.form_confidence,
+            form_evidence: normalizeHundoFormEvidence(card?.form_evidence)
+        };
+        const legacyForm = adaptLegacyHundoForm(card, normalizeOfficialName);
+        const baseSpecies = normalizeHundoBaseSpecies(rawForm.base_species || legacyForm.base_species, normalizeOfficialName);
+        const formId = normalizeHundoFormId(rawForm.form_id || (rawForm.base_species ? 'uncertain' : legacyForm.form_id));
         const order = normalizeSmartHundoCoordinate(card?.order);
         const row = normalizeSmartHundoCoordinate(card?.row);
         const column = normalizeSmartHundoCoordinate(card?.column);
@@ -368,6 +522,10 @@
             official_name: normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName),
             recognition_status: normalizeRecognitionStatus(card?.recognition_status),
             species_confidence: clampConfidence(card?.species_confidence),
+            base_species: baseSpecies,
+            form_id: formId,
+            form_confidence: clampConfidence(rawForm.form_confidence),
+            form_evidence: rawForm.form_evidence,
             cp: stringValue(card?.cp),
             shiny_state: normalizeIndependentState(rawStates.shiny),
             shiny_confidence: clampConfidence(rawConfidences.shiny),
@@ -389,11 +547,14 @@
             effective_favorite_state: EFFECTIVE_STATE_DEFAULTS.favorite,
             effective_rocket_state: EFFECTIVE_STATE_DEFAULTS.rocket,
             effective_background_type: EFFECTIVE_STATE_DEFAULTS.background,
+            effective_form_id: 'uncertain',
+            canonical_official_name: '',
             manual_review_reasons: [],
             raw: {
                 states: rawStates,
                 confidences: rawConfidences,
-                evidence: rawEvidence
+                evidence: rawEvidence,
+                form: rawForm
             }
         };
     };
@@ -1082,6 +1243,12 @@
         isSmartHundoClassification,
         partitionImageJobs,
         adaptLegacyRocketState,
+        HUNDO_FORM_CANONICAL_NAMES,
+        HUNDO_FORMS_BY_BASE_SPECIES,
+        normalizeHundoBaseSpecies,
+        normalizeHundoFormId,
+        normalizeHundoFormEvidence,
+        adaptLegacyHundoForm,
         normalizeSmartHundoCard,
         normalizeSmartHundoResult,
         normalizeVisibleLabel,
