@@ -3089,14 +3089,8 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                             index: result.imageIndex,
                             cards: result.card_result.cards
                         }));
-                    const overlapMerge = helpers.mergeSmartHundoScreenshots(
-                        successfulCardScreenshots,
-                        normalizePokemonBaseName
-                    );
-                    const conversion = helpers.smartHundoCardsToPokemonList(
-                        overlapMerge.cards,
-                        normalizePokemonBaseName
-                    );
+                    const overlapMerge = helpers.mergeSmartHundoScreenshots(successfulCardScreenshots);
+                    const conversion = helpers.smartHundoCardsToPokemonList(overlapMerge.cards);
                     const allCardOperationsSucceeded = smartResults.every(result => result.card_operation_succeeded);
                     const hasCompleteConfidentEmptyCardExtraction = (
                         smartResults.length > 0

@@ -17,7 +17,7 @@
 - `FORM_CONFIDENCE_THRESHOLD = 0.85`; `FORM_PARTIAL_VISIBILITY_THRESHOLD = 0.93`; existing `SPECIES_CONFIDENCE_THRESHOLD = 0.80` remains unchanged.
 - Whitelist species never use raw `official_name` or a generic `visible_label` as proof of standard form.
 - No unresolved, unsupported, or mismatched whitelist form enters `pokemon_list`.
-- Non-whitelist species retain the existing sanitized official-name path after validation sets `effective_form_id = 'not_applicable'`.
+- Structured non-whitelist cards retain the sanitized official-name path only for the exact `form_id='not_applicable'` plus `visual_signature='not_applicable'` tuple; transitional legacy cards with no raw structured form may reach the same result through the adapter.
 - Keep one count operation and one full-image card/state operation per matching screenshot, plus only the existing one controlled structural retry when structurally incomplete.
 - Do not create a per-Pokémon request, a traditional computer-vision pipeline, OpenCV use, contour extraction, pixel templates, or external dependencies.
 - Keep the complete original image and `detail: 'high'` for the card/state request.
@@ -226,13 +226,14 @@ deepEqual(normalized.raw.form, {
   form_confidence: 0.98,
   form_evidence: formEvidence()
 });
+equal(normalized.raw.form_contract_present, true);
 ```
 
 Also assert:
 
 - all invalid form IDs normalize to `uncertain`;
 - `unsupported` is preserved;
-- outside-whitelist `base_species='超夢'` preserves raw `form_id='not_applicable'`;
+- outside-whitelist `base_species='超夢'` preserves the exact raw `form_id='not_applicable'` plus `visual_signature='not_applicable'` tuple;
 - a generic whitelist base name never adapts to a standard form;
 - illegal `火焰鳥 + dialga_origin` is preserved raw for Task 2 to reject;
 - normalized form evidence always has exactly five keys and controlled values.
@@ -278,9 +279,13 @@ const FORM_LABEL_RELATIONSHIP_VALUES = new Set([
 ]);
 ```
 
-Use one frozen alias lookup containing exact aliases and their base/candidate form. `adaptLegacyHundoForm()` may return a candidate only for an exact legacy special-form alias. For generic whitelist base names it returns `uncertain`; for a non-whitelist legacy card it returns `not_applicable`.
+Use one frozen alias lookup containing exact aliases and their base/candidate form. `adaptLegacyHundoForm()` may return a candidate only for an exact legacy special-form alias. For generic whitelist base names it returns `uncertain`; only a transitional non-whitelist card with no raw structured form may receive adapter-produced `not_applicable`.
 
-Extend `normalizeSmartHundoCard()` exactly as defined in the interface. Never set `effective_form_id` from raw form data.
+Extend `normalizeSmartHundoCard()` exactly as defined in the interface. Keep `raw.form` at exactly
+its four specified fields and add the sibling boolean `raw.form_contract_present`, which is true
+when the input has any own property among `base_species`, `form_id`, `form_confidence`, or
+`form_evidence`, including explicitly empty values. Never set `effective_form_id` from raw form
+data.
 
 - [ ] **Step 4: Narrow regression source locks without weakening boundaries**
 
@@ -424,7 +429,8 @@ Add tests for:
 - `recognition_basis='uncertain'` remains unresolved and adds `form_uncertain`;
 - `label_relationship='conflicting'` remains unresolved and adds `form_species_mismatch`;
 - species confidence `0.799` remains unresolved and adds both `species_uncertain` and `form_uncertain`;
-- non-whitelist `超夢`, `固拉多`, `蓋歐卡`, `鳳王`, `哲爾尼亞斯` become `not_applicable` and keep existing canonical official names without form reasons.
+- structured non-whitelist `超夢`, `固拉多`, `蓋歐卡`, `鳳王`, `哲爾尼亞斯` use the exact `form_id='not_applicable'` plus `visual_signature='not_applicable'` tuple and keep existing canonical official names without form reasons;
+- malformed structured non-whitelist tuples reject with every applicable controlled form reason, while transitional legacy cards with no raw structured form remain adapter-compatible.
 
 - [ ] **Step 2: Run RED**
 
@@ -459,12 +465,26 @@ recognition_basis === 'direct_visual_match'
 key_features_visible === true
 ```
 
-For non-whitelist species, set:
+For a structured non-whitelist species, accept only this exact control tuple:
 
 ```js
-effective_form_id: 'not_applicable'
-canonical_official_name: normalizeSmartHundoOfficialName(card.official_name, normalizeOfficialName)
+form_id === 'not_applicable'
+form_evidence.visual_signature === 'not_applicable'
 ```
+
+Use `raw.form_contract_present` to distinguish structured inputs from transitional legacy inputs;
+for older normalized objects without that sibling, retain the prior nonempty raw base/form
+fallback. A direct validator call must treat any own property among all four structured fields
+(including `form_confidence`) as structured. Confidence comparisons must first require a finite
+primitive number, then clamp it; coercible strings, booleans, arrays, `NaN`, Infinity, and missing
+values all fail closed at zero.
+
+Then set `effective_form_id='not_applicable'` and build the canonical name through the sanitized
+official-name path without adding a form reason merely because the species lacks supported forms.
+Reject malformed structured tuples with controlled reasons: `uncertain` → `form_uncertain`,
+`unsupported` → `unsupported_form`, a supported form ID → `form_species_mismatch`, and a
+non-`not_applicable` signature → `form_signature_mismatch`; retain every applicable reason.
+Transitional legacy cards with no raw structured form remain accepted through the adapter.
 
 Do not mutate raw form data. Deduplicate reason codes while retaining all pre-existing reasons.
 

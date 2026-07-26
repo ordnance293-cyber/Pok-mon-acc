@@ -223,11 +223,17 @@ alias 可以正規化 `base_species`。只有精確 legacy form alias 在 struct
       form_id,
       form_confidence,
       form_evidence
-    }
+    },
+    form_contract_present
   },
   manual_review_reasons
 }
 ```
+
+`raw.form_contract_present` 只記錄輸入是否對 `base_species`、`form_id`、
+`form_confidence`、`form_evidence` 任一欄位具有 own property；即使值為空也必須為
+`true`。`raw.form` 本身仍嚴格保持上述四欄。這個 provenance 讓 validator 只把四欄
+全部缺席的 transitional legacy card 交給 adapter。
 
 normalize 階段不信任 raw form。所有卡片先以 `effective_form_id='uncertain'`、`canonical_official_name=''` 進入 validation。非白名單物種只在 validation 確認其不需要 V1 form support 後成為 `effective_form_id='not_applicable'`。
 
@@ -241,6 +247,9 @@ const FORM_PARTIAL_VISIBILITY_THRESHOLD = 0.93;
 ```
 
 既有 `SPECIES_CONFIDENCE_THRESHOLD = 0.80` 不變。
+
+Validator 的 confidence gate 只接受 finite primitive number；numeric string、boolean、
+array、`NaN`、Infinity 與缺值一律以 `0` fail closed，再套用既有門檻。
 
 ### 白名單物種
 
@@ -272,12 +281,21 @@ canonical_official_name = HUNDO_FORM_CANONICAL_NAMES[form_id]
 
 ### 非白名單物種
 
-非白名單物種：
+結構化的非白名單卡片只有在 `form_id='not_applicable'` 且
+`form_evidence.visual_signature='not_applicable'` 時才通過。這個精確控制 tuple：
 
-- `effective_form_id = 'not_applicable'`
-- `canonical_official_name` 走既有 sanitized official-name path
-- raw `form_id` 只保留在 diagnostics
-- 不因未支援型態辨識而新增 form review reason
+- 設定 `effective_form_id = 'not_applicable'`
+- 讓 `canonical_official_name` 走既有 sanitized official-name path
+- 不會只因物種沒有支援型態而新增 form review reason
+
+其他結構化 tuple 必須 fail closed、輸出 `effective_form_id='uncertain'` 與空的
+`canonical_official_name`，並累積所有適用的 controlled reasons：raw `uncertain` 對應
+`form_uncertain`、`unsupported` 對應 `unsupported_form`、supported form ID 對應
+`form_species_mismatch`、非 `not_applicable` signature 對應 `form_signature_mismatch`。
+
+只有沒有 raw structured form 的 transitional legacy card 才走 adapter；若 legacy
+`official_name` 對應非白名單物種，adapter 可產生 `not_applicable` 並沿用 sanitized
+official-name path。
 
 這個規則保留 Mewtwo、Groudon、Kyogre、Ho-Oh、Xerneas 與其他普通物種的現有結果。
 

@@ -479,6 +479,8 @@
 
     const normalizeSmartHundoCard = (card = {}, normalizeOfficialName, options = {}) => {
         const screenshotIndex = normalizeCoordinate(options?.screenshotIndex);
+        const formContractPresent = ['base_species', 'form_id', 'form_confidence', 'form_evidence']
+            .some(field => Object.hasOwn(card || {}, field));
         const hasRocketState = card?.rocket_state !== undefined && card?.rocket_state !== null;
         const rawStates = {
             shiny: normalizeRawValue(card?.shiny_state),
@@ -557,7 +559,8 @@
                 states: rawStates,
                 confidences: rawConfidences,
                 evidence: rawEvidence,
-                form: rawForm
+                form: rawForm,
+                form_contract_present: formContractPresent
             }
         };
     };
@@ -681,14 +684,8 @@
         manual_review_reasons: ['screenshot_overlap_uncertain']
     });
 
-    const mergeSmartHundoScreenshots = (screenshots = [], normalizeOfficialName) => {
+    const mergeSmartHundoScreenshots = (screenshots = []) => {
         const screenshotList = Array.isArray(screenshots) ? screenshots : [];
-        const comparisonScreenshots = screenshotList.map(screenshot => ({
-            cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(card => ({
-                ...card,
-                official_name: normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName)
-            }))
-        }));
         const pairRecords = [];
 
         for (let leftIndex = 0; leftIndex < screenshotList.length; leftIndex += 1) {
@@ -697,8 +694,8 @@
                     leftIndex,
                     rightIndex,
                     decision: detectScreenshotOverlap(
-                        comparisonScreenshots[leftIndex],
-                        comparisonScreenshots[rightIndex]
+                        screenshotList[leftIndex],
+                        screenshotList[rightIndex]
                     )
                 });
             }
@@ -1252,23 +1249,40 @@
         const baseSpecies = card?.base_species;
         const formId = card?.form_id;
         const formEvidence = card?.form_evidence || {};
+        const strictConfidence = value => (
+            typeof value === 'number' && Number.isFinite(value) ? clampConfidence(value) : 0
+        );
+        const speciesConfidence = strictConfidence(card?.species_confidence);
+        const formConfidence = strictConfidence(card?.form_confidence);
 
         if (!Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)) {
             const hasRawFormSnapshot = card?.raw?.form && typeof card.raw.form === 'object';
             const rawForm = hasRawFormSnapshot ? card.raw.form : {};
-            const hasStructuredForm = hasRawFormSnapshot
-                ? stringValue(rawForm.base_species) !== '' || stringValue(rawForm.form_id) !== ''
-                : Object.hasOwn(card || {}, 'base_species') || Object.hasOwn(card || {}, 'form_id') || Object.hasOwn(card || {}, 'form_evidence');
+            const hasFormContractFlag = card?.raw
+                && typeof card.raw === 'object'
+                && Object.hasOwn(card.raw, 'form_contract_present');
+            const hasStructuredForm = hasFormContractFlag
+                ? card.raw.form_contract_present === true
+                : hasRawFormSnapshot
+                    ? stringValue(rawForm.base_species) !== '' || stringValue(rawForm.form_id) !== ''
+                    : ['base_species', 'form_id', 'form_confidence', 'form_evidence']
+                        .some(field => Object.hasOwn(card || {}, field));
             if (hasStructuredForm) {
                 const validationReasons = [];
                 const addValidationReason = (reason) => {
                     if (!validationReasons.includes(reason)) validationReasons.push(reason);
                 };
-                if (formId === 'uncertain') addValidationReason('form_uncertain');
-                else if (formId === 'unsupported') addValidationReason('unsupported_form');
-                else if (HUNDO_SUPPORTED_FORM_IDS.has(formId)) addValidationReason('form_species_mismatch');
-                else if (formId !== 'not_applicable') addValidationReason('form_uncertain');
-                if (formEvidence.visual_signature !== 'not_applicable') {
+                const structuredFormId = hasRawFormSnapshot
+                    ? stringValue(rawForm.form_id).toLowerCase()
+                    : stringValue(formId).toLowerCase();
+                const structuredVisualSignature = hasRawFormSnapshot
+                    ? rawForm.form_evidence?.visual_signature
+                    : formEvidence.visual_signature;
+                if (structuredFormId === 'uncertain') addValidationReason('form_uncertain');
+                else if (structuredFormId === 'unsupported') addValidationReason('unsupported_form');
+                else if (HUNDO_SUPPORTED_FORM_IDS.has(structuredFormId)) addValidationReason('form_species_mismatch');
+                else if (structuredFormId !== 'not_applicable') addValidationReason('form_uncertain');
+                if (structuredVisualSignature !== 'not_applicable') {
                     addValidationReason('form_signature_mismatch');
                 }
                 if (validationReasons.length > 0) return reject(...validationReasons);
@@ -1297,14 +1311,14 @@
         if (!['clear', 'partially_occluded'].includes(formEvidence.region_visibility)) {
             addValidationReason('form_region_not_clear');
         }
-        if (Number(card?.species_confidence) < SPECIES_CONFIDENCE_THRESHOLD) {
+        if (speciesConfidence < SPECIES_CONFIDENCE_THRESHOLD) {
             addValidationReason('species_uncertain');
             addValidationReason('form_uncertain');
         }
         const minimumFormConfidence = isPartiallyOccluded
             ? FORM_PARTIAL_VISIBILITY_THRESHOLD
             : FORM_CONFIDENCE_THRESHOLD;
-        if (Number(card?.form_confidence) < minimumFormConfidence) {
+        if (formConfidence < minimumFormConfidence) {
             if (isPartiallyOccluded) addValidationReason('form_region_not_clear');
             addValidationReason('form_confidence_low');
         }
@@ -1355,7 +1369,7 @@
         return reasons.filter(isHundoReviewReason);
     };
 
-    const buildHundoDisplayName = (card = {}, normalizeOfficialName) => {
+    const buildHundoDisplayName = (card = {}) => {
         if (!hasUsableRecognizedSpecies(card)) return '';
         const canonicalOfficialName = stringValue(card?.canonical_official_name);
         if (!canonicalOfficialName) return '';
@@ -1391,12 +1405,12 @@
         };
     };
 
-    const smartHundoCardsToPokemonList = (cards = [], normalizeOfficialName) => {
+    const smartHundoCardsToPokemonList = (cards = []) => {
         const displayGroups = new Map();
         let recognizedCount = 0;
 
         (Array.isArray(cards) ? cards : []).forEach(card => {
-            const displayName = buildHundoDisplayName(card, normalizeOfficialName);
+            const displayName = buildHundoDisplayName(card);
             if (!displayName) return;
             displayGroups.set(displayName, (displayGroups.get(displayName) || 0) + 1);
             recognizedCount += 1;

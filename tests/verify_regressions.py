@@ -110,27 +110,79 @@ def assert_manual_v1_form_acceptance_doc() -> None:
     if not MANUAL_V1_FORM_ACCEPTANCE_DOC.is_file():
         raise AssertionError(f"manual V1 form acceptance document does not exist: {MANUAL_V1_FORM_ACCEPTANCE_DOC}")
     document = normalized_source(MANUAL_V1_FORM_ACCEPTANCE_DOC)
-    for fragment in (
-        "## A. standard Articuno vs Galarian Articuno",
-        "## B. standard Zapdos vs Galarian Zapdos",
-        "## C. standard Moltres vs Galarian Moltres",
-        "## D. standard Zacian vs Crowned Zacian",
-        "## E. standard Zamazenta vs Crowned Zamazenta",
-        "## F. standard Dialga vs Origin Dialga",
-        "## G. standard Palkia vs Origin Palkia",
-        "## H. all three Zygarde forms",
-        "## I. all three supported Necrozma forms",
-        "## J. all three Kyurem forms",
-        "## K. 蒼響 / 奈克洛茲瑪 / 伽勒爾火焰鳥",
+    require_fragment(
+        document,
+        "mocked browser tests verify data flow and validation boundaries only; they do not prove visual-recognition accuracy on real images",
+        "manual acceptance document",
+    )
+    expected_header = [
         "full commit SHA", "anonymized screenshot ID", "visible label", "base_species",
         "raw form_id", "form confidence", "form evidence", "effective form_id",
         "canonical official name", "final pokemon_list", "pass/fail", "failure summary",
-        "待人工執行",
-        "mocked browser tests verify data flow and validation boundaries only; they do not prove visual-recognition accuracy on real images",
-    ):
-        require_fragment(document, fragment, "manual acceptance document")
-    if "| PASS |" in document or "| FAIL |" in document:
-        raise AssertionError("manual acceptance document must leave every real-image result pending")
+    ]
+    expected_sections = {
+        "A. standard Articuno vs Galarian Articuno": [("急凍鳥", "articuno_standard / articuno_galarian")],
+        "B. standard Zapdos vs Galarian Zapdos": [("閃電鳥", "zapdos_standard / zapdos_galarian")],
+        "C. standard Moltres vs Galarian Moltres": [("火焰鳥", "moltres_standard / moltres_galarian")],
+        "D. standard Zacian vs Crowned Zacian": [("蒼響", "zacian_standard / zacian_crowned")],
+        "E. standard Zamazenta vs Crowned Zamazenta": [("藏瑪然特", "zamazenta_standard / zamazenta_crowned")],
+        "F. standard Dialga vs Origin Dialga": [("帝牙盧卡", "dialga_standard / dialga_origin")],
+        "G. standard Palkia vs Origin Palkia": [("帕路奇亞", "palkia_standard / palkia_origin")],
+        "H. all three Zygarde forms": [
+            ("基格爾德", "zygarde_10"), ("基格爾德", "zygarde_50"), ("基格爾德", "zygarde_complete"),
+        ],
+        "I. all three supported Necrozma forms": [
+            ("奈克洛茲瑪", "necrozma_base"),
+            ("奈克洛茲瑪", "necrozma_dusk_mane"),
+            ("奈克洛茲瑪", "necrozma_dawn_wings"),
+        ],
+        "J. all three Kyurem forms": [
+            ("酋雷姆", "kyurem_base"), ("酋雷姆", "kyurem_white"), ("酋雷姆", "kyurem_black"),
+        ],
+        "K. 蒼響 / 奈克洛茲瑪 / 伽勒爾火焰鳥": [
+            ("蒼響 / 奈克洛茲瑪 / 火焰鳥", "zacian_standard / necrozma_base / moltres_galarian"),
+        ],
+    }
+
+    def table_cells(line: str) -> list[str]:
+        return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+    section_names = list(expected_sections)
+    for section_index, (section_name, expected_rows) in enumerate(expected_sections.items()):
+        marker = f"## {section_name}"
+        section_start = document.find(marker)
+        if section_start < 0:
+            raise AssertionError(f"manual acceptance document: missing section {section_name!r}")
+        next_marker = f"## {section_names[section_index + 1]}" if section_index + 1 < len(section_names) else None
+        section_end = document.find(next_marker, section_start) if next_marker else len(document)
+        section = document[section_start:section_end]
+        table_lines = [line.strip() for line in section.splitlines() if line.strip().startswith("|")]
+        if len(table_lines) != len(expected_rows) + 2:
+            raise AssertionError(
+                f"manual acceptance document: section {section_name!r} must have one header, one separator, "
+                f"and {len(expected_rows)} result rows"
+            )
+        if table_cells(table_lines[0]) != expected_header:
+            raise AssertionError(f"manual acceptance document: section {section_name!r} has incorrect columns")
+        separator = table_cells(table_lines[1])
+        if len(separator) != len(expected_header) or any(cell != "---" for cell in separator):
+            raise AssertionError(f"manual acceptance document: section {section_name!r} has an invalid separator row")
+        for row_index, ((expected_species, expected_form), line) in enumerate(zip(expected_rows, table_lines[2:]), start=1):
+            cells = table_cells(line)
+            if len(cells) != len(expected_header):
+                raise AssertionError(
+                    f"manual acceptance document: section {section_name!r} row {row_index} must have 12 columns"
+                )
+            if cells[3:5] != [expected_species, expected_form]:
+                raise AssertionError(
+                    f"manual acceptance document: section {section_name!r} row {row_index} has wrong species/form"
+                )
+            for cell_index in (0, 1, 2, 5, 6, 7, 8, 9, 10, 11):
+                if cells[cell_index] != "待人工執行":
+                    raise AssertionError(
+                        f"manual acceptance document: section {section_name!r} row {row_index} "
+                        f"column {expected_header[cell_index]!r} must remain pending"
+                    )
 
 
 def assert_manual_v2_acceptance_doc() -> None:
