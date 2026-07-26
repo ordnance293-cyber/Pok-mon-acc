@@ -96,6 +96,51 @@
         'form_signature_mismatch',
         'unsupported_form'
     ]);
+    const HUNDO_FORM_VERIFIER_RESULT_FIELDS = Object.freeze([
+        'tile_id',
+        'card_id',
+        'base_species',
+        'verified_form_id',
+        'verification_confidence',
+        'crop_visibility',
+        'body_plan',
+        'limb_layout',
+        'fusion_host',
+        'decisive_feature',
+        'key_features_visible'
+    ]);
+    const HUNDO_FORM_VERIFIER_FORM_IDS = new Set([
+        'uncertain',
+        ...Object.keys(REQUIRED_VERIFIED_FORM_EVIDENCE)
+    ]);
+    const HUNDO_FORM_VERIFIER_VISIBILITY_VALUES = new Set([
+        'clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain'
+    ]);
+    const HUNDO_FORM_VERIFIER_EVIDENCE_ENUM_VALUES = Object.freeze({
+        body_plan: Object.freeze(['uncertain', 'dialga_stocky_wide_quadruped', 'dialga_elongated_equine_quadruped', 'palkia_upright_biped_with_arms', 'palkia_centaur_quadruped', 'necrozma_upright_crystalline', 'necrozma_quadruped_lion', 'necrozma_wide_moon_wings']),
+        limb_layout: Object.freeze(['uncertain', 'four_standard_legs', 'four_long_legs', 'two_arms_two_legs', 'four_legs_no_standard_arms', 'upright_crystalline_limbs', 'quadruped_lion', 'giant_wings_no_lion_body']),
+        fusion_host: Object.freeze(['uncertain', 'not_applicable', 'none', 'solgaleo', 'lunala']),
+        decisive_feature: Object.freeze(['uncertain', 'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest', 'palkia_standard_visible_arms', 'palkia_origin_centaur_body', 'necrozma_base_crystal_body', 'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings'])
+    });
+    const HUNDO_FORM_VERIFIER_CONTROLLED_STATUS_VALUES = Object.freeze([
+        'verified',
+        'uncertain',
+        'low_confidence',
+        'species_mismatch',
+        'evidence_mismatch',
+        'invalid_result',
+        'structural_incomplete',
+        'request_failed'
+    ]);
+    const HUNDO_FORM_VERIFIER_CANONICAL_NAMES = Object.freeze({
+        dialga_standard: '\u5e1d\u7259\u76e7\u5361',
+        dialga_origin: '\u8d77\u6e90\u5e1d\u7259\u76e7\u5361',
+        palkia_standard: '\u5e15\u8def\u5947\u4e9e',
+        palkia_origin: '\u8d77\u6e90\u5e15\u8def\u5947\u4e9e',
+        necrozma_base: '\u5948\u514b\u6d1b\u8332\u746a',
+        necrozma_dusk_mane: '\u5948\u514b\u6d1b\u8332\u746a\uff08\u9ec3\u660f\u4e4b\u9b03\uff09',
+        necrozma_dawn_wings: '\u5948\u514b\u6d1b\u8332\u746a\uff08\u62c2\u66c9\u4e4b\u7ffc\uff09'
+    });
 
     const isFinitePrimitiveNumber = value => typeof value === 'number' && Number.isFinite(value);
     const isFinitePrimitiveInteger = value => isFinitePrimitiveNumber(value) && Number.isInteger(value);
@@ -115,6 +160,228 @@
         decisive_feature: 'uncertain',
         key_features_visible: false
     });
+    const isPlainObject = value => value !== null
+        && typeof value === 'object'
+        && Object.getPrototypeOf(value) === Object.prototype;
+    const hasOnlyOwnFields = (value, fields) => isPlainObject(value)
+        && Reflect.ownKeys(value).length === fields.length
+        && fields.every(field => Object.hasOwn(value, field))
+        && Reflect.ownKeys(value).every(field => typeof field === 'string' && fields.includes(field));
+    const isDensePlainArray = value => Array.isArray(value)
+        && Object.getPrototypeOf(value) === Array.prototype
+        && Reflect.ownKeys(value).length === value.length + 1
+        && Reflect.ownKeys(value).every(key => key === 'length' || /^(0|[1-9]\d*)$/.test(key))
+        && Array.from({ length: value.length }, (_unused, index) => Object.hasOwn(value, index)).every(Boolean);
+
+    const normalizeHundoFormVerifierCard = value => {
+        if (!hasOnlyOwnFields(value, HUNDO_FORM_VERIFIER_RESULT_FIELDS)) return null;
+        if (![value.tile_id, value.card_id, value.base_species, value.verified_form_id,
+            value.crop_visibility, value.body_plan, value.limb_layout, value.fusion_host,
+            value.decisive_feature].every(field => typeof field === 'string')) return null;
+        if (!isFinitePrimitiveNumber(value.verification_confidence)
+            || value.verification_confidence < 0 || value.verification_confidence > 1
+            || typeof value.key_features_visible !== 'boolean'
+            || !TARGET_HUNDO_FORM_BASE_SPECIES.includes(value.base_species)
+            || !HUNDO_FORM_VERIFIER_FORM_IDS.has(value.verified_form_id)
+            || !HUNDO_FORM_VERIFIER_VISIBILITY_VALUES.has(value.crop_visibility)
+            || !HUNDO_FORM_VERIFIER_EVIDENCE_ENUM_VALUES.body_plan.includes(value.body_plan)
+            || !HUNDO_FORM_VERIFIER_EVIDENCE_ENUM_VALUES.limb_layout.includes(value.limb_layout)
+            || !HUNDO_FORM_VERIFIER_EVIDENCE_ENUM_VALUES.fusion_host.includes(value.fusion_host)
+            || !HUNDO_FORM_VERIFIER_EVIDENCE_ENUM_VALUES.decisive_feature.includes(value.decisive_feature)) return null;
+        return {
+            tile_id: value.tile_id,
+            card_id: value.card_id,
+            base_species: value.base_species,
+            verified_form_id: value.verified_form_id,
+            verification_confidence: value.verification_confidence,
+            crop_visibility: value.crop_visibility,
+            body_plan: value.body_plan,
+            limb_layout: value.limb_layout,
+            fusion_host: value.fusion_host,
+            decisive_feature: value.decisive_feature,
+            key_features_visible: value.key_features_visible
+        };
+    };
+
+    const normalizeHundoFormVerifierResult = result => {
+        if (!hasOnlyOwnFields(result, ['cards']) || !isDensePlainArray(result.cards)) return null;
+        const cards = result.cards.map(normalizeHundoFormVerifierCard);
+        return cards.every(Boolean) ? { cards } : null;
+    };
+
+    const isValidHundoFormVerifierJob = job => isPlainObject(job)
+        && Object.hasOwn(job, 'tile_id')
+        && Object.hasOwn(job, 'card_id')
+        && Object.hasOwn(job, 'base_species')
+        && Object.hasOwn(job, 'candidate_form_ids')
+        && typeof job.tile_id === 'string'
+        && typeof job.card_id === 'string'
+        && typeof job.base_species === 'string'
+        && Array.isArray(job.candidate_form_ids);
+
+    const validateHundoFormVerifierStructure = (result, jobs, finishReason) => {
+        const retryReasons = new Set();
+        const normalized = normalizeHundoFormVerifierResult(result);
+        const requestedJobs = isDensePlainArray(jobs) ? jobs : null;
+        if (!normalized || !requestedJobs) {
+            return { complete: false, retry_reasons: ['invalid_required_field'], normalized: null };
+        }
+        if (!requestedJobs.every(isValidHundoFormVerifierJob)) {
+            return { complete: false, retry_reasons: ['invalid_required_field'], normalized };
+        }
+        if (['length', 'truncated', 'truncation'].includes(finishReason)) retryReasons.add('truncation');
+        const jobsByTile = new Map();
+        const jobsByCard = new Map();
+        requestedJobs.forEach(job => {
+            if (jobsByTile.has(job.tile_id) || jobsByCard.has(job.card_id)) {
+                retryReasons.add('invalid_required_field');
+                return;
+            }
+            jobsByTile.set(job.tile_id, job);
+            jobsByCard.set(job.card_id, job);
+        });
+        const seenTiles = new Set();
+        const seenCards = new Set();
+        const matchedCards = new Set();
+        normalized.cards.forEach(card => {
+            if (seenTiles.has(card.tile_id)) retryReasons.add('duplicate_tile');
+            seenTiles.add(card.tile_id);
+            if (seenCards.has(card.card_id)) retryReasons.add('duplicate_card');
+            seenCards.add(card.card_id);
+            const job = jobsByTile.get(card.tile_id);
+            if (!job || job.card_id !== card.card_id || jobsByCard.get(card.card_id) !== job) {
+                retryReasons.add('unexpected');
+                return;
+            }
+            matchedCards.add(card.card_id);
+        });
+        requestedJobs.forEach(job => {
+            if (!matchedCards.has(job.card_id)) retryReasons.add('missing');
+        });
+        return {
+            complete: retryReasons.size === 0,
+            retry_reasons: [...retryReasons],
+            normalized,
+            cards_by_id: new Map(normalized.cards.map(card => [card.card_id, card]))
+        };
+    };
+
+    const validateHundoVerifiedForm = (resultCard, job) => {
+        const card = normalizeHundoFormVerifierCard(resultCard);
+        if (!card || !isPlainObject(job)
+            || card.tile_id !== job.tile_id || card.card_id !== job.card_id) {
+            return { valid: false, reason: 'form_verifier_invalid_result' };
+        }
+        if (card.base_species !== job.base_species) {
+            return { valid: false, reason: 'form_verifier_species_mismatch' };
+        }
+        if (card.verified_form_id === 'uncertain') {
+            return { valid: false, reason: 'form_verifier_uncertain' };
+        }
+        const evidence = REQUIRED_VERIFIED_FORM_EVIDENCE[card.verified_form_id];
+        if (!evidence || evidence.base_species !== card.base_species
+            || !Array.isArray(job.candidate_form_ids)
+            || !job.candidate_form_ids.includes(card.verified_form_id)) {
+            return { valid: false, reason: 'form_verifier_species_mismatch' };
+        }
+        if (!['clear', 'partially_visible'].includes(card.crop_visibility)
+            || card.key_features_visible !== true
+            || card.body_plan !== evidence.body_plan
+            || card.limb_layout !== evidence.limb_layout
+            || card.fusion_host !== evidence.fusion_host
+            || card.decisive_feature !== evidence.decisive_feature) {
+            return { valid: false, reason: 'form_verifier_evidence_mismatch' };
+        }
+        const threshold = card.crop_visibility === 'partially_visible'
+            ? HUNDO_FORM_VERIFY_PARTIAL_THRESHOLD
+            : HUNDO_FORM_VERIFY_CONFIDENCE_THRESHOLD;
+        if (card.verification_confidence < threshold) {
+            return { valid: false, reason: 'form_verifier_low_confidence' };
+        }
+        return { valid: true, result: card };
+    };
+
+    const verificationFailure = (card, reason) => {
+        const statusByReason = {
+            form_verifier_uncertain: 'uncertain',
+            form_verifier_low_confidence: 'low_confidence',
+            form_verifier_species_mismatch: 'species_mismatch',
+            form_verifier_evidence_mismatch: 'evidence_mismatch',
+            form_verifier_invalid_result: 'invalid_result',
+            form_verifier_structural_incomplete: 'structural_incomplete',
+            form_verification_request_failed: 'request_failed'
+        };
+        const status = statusByReason[reason] || 'invalid_result';
+        return {
+            ...card,
+            verified_form_id: 'uncertain',
+            verification_confidence: 0,
+            verification_evidence: verificationEvidenceDefaults(),
+            verification_status: HUNDO_FORM_VERIFIER_CONTROLLED_STATUS_VALUES.includes(status) ? status : 'invalid_result',
+            effective_form_id: 'uncertain',
+            canonical_official_name: '',
+            manual_review_reasons: addReason(
+                Array.isArray(card?.manual_review_reasons) ? card.manual_review_reasons.slice() : [],
+                reason
+            )
+        };
+    };
+
+    const mergeHundoFormVerificationResults = (cards, jobs, result, structure, canonicalNames) => {
+        const requestedJobs = Array.isArray(jobs) ? jobs : [];
+        const jobsByCard = new Map(requestedJobs.map(job => [job?.card_id, job]));
+        const evaluatedStructure = structure && typeof structure === 'object'
+            ? structure
+            : validateHundoFormVerifierStructure(result, requestedJobs);
+        const normalized = evaluatedStructure?.normalized || normalizeHundoFormVerifierResult(result);
+        const resultsByCard = evaluatedStructure?.cards_by_id instanceof Map
+            ? evaluatedStructure.cards_by_id
+            : new Map((normalized?.cards || []).map(card => [card.card_id, card]));
+        const structuralReason = evaluatedStructure?.request_failed === true
+            ? 'form_verification_request_failed'
+            : evaluatedStructure?.complete === true
+                ? null
+                : (evaluatedStructure?.retry_reasons || []).some(reason => [
+                    'invalid_required_field', 'duplicate_tile', 'duplicate_card', 'unexpected'
+                ].includes(reason))
+                    ? 'form_verifier_invalid_result'
+                    : 'form_verifier_structural_incomplete';
+        return Array.isArray(cards) ? cards.map(card => {
+            const ownCardId = Object.hasOwn(card || {}, 'card_id') ? canonicalCardId(card.card_id) : null;
+            const safeFallbackCardId = ownCardId ? ownCardId : cardIdFor(card, {});
+            const job = jobsByCard.get(safeFallbackCardId);
+            if (!job) {
+                return isTargetHundoFormBaseSpecies(card?.base_species)
+                    ? verificationFailure(card, 'form_verifier_invalid_result')
+                    : card;
+            }
+            if (structuralReason) return verificationFailure(card, structuralReason);
+            const verdict = validateHundoVerifiedForm(resultsByCard.get(job.card_id), job);
+            if (!verdict.valid) return verificationFailure(card, verdict.reason);
+            const verified = verdict.result;
+            const canonicalName = canonicalNames?.[verified.verified_form_id];
+            if (!Object.hasOwn(canonicalNames || {}, verified.verified_form_id)
+                || canonicalName !== HUNDO_FORM_VERIFIER_CANONICAL_NAMES[verified.verified_form_id]) {
+                return verificationFailure(card, 'form_verifier_invalid_result');
+            }
+            return {
+                ...card,
+                verified_form_id: verified.verified_form_id,
+                verification_confidence: verified.verification_confidence,
+                verification_evidence: {
+                    crop_visibility: verified.crop_visibility,
+                    body_plan: verified.body_plan,
+                    limb_layout: verified.limb_layout,
+                    fusion_host: verified.fusion_host,
+                    decisive_feature: verified.decisive_feature,
+                    key_features_visible: verified.key_features_visible
+                },
+                verification_status: 'verified',
+                effective_form_id: verified.verified_form_id,
+                canonical_official_name: canonicalName
+            };
+        }) : [];
+    };
 
     const normalizeHundoBoundingBox = value => {
         if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -348,6 +615,10 @@
         HUNDO_FORM_VERIFIER_REVIEW_REASON_MESSAGES,
         normalizeHundoBoundingBox,
         normalizeHundoBboxContract,
+        normalizeHundoFormVerifierResult,
+        validateHundoFormVerifierStructure,
+        validateHundoVerifiedForm,
+        mergeHundoFormVerificationResults,
         isTargetHundoFormBaseSpecies,
         planTargetHundoFormCandidates,
         planHundoFormVerificationBatches,

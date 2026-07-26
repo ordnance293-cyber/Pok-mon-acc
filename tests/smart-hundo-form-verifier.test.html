@@ -277,6 +277,363 @@
         jobs.forEach(job => deepEqual(Object.keys(job), ['tile_id', 'card_id', 'screenshot_index', 'base_species', 'candidate_form_ids']));
       });
 
+      const verifierJob = (overrides = {}) => ({
+        tile_id: 'T1',
+        card_id: '0:2:1:1',
+        base_species: verifier().REQUIRED_VERIFIED_FORM_EVIDENCE.dialga_origin.base_species,
+        candidate_form_ids: ['dialga_standard', 'dialga_origin', 'uncertain'],
+        ...overrides
+      });
+      const verifiedResult = (formId = 'dialga_origin', overrides = {}) => {
+        const tuple = verifier().REQUIRED_VERIFIED_FORM_EVIDENCE[formId];
+        return {
+          tile_id: 'T1',
+          card_id: '0:2:1:1',
+          base_species: tuple.base_species,
+          verified_form_id: formId,
+          verification_confidence: 0.97,
+          crop_visibility: 'clear',
+          body_plan: tuple.body_plan,
+          limb_layout: tuple.limb_layout,
+          fusion_host: tuple.fusion_host,
+          decisive_feature: tuple.decisive_feature,
+          key_features_visible: true,
+          ...overrides
+        };
+      };
+      const verifiedEnvelope = (cards, overrides = {}) => ({ cards, ...overrides });
+      const structure = (result, jobs = [verifierJob()], finishReason = 'stop') => verifier()
+        .validateHundoFormVerifierStructure(result, jobs, finishReason);
+
+      test('normalizes only exact complete verifier cards and preserves all seven exact evidence tuples', () => {
+        const api = verifier();
+        const jobs = Object.keys(api.REQUIRED_VERIFIED_FORM_EVIDENCE).map((formId, index) => {
+          const tuple = api.REQUIRED_VERIFIED_FORM_EVIDENCE[formId];
+          return {
+            tile_id: `T${index + 1}`,
+            card_id: `0:${index + 1}:1:1`,
+            base_species: tuple.base_species,
+            candidate_form_ids: [formId, 'uncertain']
+          };
+        });
+        const cards = jobs.map((job, index) => verifiedResult(Object.keys(api.REQUIRED_VERIFIED_FORM_EVIDENCE)[index], {
+          tile_id: job.tile_id,
+          card_id: job.card_id
+        }));
+        const normalized = api.normalizeHundoFormVerifierResult(verifiedEnvelope(cards));
+        deepEqual(normalized, verifiedEnvelope(cards));
+        equal(structure(normalized, jobs).complete, true);
+        cards.forEach((card, index) => {
+          const verdict = api.validateHundoVerifiedForm(card, jobs[index]);
+          equal(verdict.valid, true, card.verified_form_id);
+        });
+      });
+
+      test('rejects strict primitive schema violations and all evidence conflicts', () => {
+        const api = verifier();
+        ['0.97', true, [], {}, NaN, Infinity].forEach(value => {
+          const result = verifiedEnvelope([verifiedResult('dialga_origin', { verification_confidence: value })]);
+          const outcome = structure(result);
+          equal(outcome.complete, false);
+          equal(outcome.retry_reasons.includes('invalid_required_field'), true);
+        });
+        const checks = [
+          ['dialga body mismatch', verifiedResult('dialga_origin', { body_plan: 'dialga_stocky_wide_quadruped' }), 'form_verifier_evidence_mismatch'],
+          ['dialga limb mismatch', verifiedResult('dialga_origin', { limb_layout: 'four_standard_legs' }), 'form_verifier_evidence_mismatch'],
+          ['palkia arm conflict', verifiedResult('palkia_origin', { body_plan: 'palkia_upright_biped_with_arms' }), 'form_verifier_evidence_mismatch'],
+          ['necrozma fusion conflict', verifiedResult('necrozma_dusk_mane', { fusion_host: 'lunala' }), 'form_verifier_evidence_mismatch'],
+          ['cross species form', verifiedResult('dialga_origin', { base_species: verifier().REQUIRED_VERIFIED_FORM_EVIDENCE.palkia_origin.base_species }), 'form_verifier_species_mismatch'],
+          ['uncertain form', verifiedResult('dialga_origin', { verified_form_id: 'uncertain' }), 'form_verifier_uncertain'],
+          ['clear threshold', verifiedResult('dialga_origin', { verification_confidence: 0.899 }), 'form_verifier_low_confidence'],
+          ['partial threshold', verifiedResult('dialga_origin', { crop_visibility: 'partially_visible', verification_confidence: 0.949 }), 'form_verifier_low_confidence'],
+          ['cropped visibility', verifiedResult('dialga_origin', { crop_visibility: 'cropped' }), 'form_verifier_evidence_mismatch'],
+          ['not-visible visibility', verifiedResult('dialga_origin', { crop_visibility: 'not_visible' }), 'form_verifier_evidence_mismatch'],
+          ['uncertain visibility', verifiedResult('dialga_origin', { crop_visibility: 'uncertain' }), 'form_verifier_evidence_mismatch']
+        ];
+        checks.forEach(([name, card, reason]) => {
+          const job = verifierJob({ base_species: card.base_species, candidate_form_ids: ['dialga_origin', 'palkia_origin', 'necrozma_dusk_mane', 'uncertain'] });
+          equal(api.validateHundoVerifiedForm(card, job).reason, reason, name);
+        });
+        equal(api.validateHundoVerifiedForm(verifiedResult('dialga_origin', { verification_confidence: 0.90 }), verifierJob()).valid, true);
+        equal(api.validateHundoVerifiedForm(verifiedResult('dialga_origin', { crop_visibility: 'partially_visible', verification_confidence: 0.95 }), verifierJob()).valid, true);
+      });
+
+      test('rejects false key evidence and each explicit necrozma upright lion moon-wing conflict', () => {
+        const api = verifier();
+        equal(api.validateHundoVerifiedForm(verifiedResult('dialga_origin', { key_features_visible: false }), verifierJob()).reason, 'form_verifier_evidence_mismatch');
+        const forms = ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'];
+        const bodies = ['necrozma_upright_crystalline', 'necrozma_quadruped_lion', 'necrozma_wide_moon_wings'];
+        const limbs = ['upright_crystalline_limbs', 'quadruped_lion', 'giant_wings_no_lion_body'];
+        forms.forEach((formId, index) => {
+          const expected = api.REQUIRED_VERIFIED_FORM_EVIDENCE[formId];
+          const bodyConflict = verifiedResult(formId, { body_plan: bodies[(index + 1) % bodies.length] });
+          const limbConflict = verifiedResult(formId, { limb_layout: limbs[(index + 2) % limbs.length] });
+          const job = verifierJob({ base_species: expected.base_species, candidate_form_ids: [formId, 'uncertain'] });
+          equal(api.validateHundoVerifiedForm(bodyConflict, job).reason, 'form_verifier_evidence_mismatch', `${formId} body`);
+          equal(api.validateHundoVerifiedForm(limbConflict, job).reason, 'form_verifier_evidence_mismatch', `${formId} limb`);
+        });
+      });
+
+      test('handles clear and partially-visible confidence boundaries independently', () => {
+        const api = verifier();
+        equal(api.validateHundoVerifiedForm(verifiedResult('dialga_origin', { verification_confidence: 0.899 }), verifierJob()).reason, 'form_verifier_low_confidence');
+        equal(api.validateHundoVerifiedForm(verifiedResult('dialga_origin', { verification_confidence: 0.90 }), verifierJob()).valid, true);
+        equal(api.validateHundoVerifiedForm(verifiedResult('dialga_origin', { crop_visibility: 'partially_visible', verification_confidence: 0.949 }), verifierJob()).reason, 'form_verifier_low_confidence');
+        equal(api.validateHundoVerifiedForm(verifiedResult('dialga_origin', { crop_visibility: 'partially_visible', verification_confidence: 0.95 }), verifierJob()).valid, true);
+      });
+
+      test('reports missing duplicate unexpected sparse extra inherited and truncation structure failures', () => {
+        const api = verifier();
+        const jobs = [verifierJob(), verifierJob({ tile_id: 'T2', card_id: '0:3:1:1' })];
+        const complete = [verifiedResult(), verifiedResult('dialga_standard', { tile_id: 'T2', card_id: '0:3:1:1' })];
+        const cases = [
+          [complete.slice(0, 1), 'missing'],
+          [complete.concat(verifiedResult('dialga_origin')), 'duplicate_tile'],
+          [complete.concat(verifiedResult('dialga_standard', { tile_id: 'T3', card_id: '0:99:1:1' })), 'unexpected'],
+          [Object.assign([], { 1: complete[1], length: 2 }), 'invalid_required_field'],
+          [complete.map(card => ({ ...card, extra: true })), 'invalid_required_field']
+        ];
+        const inherited = Object.create(verifiedResult());
+        inherited.tile_id = 'T1';
+        inherited.card_id = '0:2:1:1';
+        inherited.base_species = verifier().REQUIRED_VERIFIED_FORM_EVIDENCE.dialga_origin.base_species;
+        inherited.verified_form_id = 'dialga_origin';
+        inherited.verification_confidence = 0.97;
+        inherited.crop_visibility = 'clear';
+        inherited.body_plan = 'dialga_elongated_equine_quadruped';
+        inherited.limb_layout = 'four_long_legs';
+        inherited.fusion_host = 'not_applicable';
+        inherited.decisive_feature = 'dialga_origin_elongated_neck_chest';
+        inherited.key_features_visible = true;
+        delete inherited.body_plan;
+        cases.push([[inherited, complete[1]], 'invalid_required_field']);
+        cases.forEach(([cards, reason]) => {
+          const outcome = structure(verifiedEnvelope(cards), jobs);
+          equal(outcome.complete, false);
+          equal(outcome.retry_reasons.includes(reason), true);
+        });
+        ['length', 'truncated', 'truncation'].forEach(reason => {
+          const outcome = structure(verifiedEnvelope(complete), jobs, reason);
+          equal(outcome.complete, false);
+          equal(outcome.retry_reasons.includes('truncation'), true);
+        });
+      });
+
+      test('reports wrong tile, wrong card, duplicate card, top-level and required-field structure failures separately', () => {
+        const jobs = [verifierJob({ screenshot_index: 0 }), verifierJob({ tile_id: 'T2', card_id: '0:3:1:1', screenshot_index: 0 })];
+        const cards = [verifiedResult(), verifiedResult('dialga_standard', { tile_id: 'T2', card_id: '0:3:1:1' })];
+        const cases = [
+          [verifiedEnvelope([{ ...cards[0], tile_id: 'T2' }, cards[1]]), 'duplicate_tile'],
+          [verifiedEnvelope([{ ...cards[0], card_id: cards[1].card_id }, cards[1]]), 'duplicate_card'],
+          [verifiedEnvelope([{ ...cards[0], tile_id: 'T1', card_id: cards[1].card_id }, cards[1]]), 'unexpected'],
+          [verifiedEnvelope(cards, { extra: true }), 'invalid_required_field'],
+          [{}, 'invalid_required_field'],
+          [Object.create(verifiedEnvelope(cards)), 'invalid_required_field'],
+          [verifiedEnvelope(cards.map(card => { const copy = { ...card }; delete copy.body_plan; return copy; })), 'invalid_required_field']
+        ];
+        cases.forEach(([result, reason]) => {
+          const outcome = structure(result, jobs);
+          equal(outcome.complete, false);
+          equal(outcome.retry_reasons.includes(reason), true);
+        });
+      });
+
+      test('rejects unknown evidence-schema enum values as structural invalid-required-field retries', () => {
+        const fields = ['body_plan', 'limb_layout', 'fusion_host', 'decisive_feature'];
+        fields.forEach(field => {
+          const result = verifiedEnvelope([verifiedResult('dialga_origin', { [field]: `not_an_allowed_${field}` })]);
+          const outcome = structure(result);
+          equal(outcome.complete, false, field);
+          equal(outcome.retry_reasons.includes('invalid_required_field'), true, field);
+        });
+      });
+
+      test('accepts a natural uncertain payload structurally and classifies it semantically without retry', () => {
+        const baseSpecies = verifier().REQUIRED_VERIFIED_FORM_EVIDENCE.dialga_origin.base_species;
+        const job = verifierJob({ screenshot_index: 0, base_species: baseSpecies });
+        const result = verifiedEnvelope([{
+          tile_id: job.tile_id,
+          card_id: job.card_id,
+          base_species: baseSpecies,
+          verified_form_id: 'uncertain',
+          verification_confidence: 0.5,
+          crop_visibility: 'uncertain',
+          body_plan: 'uncertain',
+          limb_layout: 'uncertain',
+          fusion_host: 'uncertain',
+          decisive_feature: 'uncertain',
+          key_features_visible: false
+        }]);
+        const outcome = structure(result, [job]);
+        equal(outcome.complete, true);
+        deepEqual(outcome.retry_reasons, []);
+        equal(verifier().validateHundoVerifiedForm(result.cards[0], job).reason, 'form_verifier_uncertain');
+      });
+
+      test('returns controlled invalid-required-field structure results for invalid jobs without throwing', () => {
+        const result = verifiedEnvelope([verifiedResult()]);
+        const inheritedJob = Object.create(verifierJob());
+        const sparseJobs = [];
+        sparseJobs[1] = verifierJob();
+        const extraJobs = [verifierJob()];
+        extraJobs.extra = true;
+        [ [null], [inheritedJob], sparseJobs, extraJobs ].forEach(jobs => {
+          let outcome;
+          try {
+            outcome = structure(result, jobs);
+          } catch (error) {
+            fail(`structure threw: ${error && error.message ? error.message : String(error)}`);
+          }
+          equal(outcome.complete, false);
+          equal(outcome.retry_reasons.includes('invalid_required_field'), true);
+        });
+      });
+
+      test('merges verified forms immutably and fails closed without primary-form fallback', () => {
+        const api = verifier();
+        const names = globalThis.SmartHundoHelpers.HUNDO_FORM_CANONICAL_NAMES;
+        const first = targetCard({ manual_review_reasons: ['species_uncertain'] });
+        const palkiaSpecies = api.REQUIRED_VERIFIED_FORM_EVIDENCE.palkia_origin.base_species;
+        const second = targetCard({ card_id: '0:3:1:1', form_id: 'palkia_standard', effective_form_id: 'palkia_standard', base_species: palkiaSpecies, canonical_official_name: names.palkia_standard, manual_review_reasons: [] });
+        const cards = [first, second];
+        const before = JSON.stringify(cards);
+        const jobs = [verifierJob(), verifierJob({ tile_id: 'T2', card_id: second.card_id, base_species: second.base_species, candidate_form_ids: ['palkia_standard', 'palkia_origin', 'uncertain'] })];
+        const result = verifiedEnvelope([
+          verifiedResult('dialga_origin'),
+          verifiedResult('palkia_origin', { tile_id: 'T2', card_id: second.card_id, base_species: second.base_species, verification_confidence: 0.96 })
+        ]);
+        const merged = api.mergeHundoFormVerificationResults(cards, jobs, result, structure(result, jobs), names);
+        equal(JSON.stringify(cards), before);
+        deepEqual(merged.map(card => card.effective_form_id), ['dialga_origin', 'palkia_origin']);
+        deepEqual(merged.map(card => card.canonical_official_name), [names.dialga_origin, names.palkia_origin]);
+        equal(merged[0].verification_status, 'verified');
+        const uncertain = verifiedEnvelope([verifiedResult('dialga_origin', { verified_form_id: 'uncertain' }), result.cards[1]]);
+        const failed = api.mergeHundoFormVerificationResults(cards, jobs, uncertain, structure(uncertain, jobs), names);
+        equal(failed[0].effective_form_id, 'uncertain');
+        equal(failed[0].canonical_official_name, '');
+        equal(failed[0].manual_review_reasons.includes('form_verifier_uncertain'), true);
+        const summary = globalThis.SmartHundoHelpers.summarizeHundoManualReview([
+          { ...failed[0], manual_review_reasons: [...failed[0].manual_review_reasons, 'form_verifier_uncertain'] }
+        ]);
+        equal(summary.review_card_count, 1);
+      });
+
+      test('fails closed when a valid verifier form has no nonempty canonical map entry', () => {
+        const api = verifier();
+        const card = targetCard();
+        const job = verifierJob({ screenshot_index: 0 });
+        const result = verifiedEnvelope([verifiedResult('dialga_origin')]);
+        const merged = api.mergeHundoFormVerificationResults([card], [job], result, structure(result, [job]), {});
+        equal(merged[0].verification_status, 'invalid_result');
+        equal(merged[0].effective_form_id, 'uncertain');
+        equal(merged[0].manual_review_reasons.includes('form_verifier_invalid_result'), true);
+      });
+
+      test('requires exact own approved canonical entries and matches own card IDs without ancillary identity fields', () => {
+        const api = verifier();
+        const names = globalThis.SmartHundoHelpers.HUNDO_FORM_CANONICAL_NAMES;
+        const job = verifierJob({ screenshot_index: 0 });
+        const result = verifiedEnvelope([verifiedResult('dialga_origin')]);
+        const idOnlyCard = targetCard({ screenshot_index: undefined });
+        const valid = api.mergeHundoFormVerificationResults([idOnlyCard], [job], result, structure(result, [job]), names);
+        equal(valid[0].verification_status, 'verified');
+        equal(valid[0].effective_form_id, 'dialga_origin');
+        [
+          { dialga_origin: 'wrong nonempty canonical' },
+          Object.create({ dialga_origin: names.dialga_origin }),
+          {}
+        ].forEach(canonicalNames => {
+          const merged = api.mergeHundoFormVerificationResults([idOnlyCard], [job], result, structure(result, [job]), canonicalNames);
+          equal(merged[0].verification_status, 'invalid_result');
+          equal(merged[0].effective_form_id, 'uncertain');
+          equal(merged[0].manual_review_reasons.includes('form_verifier_invalid_result'), true);
+        });
+        const noIdentity = targetCard({ card_id: undefined, screenshot_index: undefined });
+        const failed = api.mergeHundoFormVerificationResults([noIdentity], [job], result, structure(result, [job]), names);
+        equal(failed[0].verification_status, 'invalid_result');
+        equal(failed[0].effective_form_id, 'uncertain');
+      });
+
+      test('prioritizes invalid structural mappings over consequential missing cards', () => {
+        const api = verifier();
+        const first = targetCard();
+        const second = targetCard({ card_id: '0:3:1:1', order: 3 });
+        const jobs = [verifierJob({ screenshot_index: 0 }), verifierJob({ tile_id: 'T2', card_id: second.card_id, screenshot_index: 0 })];
+        const result = verifiedEnvelope([
+          verifiedResult(),
+          verifiedResult('dialga_origin', { tile_id: 'T1', card_id: first.card_id })
+        ]);
+        const outcome = structure(result, jobs);
+        equal(outcome.retry_reasons.includes('duplicate_tile'), true);
+        equal(outcome.retry_reasons.includes('missing'), true);
+        const merged = api.mergeHundoFormVerificationResults([first, second], jobs, result, outcome, globalThis.SmartHundoHelpers.HUNDO_FORM_CANONICAL_NAMES);
+        merged.forEach(card => {
+          equal(card.verification_status, 'invalid_result');
+          equal(card.manual_review_reasons.includes('form_verifier_invalid_result'), true);
+        });
+      });
+
+      test('preserves all Stage 1 state and raw evidence fields while verified forms drive exact list groups', () => {
+        const api = verifier();
+        const helpers = globalThis.SmartHundoHelpers;
+        const names = helpers.HUNDO_FORM_CANONICAL_NAMES;
+        const stateful = (card, overrides = {}) => ({
+          ...card,
+          raw: { card: { stable: true } },
+          cp: '1234', visible_label: 'CP 1234',
+          shiny_state: 'yes', shiny_confidence: 0.99, shiny_evidence: { position: 'top', color: 'gold', shape: 'star' }, effective_shiny_state: 'yes',
+          lucky_state: 'no', lucky_confidence: 0.99, lucky_evidence: { position: 'none', appearance: 'absent' }, effective_lucky_state: 'no',
+          favorite_state: 'no', favorite_confidence: 0.99, favorite_evidence: { position: 'none', appearance: 'absent' }, effective_favorite_state: 'no',
+          rocket_state: 'purified', rocket_confidence: 0.99, rocket_evidence: { state: 'purified' }, effective_rocket_state: 'purified',
+          background_type: 'special', background_confidence: 0.99, background_evidence: { type: 'special' }, effective_background_type: 'special',
+          ...overrides
+        });
+        const species = {
+          palkia: verifier().REQUIRED_VERIFIED_FORM_EVIDENCE.palkia_origin.base_species,
+          necrozma: verifier().REQUIRED_VERIFIED_FORM_EVIDENCE.necrozma_base.base_species
+        };
+        const cards = [
+          stateful(targetCard()),
+          stateful(targetCard({ card_id: '0:3:1:1' }), { effective_shiny_state: 'no', effective_rocket_state: 'normal', effective_background_type: 'none' }),
+          stateful(targetCard({ card_id: '0:4:1:1', base_species: species.palkia, form_id: 'palkia_standard', effective_form_id: 'palkia_standard' }), { effective_shiny_state: 'no', effective_rocket_state: 'normal', effective_background_type: 'none' }),
+          stateful(targetCard({ card_id: '0:5:1:1', base_species: species.palkia, form_id: 'palkia_standard', effective_form_id: 'palkia_standard' }), { effective_shiny_state: 'no', effective_rocket_state: 'normal', effective_background_type: 'none' }),
+          stateful(targetCard({ card_id: '0:6:1:1', base_species: species.necrozma, form_id: 'necrozma_base', effective_form_id: 'necrozma_base' }), { effective_shiny_state: 'no', effective_rocket_state: 'normal', effective_background_type: 'none' }),
+          stateful(targetCard({ card_id: '0:7:1:1', base_species: species.necrozma, form_id: 'necrozma_base', effective_form_id: 'necrozma_base' }), { effective_shiny_state: 'no', effective_rocket_state: 'normal', effective_background_type: 'none' }),
+          stateful(targetCard({ card_id: '0:8:1:1', base_species: species.necrozma, form_id: 'necrozma_base', effective_form_id: 'necrozma_base' }), { effective_shiny_state: 'no', effective_rocket_state: 'normal', effective_background_type: 'none' })
+        ];
+        const formIds = ['dialga_origin', 'dialga_origin', 'palkia_standard', 'palkia_origin', 'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'];
+        const jobs = cards.map((card, index) => verifierJob({ tile_id: `T${index + 1}`, card_id: card.card_id, screenshot_index: 0, base_species: card.base_species, candidate_form_ids: verifier().VERIFIED_FORM_IDS_BY_BASE_SPECIES[card.base_species] }));
+        const result = verifiedEnvelope(cards.map((card, index) => verifiedResult(formIds[index], { tile_id: `T${index + 1}`, card_id: card.card_id, base_species: card.base_species })));
+        const stageOneSnapshots = cards.map(card => ({ raw: card.raw, cp: card.cp, visible_label: card.visible_label, shiny_state: card.shiny_state, shiny_confidence: card.shiny_confidence, shiny_evidence: card.shiny_evidence, effective_shiny_state: card.effective_shiny_state, lucky_state: card.lucky_state, lucky_confidence: card.lucky_confidence, lucky_evidence: card.lucky_evidence, effective_lucky_state: card.effective_lucky_state, favorite_state: card.favorite_state, favorite_confidence: card.favorite_confidence, favorite_evidence: card.favorite_evidence, effective_favorite_state: card.effective_favorite_state, rocket_state: card.rocket_state, rocket_confidence: card.rocket_confidence, rocket_evidence: card.rocket_evidence, effective_rocket_state: card.effective_rocket_state, background_type: card.background_type, background_confidence: card.background_confidence, background_evidence: card.background_evidence, effective_background_type: card.effective_background_type }));
+        const merged = api.mergeHundoFormVerificationResults(cards, jobs, result, structure(result, jobs), names);
+        deepEqual(merged.map(card => ({ raw: card.raw, cp: card.cp, visible_label: card.visible_label, shiny_state: card.shiny_state, shiny_confidence: card.shiny_confidence, shiny_evidence: card.shiny_evidence, effective_shiny_state: card.effective_shiny_state, lucky_state: card.lucky_state, lucky_confidence: card.lucky_confidence, lucky_evidence: card.lucky_evidence, effective_lucky_state: card.effective_lucky_state, favorite_state: card.favorite_state, favorite_confidence: card.favorite_confidence, favorite_evidence: card.favorite_evidence, effective_favorite_state: card.effective_favorite_state, rocket_state: card.rocket_state, rocket_confidence: card.rocket_confidence, rocket_evidence: card.rocket_evidence, effective_rocket_state: card.effective_rocket_state, background_type: card.background_type, background_confidence: card.background_confidence, background_evidence: card.background_evidence, effective_background_type: card.effective_background_type })), stageOneSnapshots);
+        equal(helpers.smartHundoCardsToPokemonList(merged).pokemon_list, `\u8272\u9055\u7279\u5225\u80cc\u5361${names.dialga_origin},${names.dialga_origin},${names.palkia_standard},${names.palkia_origin},${names.necrozma_base},${names.necrozma_dusk_mane},${names.necrozma_dawn_wings}`);
+        equal(helpers.smartHundoCardsToPokemonList(merged.slice(1)).pokemon_list, `${names.dialga_origin},${names.palkia_standard},${names.palkia_origin},${names.necrozma_base},${names.necrozma_dusk_mane},${names.necrozma_dawn_wings}`);
+        equal(helpers.buildHundoDisplayName(merged[0]), `\u8272\u9055\u7279\u5225\u80cc\u5361${names.dialga_origin}`);
+        equal(helpers.buildHundoDisplayName({ ...merged[3], effective_shiny_state: 'no', effective_background_type: 'none', effective_rocket_state: 'purified' }), names.palkia_origin);
+      });
+
+      test('keeps verified form canonical groups separate and renders shiny special and purified exactly', () => {
+        const helpers = globalThis.SmartHundoHelpers;
+        const names = helpers.HUNDO_FORM_CANONICAL_NAMES;
+        const shown = (effective_form_id, states = {}) => ({
+          card_id: `${effective_form_id}:${JSON.stringify(states)}`,
+          base_species: verifier().REQUIRED_VERIFIED_FORM_EVIDENCE.dialga_origin.base_species,
+          recognition_status: 'recognized',
+          species_confidence: 0.99,
+          effective_form_id,
+          canonical_official_name: names[effective_form_id],
+          effective_shiny_state: 'no', effective_lucky_state: 'no', effective_favorite_state: 'no', effective_rocket_state: 'normal', effective_background_type: 'none',
+          ...states
+        });
+        equal(helpers.smartHundoCardsToPokemonList([shown('dialga_standard'), shown('dialga_origin'), shown('dialga_origin')]).pokemon_list, `${names.dialga_standard},${names.dialga_origin}*2`);
+        equal(helpers.smartHundoCardsToPokemonList([shown('palkia_standard'), shown('palkia_origin')]).pokemon_list, `${names.palkia_standard},${names.palkia_origin}`);
+        equal(helpers.smartHundoCardsToPokemonList([shown('necrozma_base'), shown('necrozma_dusk_mane'), shown('necrozma_dawn_wings')]).pokemon_list, `${names.necrozma_base},${names.necrozma_dusk_mane},${names.necrozma_dawn_wings}`);
+        equal(helpers.buildHundoDisplayName(shown('dialga_origin', { effective_shiny_state: 'yes' })), `\u8272\u9055${names.dialga_origin}`);
+        equal(helpers.buildHundoDisplayName(shown('necrozma_dawn_wings', { effective_background_type: 'special' })), `\u7279\u5225\u80cc\u5361${names.necrozma_dawn_wings}`);
+        equal(helpers.buildHundoDisplayName(shown('palkia_origin', { effective_rocket_state: 'purified' })), names.palkia_origin);
+      });
+
       executionStatus = 'pass';
       render();
     })();
