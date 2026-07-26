@@ -1834,6 +1834,7 @@
             hundo_count_conflict: '百神總數結果衝突',
             screenshot_overlap_uncertain: '截圖重疊需人工確認',
             smart_hundo_request_failed: '百神辨識請求失敗',
+            smart_hundo_model_request_failed: '百神智慧卡片辨識請求失敗',
             form_uncertain: '型態需人工確認',
             form_species_mismatch: '物種與型態結果衝突',
             form_region_not_clear: '型態主要外觀區域看不清楚',
@@ -2593,6 +2594,13 @@
           });
           const diagnostics = shapeSmartHundoDiagnostics({
             scan_session_id: 'scan-17',
+            models: {
+              classification: 'gpt-4.1-mini',
+              hundo_count: 'gpt-4.1-mini',
+              smart_cards: 'gpt-5-mini',
+              smart_cards_reasoning_effort: 'low',
+              Authorization: 'Bearer model-summary-secret'
+            },
             screenshots: [{
               index: 4,
               classification: {
@@ -2612,6 +2620,22 @@
               finish_reason: 'stop',
               structural_retry_used: true,
               structural_retry_reason: ['scan_incomplete'],
+              models: {
+                classification: {
+                  requested_model: 'gpt-4.1-mini',
+                  returned_model: 'gpt-4.1-mini-2025-04-14'
+                },
+                hundo_count: {
+                  requested_model: 'gpt-4.1-mini',
+                  returned_model: 'gpt-4.1-mini-2025-04-14'
+                },
+                smart_cards: {
+                  requested_model: 'gpt-5-mini',
+                  returned_model: 'gpt-5-mini-2025-08-07',
+                  reasoning_effort: 'low'
+                },
+                payload: 'data:image/png;base64,MODEL_PAYLOAD'
+              },
               cards: [safeCard],
               originalDataUrl: 'data:image/png;base64,ORIGINAL_SCREEN',
               countCrop: 'data:image/png;base64,COUNT_CROP_SCREEN',
@@ -2639,6 +2663,7 @@
 
           deepEqual(Object.keys(diagnostics), [
             'scan_session_id',
+            'models',
             'screenshots',
             'count_candidates',
             'count_conflict',
@@ -2646,6 +2671,27 @@
             'manual_review_reasons',
             'pokemon_list'
           ]);
+          deepEqual(diagnostics.models, {
+            classification: 'gpt-4.1-mini',
+            hundo_count: 'gpt-4.1-mini',
+            smart_cards: 'gpt-5-mini',
+            smart_cards_reasoning_effort: 'low'
+          });
+          deepEqual(diagnostics.screenshots[0].models, {
+            classification: {
+              requested_model: 'gpt-4.1-mini',
+              returned_model: 'gpt-4.1-mini-2025-04-14'
+            },
+            hundo_count: {
+              requested_model: 'gpt-4.1-mini',
+              returned_model: 'gpt-4.1-mini-2025-04-14'
+            },
+            smart_cards: {
+              requested_model: 'gpt-5-mini',
+              returned_model: 'gpt-5-mini-2025-08-07',
+              reasoning_effort: 'low'
+            }
+          });
           deepEqual(diagnostics.screenshots[0].classification, {
             image_type: 'HUNDO_LEGENDARY_SCREEN',
             search_query: 'safe-query'
@@ -2700,7 +2746,10 @@
             'File',
             'firebase-api-key',
             'gas-secret',
-            'account;password'
+            'account;password',
+            'model-summary-secret',
+            'MODEL_PAYLOAD',
+            '"payload":'
           ].forEach(sentinel => {
             equal(serialized.includes(sentinel), false, `diagnostics excludes ${sentinel}`);
           });
@@ -2843,6 +2892,12 @@
         test('validates allowed diagnostic values and redacts secrets injected into allowlisted fields', () => {
           const diagnostics = shapeSmartHundoDiagnostics({
             scan_session_id: 'scan-API_KEY-secret',
+            models: {
+              classification: 'Authorization',
+              hundo_count: 'gpt-4.1-mini',
+              smart_cards: 'data:image/png;base64,MODEL',
+              smart_cards_reasoning_effort: 'high'
+            },
             screenshots: [{
               index: 6,
               classification: {
@@ -2861,6 +2916,21 @@
               finish_reason: 'password=hunter2',
               structural_retry_used: true,
               structural_retry_reason: ['scan_incomplete', 'unknown-retry', 'gas-secret'],
+              models: {
+                classification: {
+                  requested_model: 'gpt-4.1-mini',
+                  returned_model: 'Bearer injected'
+                },
+                hundo_count: {
+                  requested_model: 'api-key',
+                  returned_model: 'gpt-4.1-mini-2025-04-14'
+                },
+                smart_cards: {
+                  requested_model: 'gpt-5-mini',
+                  returned_model: 'gpt-5-mini raw payload',
+                  reasoning_effort: 'high'
+                }
+              },
               cards: [validatedCard({
                 card_id: 'sk-proj-1234567890abcdef',
                 cp: 'data:image/png;base64,CARD',
@@ -2925,6 +2995,27 @@
           });
 
           equal(diagnostics.scan_session_id, '');
+          deepEqual(diagnostics.models, {
+            classification: '',
+            hundo_count: 'gpt-4.1-mini',
+            smart_cards: '',
+            smart_cards_reasoning_effort: ''
+          });
+          deepEqual(diagnostics.screenshots[0].models, {
+            classification: {
+              requested_model: 'gpt-4.1-mini',
+              returned_model: ''
+            },
+            hundo_count: {
+              requested_model: '',
+              returned_model: 'gpt-4.1-mini-2025-04-14'
+            },
+            smart_cards: {
+              requested_model: 'gpt-5-mini',
+              returned_model: '',
+              reasoning_effort: ''
+            }
+          });
           equal(diagnostics.screenshots[0].classification.search_query, '');
           equal(diagnostics.screenshots[0].normalized_search_query, '');
           equal(diagnostics.screenshots[0].raw_count_text, '');
@@ -4005,6 +4096,7 @@
             return {
               ok: true,
               json: async () => ({
+                model: 'gpt-5-mini-2025-08-07',
                 choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(content) } }]
               })
             };
@@ -4034,6 +4126,12 @@
           equal(retried.result.cards.some(item => item.official_name === '第一次卡片'), false);
           equal(retried.result.cards.every(item => item.card_id.startsWith('9:')), true);
           equal(retried.finish_reason, 'stop');
+          deepEqual(retried.model_metadata, {
+            requested_model: 'gpt-5-mini',
+            returned_model: 'gpt-5-mini-2025-08-07',
+            reasoning_effort: 'low',
+            finish_reason: 'stop'
+          });
           equal(retried.structure.structurally_complete, true);
           equal(retried.structural_retry_used, true);
           deepEqual(retried.structural_retry_reason, ['detected_card_count_mismatch']);
@@ -4363,11 +4461,19 @@
           });
           return files;
         };
-        const openAiResponse = (content, onJson, finishReason = 'stop') => ({
+        const openAiResponse = (
+          content,
+          onJson,
+          finishReason = 'stop',
+          model = 'gpt-4.1-mini-2025-04-14'
+        ) => ({
           ok: true,
           json: async () => {
             onJson?.();
-            return { choices: [{ finish_reason: finishReason, message: { content: JSON.stringify(content) } }] };
+            return {
+              model,
+              choices: [{ finish_reason: finishReason, message: { content: JSON.stringify(content) } }]
+            };
           }
         });
         const classificationByImage = {
@@ -4550,7 +4656,12 @@
             const content = Array.isArray(configured)
               ? configured[prompt.includes('【結構重試】') ? 1 : 0]
               : configured;
-            return openAiResponse(content, () => requestStageEvents.push({ event: 'finish', schemaName }));
+            return openAiResponse(
+              content,
+              () => requestStageEvents.push({ event: 'finish', schemaName }),
+              'stop',
+              'gpt-5-mini-2025-08-07'
+            );
           }
           if (schemaName === 'pokemon_go_trainer_team_fixed_ui_extractor') {
             const identity = imageUrl.match(/TEAM_EVIDENCE_(.+)$/)?.[1];
@@ -5237,11 +5348,34 @@
           equal(document.getElementById('g_hundos').value, '鳳王,哲爾尼亞斯,雷吉奇卡斯');
           equal(document.getElementById('aiAutoStatus').textContent, '百神掃描完成：總數3，辨識3張卡片');
           equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult, 'both diagnostic aliases share one safe object');
+          deepEqual(window.lastSmartHundoDiagnostics.models, {
+            classification: 'gpt-4.1-mini',
+            hundo_count: 'gpt-4.1-mini',
+            smart_cards: 'gpt-5-mini',
+            smart_cards_reasoning_effort: 'low'
+          });
           deepEqual(window.lastSmartHundoDiagnostics.screenshots.map(screenshot => screenshot.index), [1, 3]);
           deepEqual(window.lastSmartHundoDiagnostics.screenshots.map(screenshot => screenshot.classification.image_type), [
             'HUNDO_LEGENDARY_SCREEN',
             'HUNDO_LEGENDARY_SCREEN'
           ], 'raw OTHER exact query is canonicalized before partition');
+          window.lastSmartHundoDiagnostics.screenshots.forEach(screenshot => {
+            deepEqual(screenshot.models, {
+              classification: {
+                requested_model: 'gpt-4.1-mini',
+                returned_model: 'gpt-4.1-mini-2025-04-14'
+              },
+              hundo_count: {
+                requested_model: 'gpt-4.1-mini',
+                returned_model: 'gpt-4.1-mini-2025-04-14'
+              },
+              smart_cards: {
+                requested_model: 'gpt-5-mini',
+                returned_model: 'gpt-5-mini-2025-08-07',
+                reasoning_effort: 'low'
+              }
+            });
+          });
           equal(window.lastSmartHundoDiagnostics.screenshots[1].cards[0].effective_states.rocket, 'purified');
           equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
           equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
@@ -5753,9 +5887,15 @@
 
           equal(document.getElementById('st_hundo_leg').value, '3', 'validated count replaces independently');
           equal(document.getElementById('g_hundos').value, '手動保留清單', 'failed card scan never promotes an old or partial AI list');
-          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_request_failed), true);
-          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'), true);
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_model_request_failed), true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_model_request_failed'), true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'), false);
           equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult);
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots[0].models.smart_cards, {
+            requested_model: 'gpt-5-mini',
+            returned_model: '',
+            reasoning_effort: 'low'
+          });
           const failedCardRequests = routedRequests.filter(
             request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2'
           );
@@ -5772,6 +5912,7 @@
             .flat(2)
             .find(value => value && typeof value === 'object' && value.stage === 'hundo_cards');
           equal(cardFailureSummary.name, 'Error', 'unknown error names fall back to Error');
+          equal(cardFailureSummary.reasonCode, 'smart_hundo_model_request_failed');
           const serializedAudit = JSON.stringify(window.lastSmartHundoDiagnostics);
           ['test-key', 'Authorization', 'ORIGINAL_', 'RESIZED_', 'data:image/', 'classificationDataUrl', 'file', 'CARD_FAIL_SECRET', 'COUNT_FAIL_SECRET'].forEach(secret => {
             equal(serializedAudit.includes(secret), false, `audit excludes ${secret}`);
@@ -5969,13 +6110,22 @@
         equal(serializedLogs.includes('COUNT_FAIL_SECRET'), false, 'logs omit thrown response details');
         const safeErrorSummaries = loggedValues
           .flat(2)
-          .filter(value => value && typeof value === 'object' && value.reasonCode === 'smart_hundo_request_failed');
+          .filter(value => value && typeof value === 'object' && [
+            'smart_hundo_request_failed',
+            'smart_hundo_model_request_failed'
+          ].includes(value.reasonCode));
         equal(safeErrorSummaries.length >= 2, true, 'each failed logical operation emits a safe summary');
         safeErrorSummaries.forEach(summary => {
           deepEqual(Object.keys(summary), ['stage', 'name', 'httpStatus', 'reasonCode']);
           equal(['hundo_count', 'hundo_cards'].includes(summary.stage), true);
           equal(['Error'].includes(summary.name), true);
           equal([502, 503].includes(summary.httpStatus), true);
+          equal(
+            summary.stage === 'hundo_cards'
+              ? summary.reasonCode === 'smart_hundo_model_request_failed'
+              : summary.reasonCode === 'smart_hundo_request_failed',
+            true
+          );
         });
 
         executionStatus = 'pass';

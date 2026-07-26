@@ -932,6 +932,47 @@
         return DIAGNOSTIC_FORBIDDEN_VALUE_PATTERN.test(normalized) ? '' : normalized;
     };
     const diagnosticString = sanitizeDiagnosticString;
+    const DIAGNOSTIC_REASONING_EFFORT_VALUES = new Set(['low']);
+    const diagnosticModelIdentifier = (value) => {
+        const model = diagnosticString(value).trim();
+        return /^[a-z0-9][a-z0-9._:-]{0,99}$/i.test(model) ? model : '';
+    };
+    const diagnosticModelMetadata = (metadata = {}, includeReasoningEffort = false) => {
+        const source = metadata && typeof metadata === 'object' ? metadata : {};
+        const shaped = {
+            requested_model: diagnosticModelIdentifier(source.requested_model),
+            returned_model: diagnosticModelIdentifier(source.returned_model)
+        };
+        if (includeReasoningEffort) {
+            shaped.reasoning_effort = diagnosticEnum(
+                source.reasoning_effort,
+                DIAGNOSTIC_REASONING_EFFORT_VALUES,
+                ''
+            );
+        }
+        return shaped;
+    };
+    const diagnosticModelRouting = (models = {}) => {
+        const source = models && typeof models === 'object' ? models : {};
+        return {
+            classification: diagnosticModelIdentifier(source.classification),
+            hundo_count: diagnosticModelIdentifier(source.hundo_count),
+            smart_cards: diagnosticModelIdentifier(source.smart_cards),
+            smart_cards_reasoning_effort: diagnosticEnum(
+                source.smart_cards_reasoning_effort,
+                DIAGNOSTIC_REASONING_EFFORT_VALUES,
+                ''
+            )
+        };
+    };
+    const diagnosticScreenshotModels = (models = {}) => {
+        const source = models && typeof models === 'object' ? models : {};
+        return {
+            classification: diagnosticModelMetadata(source.classification),
+            hundo_count: diagnosticModelMetadata(source.hundo_count),
+            smart_cards: diagnosticModelMetadata(source.smart_cards, true)
+        };
+    };
     const diagnosticNonnegativeInteger = (value) => {
         const number = Number(value);
         return Number.isInteger(number) && number >= 0 ? number : 0;
@@ -1087,6 +1128,7 @@
     });
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),
+        models: diagnosticModelRouting(session?.models),
         screenshots: (Array.isArray(session?.screenshots) ? session.screenshots : []).map(screenshot => ({
             index: diagnosticNonnegativeInteger(screenshot?.index),
             classification: {
@@ -1107,6 +1149,7 @@
             finish_reason: diagnosticString(screenshot?.finish_reason),
             structural_retry_used: screenshot?.structural_retry_used === true,
             structural_retry_reason: diagnosticStructuralReasons(screenshot?.structural_retry_reason),
+            models: diagnosticScreenshotModels(screenshot?.models),
             cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(diagnosticCard)
         })),
         count_candidates: (Array.isArray(session?.count_candidates) ? session.count_candidates : [])
@@ -1181,6 +1224,7 @@
         hundo_count_conflict: '百神總數結果衝突',
         screenshot_overlap_uncertain: '截圖重疊需人工確認',
         smart_hundo_request_failed: '百神辨識請求失敗',
+        smart_hundo_model_request_failed: '百神智慧卡片辨識請求失敗',
         form_uncertain: '型態需人工確認',
         form_species_mismatch: '物種與型態結果衝突',
         form_region_not_clear: '型態主要外觀區域看不清楚',

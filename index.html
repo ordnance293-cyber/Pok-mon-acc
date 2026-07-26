@@ -2569,6 +2569,13 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             return {};
         };
 
+        const openAiRequestMetadata = (response = {}) => ({
+            requested_model: String(response?.requested_model || ''),
+            returned_model: String(response?.returned_model || ''),
+            reasoning_effort: String(response?.reasoning_effort || ''),
+            finish_reason: String(response?.finish_reason || '')
+        });
+
         const safeTrainerTeamErrorSummary = (operationFailure, stage = 'trainer_team', reasonCode = 'trainer_team_request_failed') => {
             const httpStatus = Number(operationFailure?.httpStatus ?? operationFailure?.status);
             const suppliedName = String(operationFailure?.name || 'Error');
@@ -2680,6 +2687,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 return {
                     result,
                     finish_reason: finishReason,
+                    model_metadata: openAiRequestMetadata(response),
                     structure: helpers.validateSmartHundoStructure(result, finishReason)
                 };
             };
@@ -2724,7 +2732,8 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 const normalized = helpers.normalizeHundoCountResult(response?.result);
                 return {
                     ...helpers.validateHundoCountEvidence(response?.result, classification),
-                    count_source: normalized.count_source
+                    count_source: normalized.count_source,
+                    model_metadata: openAiRequestMetadata(response)
                 };
             })();
             const cardOperation = requestSmartHundoWithStructuralRetry({
@@ -2751,7 +2760,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 const summary = safeSmartHundoErrorSummary(
                     cardSettlement.reason,
                     'hundo_cards',
-                    'smart_hundo_request_failed'
+                    'smart_hundo_model_request_failed'
                 );
                 requestFailures.push(summary);
                 if (isCurrentRun()) console.warn('Smart hundo operation failed', summary);
@@ -2790,7 +2799,15 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             ) {
                 manualReviewReasons.push('incomplete_card_enumeration');
             }
-            if (requestFailures.length > 0) manualReviewReasons.push('smart_hundo_request_failed');
+            requestFailures.forEach(failure => {
+                if (!manualReviewReasons.includes(failure.reasonCode)) {
+                    manualReviewReasons.push(failure.reasonCode);
+                }
+            });
+
+            const classificationMetadata = classification?.model_metadata || {};
+            const countMetadata = count?.model_metadata || {};
+            const cardMetadata = cardExtraction?.model_metadata || {};
 
             return {
                 imageIndex,
@@ -2806,6 +2823,21 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 structure: cardExtraction?.structure || helpers.validateSmartHundoStructure(cardResult, ''),
                 structural_retry_used: cardExtraction?.structural_retry_used === true,
                 structural_retry_reason: cardExtraction?.structural_retry_reason || [],
+                models: {
+                    classification: {
+                        requested_model: classificationMetadata.requested_model || OPENAI_MODEL,
+                        returned_model: classificationMetadata.returned_model || ''
+                    },
+                    hundo_count: {
+                        requested_model: countMetadata.requested_model || OPENAI_MODEL,
+                        returned_model: countMetadata.returned_model || ''
+                    },
+                    smart_cards: {
+                        requested_model: cardMetadata.requested_model || HUNDO_SMART_MODEL,
+                        returned_model: cardMetadata.returned_model || '',
+                        reasoning_effort: cardMetadata.reasoning_effort || HUNDO_SMART_REASONING_EFFORT
+                    }
+                },
                 request_failures: requestFailures,
                 manual_review_reasons: manualReviewReasons
             };
@@ -2860,7 +2892,8 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 'incomplete_card_enumeration',
                 'hundo_count_conflict',
                 'screenshot_overlap_uncertain',
-                'smart_hundo_request_failed'
+                'smart_hundo_request_failed',
+                'smart_hundo_model_request_failed'
             ].forEach(reason => {
                 const count = Number(reasonCounts[reason] || 0);
                 if (count > 0) {
@@ -2890,8 +2923,18 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
         };
 
         const requestSingleImageClassification = async (apiKey, dataUrl, statusUpdater) => {
-            const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiClassificationPrompt(), dataUrl, OPENAI_CLASSIFICATION_JSON_SCHEMA, statusUpdater);
-            return normalizeAiClassification(rawResult);
+            const response = await requestOpenAiJsonSchema(
+                apiKey,
+                buildAiClassificationPrompt(),
+                dataUrl,
+                OPENAI_CLASSIFICATION_JSON_SCHEMA,
+                statusUpdater,
+                { includeMetadata: true }
+            );
+            return {
+                ...normalizeAiClassification(response?.result),
+                model_metadata: openAiRequestMetadata(response)
+            };
         };
 
         const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = []) => {
@@ -3250,6 +3293,21 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                         structure: helpers.validateSmartHundoStructure(emptyCardResult, ''),
                         structural_retry_used: false,
                         structural_retry_reason: [],
+                        models: {
+                            classification: {
+                                requested_model: job.classification?.model_metadata?.requested_model || OPENAI_MODEL,
+                                returned_model: job.classification?.model_metadata?.returned_model || ''
+                            },
+                            hundo_count: {
+                                requested_model: OPENAI_MODEL,
+                                returned_model: ''
+                            },
+                            smart_cards: {
+                                requested_model: HUNDO_SMART_MODEL,
+                                returned_model: '',
+                                reasoning_effort: HUNDO_SMART_REASONING_EFFORT
+                            }
+                        },
                         request_failures: [summary],
                         manual_review_reasons: ['smart_hundo_request_failed']
                     };
@@ -3394,6 +3452,12 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                     );
                     const diagnostics = helpers.shapeSmartHundoDiagnostics({
                         scan_session_id: String(smartSessionId),
+                        models: {
+                            classification: OPENAI_MODEL,
+                            hundo_count: OPENAI_MODEL,
+                            smart_cards: HUNDO_SMART_MODEL,
+                            smart_cards_reasoning_effort: HUNDO_SMART_REASONING_EFFORT
+                        },
                         screenshots: smartResults.map(result => ({
                             index: result.imageIndex,
                             classification: result.classification,
@@ -3409,6 +3473,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                             finish_reason: result.finish_reason,
                             structural_retry_used: result.structural_retry_used,
                             structural_retry_reason: result.structural_retry_reason,
+                            models: result.models,
                             cards: result.card_result.cards
                         })),
                         count_candidates: countMerge.candidates,
