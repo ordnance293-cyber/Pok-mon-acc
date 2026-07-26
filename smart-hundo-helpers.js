@@ -8,6 +8,8 @@
     const ENUMERATION_CONFIDENCE_THRESHOLD = 0.85;
     // Species and state gates are consumed by card validation and list conversion.
     const SPECIES_CONFIDENCE_THRESHOLD = 0.80;
+    const FORM_CONFIDENCE_THRESHOLD = 0.85;
+    const FORM_PARTIAL_VISIBILITY_THRESHOLD = 0.93;
     const STATE_YES_CONFIDENCE_THRESHOLD = 0.85;
     const STATE_NEGATIVE_CONFIDENCE_THRESHOLD = 0.75;
     const INDEPENDENT_STATE_VALUES = new Set(['yes', 'no', 'uncertain']);
@@ -38,6 +40,111 @@
     const HUNDO_COUNT_ACTIVE_TAB_VALUES = new Set(['pokemon', 'egg', 'unknown']);
     const HUNDO_COUNT_SOURCE_VALUES = new Set(['pokemon_search_result_summary', 'other', 'uncertain']);
     const HUNDO_COUNT_POSITION_VALUES = new Set(['associated_with_active_pokemon_tab', 'other', 'uncertain']);
+    const HUNDO_FORM_CANONICAL_NAMES = Object.freeze({
+        articuno_standard: '急凍鳥',
+        articuno_galarian: '伽勒爾急凍鳥',
+        zapdos_standard: '閃電鳥',
+        zapdos_galarian: '伽勒爾閃電鳥',
+        moltres_standard: '火焰鳥',
+        moltres_galarian: '伽勒爾火焰鳥',
+        zacian_standard: '蒼響',
+        zacian_crowned: '蒼響劍盾型態',
+        zamazenta_standard: '藏瑪然特',
+        zamazenta_crowned: '藏瑪然特劍盾型態',
+        dialga_standard: '帝牙盧卡',
+        dialga_origin: '起源帝牙盧卡',
+        palkia_standard: '帕路奇亞',
+        palkia_origin: '起源帕路奇亞',
+        zygarde_10: '基格爾德（10%形態）',
+        zygarde_50: '基格爾德（50%形態）',
+        zygarde_complete: '基格爾德（完全體形態）',
+        necrozma_base: '奈克洛茲瑪',
+        necrozma_dusk_mane: '奈克洛茲瑪（黃昏之鬃）',
+        necrozma_dawn_wings: '奈克洛茲瑪（拂曉之翼）',
+        kyurem_base: '酋雷姆',
+        kyurem_white: '焰白酋雷姆',
+        kyurem_black: '闇黑酋雷姆'
+    });
+    const HUNDO_FORMS_BY_BASE_SPECIES = Object.freeze({
+        急凍鳥: Object.freeze(['articuno_standard', 'articuno_galarian']),
+        閃電鳥: Object.freeze(['zapdos_standard', 'zapdos_galarian']),
+        火焰鳥: Object.freeze(['moltres_standard', 'moltres_galarian']),
+        蒼響: Object.freeze(['zacian_standard', 'zacian_crowned']),
+        藏瑪然特: Object.freeze(['zamazenta_standard', 'zamazenta_crowned']),
+        帝牙盧卡: Object.freeze(['dialga_standard', 'dialga_origin']),
+        帕路奇亞: Object.freeze(['palkia_standard', 'palkia_origin']),
+        基格爾德: Object.freeze(['zygarde_10', 'zygarde_50', 'zygarde_complete']),
+        奈克洛茲瑪: Object.freeze(['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings']),
+        酋雷姆: Object.freeze(['kyurem_base', 'kyurem_white', 'kyurem_black'])
+    });
+    const FORM_CONTROL_IDS = new Set(['not_applicable', 'uncertain', 'unsupported']);
+    const HUNDO_SUPPORTED_FORM_IDS = new Set(Object.keys(HUNDO_FORM_CANONICAL_NAMES));
+    const HUNDO_FORM_ID_VALUES = new Set([...FORM_CONTROL_IDS, ...HUNDO_SUPPORTED_FORM_IDS]);
+    const FORM_VISUAL_SIGNATURE_VALUES = new Set([
+        ...HUNDO_SUPPORTED_FORM_IDS,
+        'not_applicable',
+        'other',
+        'uncertain'
+    ]);
+    const FORM_RECOGNITION_BASIS_VALUES = new Set([
+        'direct_visual_match',
+        'visual_and_label',
+        'label_only',
+        'uncertain'
+    ]);
+    const FORM_LABEL_RELATIONSHIP_VALUES = new Set([
+        'exact_form',
+        'base_species_only',
+        'custom_nickname',
+        'conflicting',
+        'unreadable',
+        'not_applicable',
+        'uncertain'
+    ]);
+    const HUNDO_FORM_ALIASES = Object.freeze({
+        急凍鳥: Object.freeze({ base_species: '急凍鳥' }),
+        伽勒爾急凍鳥: Object.freeze({ base_species: '急凍鳥', candidate_form_id: 'articuno_galarian' }),
+        閃電鳥: Object.freeze({ base_species: '閃電鳥' }),
+        伽勒爾閃電鳥: Object.freeze({ base_species: '閃電鳥', candidate_form_id: 'zapdos_galarian' }),
+        火焰鳥: Object.freeze({ base_species: '火焰鳥' }),
+        伽勒爾火焰鳥: Object.freeze({ base_species: '火焰鳥', candidate_form_id: 'moltres_galarian' }),
+        蒼響: Object.freeze({ base_species: '蒼響' }),
+        蒼響劍王: Object.freeze({ base_species: '蒼響', candidate_form_id: 'zacian_crowned' }),
+        '蒼響（劍之王）': Object.freeze({ base_species: '蒼響', candidate_form_id: 'zacian_crowned' }),
+        '蒼響(劍之王)': Object.freeze({ base_species: '蒼響', candidate_form_id: 'zacian_crowned' }),
+        蒼響劍盾型態: Object.freeze({ base_species: '蒼響', candidate_form_id: 'zacian_crowned' }),
+        藏瑪然特: Object.freeze({ base_species: '藏瑪然特' }),
+        藏瑪然特盾王: Object.freeze({ base_species: '藏瑪然特', candidate_form_id: 'zamazenta_crowned' }),
+        '藏瑪然特（盾之王）': Object.freeze({ base_species: '藏瑪然特', candidate_form_id: 'zamazenta_crowned' }),
+        '藏瑪然特(盾之王)': Object.freeze({ base_species: '藏瑪然特', candidate_form_id: 'zamazenta_crowned' }),
+        藏瑪然特劍盾型態: Object.freeze({ base_species: '藏瑪然特', candidate_form_id: 'zamazenta_crowned' }),
+        帝牙盧卡: Object.freeze({ base_species: '帝牙盧卡' }),
+        '帝牙盧卡（起源形態）': Object.freeze({ base_species: '帝牙盧卡', candidate_form_id: 'dialga_origin' }),
+        '帝牙盧卡(起源形態)': Object.freeze({ base_species: '帝牙盧卡', candidate_form_id: 'dialga_origin' }),
+        起源型態帝牙盧卡: Object.freeze({ base_species: '帝牙盧卡', candidate_form_id: 'dialga_origin' }),
+        起源帝牙盧卡: Object.freeze({ base_species: '帝牙盧卡', candidate_form_id: 'dialga_origin' }),
+        帕路奇亞: Object.freeze({ base_species: '帕路奇亞' }),
+        '帕路奇亞（起源形態）': Object.freeze({ base_species: '帕路奇亞', candidate_form_id: 'palkia_origin' }),
+        '帕路奇亞(起源形態)': Object.freeze({ base_species: '帕路奇亞', candidate_form_id: 'palkia_origin' }),
+        起源型態帕路奇亞: Object.freeze({ base_species: '帕路奇亞', candidate_form_id: 'palkia_origin' }),
+        起源帕路奇亞: Object.freeze({ base_species: '帕路奇亞', candidate_form_id: 'palkia_origin' }),
+        基格爾德: Object.freeze({ base_species: '基格爾德' }),
+        '基格爾德（10%形態）': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_10' }),
+        '基格爾德(10%形態)': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_10' }),
+        '基格爾德（50%形態）': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_50' }),
+        '基格爾德(50%形態)': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_50' }),
+        '基格爾德（完全體形態）': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_complete' }),
+        '基格爾德(完全體形態)': Object.freeze({ base_species: '基格爾德', candidate_form_id: 'zygarde_complete' }),
+        奈克洛茲瑪: Object.freeze({ base_species: '奈克洛茲瑪' }),
+        '奈克洛茲瑪（黃昏之鬃）': Object.freeze({ base_species: '奈克洛茲瑪', candidate_form_id: 'necrozma_dusk_mane' }),
+        '奈克洛茲瑪(黃昏之鬃)': Object.freeze({ base_species: '奈克洛茲瑪', candidate_form_id: 'necrozma_dusk_mane' }),
+        '奈克洛茲瑪（拂曉之翼）': Object.freeze({ base_species: '奈克洛茲瑪', candidate_form_id: 'necrozma_dawn_wings' }),
+        '奈克洛茲瑪(拂曉之翼)': Object.freeze({ base_species: '奈克洛茲瑪', candidate_form_id: 'necrozma_dawn_wings' }),
+        酋雷姆: Object.freeze({ base_species: '酋雷姆' }),
+        焰白酋雷姆: Object.freeze({ base_species: '酋雷姆', candidate_form_id: 'kyurem_white' }),
+        炎白酋雷姆: Object.freeze({ base_species: '酋雷姆', candidate_form_id: 'kyurem_white' }),
+        闇黑酋雷姆: Object.freeze({ base_species: '酋雷姆', candidate_form_id: 'kyurem_black' })
+    });
 
     const stringValue = (value) => value === undefined || value === null ? '' : String(value).trim();
 
@@ -63,6 +170,10 @@
         if (!Number.isFinite(number)) return 0;
         return Math.min(1, Math.max(0, number));
     };
+
+    const clampStrictConfidence = value => (
+        typeof value === 'number' && Number.isFinite(value) ? clampConfidence(value) : 0
+    );
 
     const normalizeHundoCountResult = (result = {}) => ({
         hundo_leg: String(result?.hundo_leg ?? '').normalize('NFKC').trim(),
@@ -330,8 +441,50 @@
         return stripSmartHundoPresentationPrefixes(normalizeWith(normalizer, sanitized));
     };
 
+    const normalizeHundoBaseSpecies = (value, normalizeOfficialName) => {
+        const sanitized = stripSmartHundoPresentationPrefixes(value);
+        const directAlias = HUNDO_FORM_ALIASES[sanitized];
+        if (directAlias) return directAlias.base_species;
+        const normalized = stripSmartHundoPresentationPrefixes(normalizeWith(normalizeOfficialName, sanitized));
+        return HUNDO_FORM_ALIASES[normalized]?.base_species || normalized;
+    };
+
+    const normalizeHundoFormId = (value) => {
+        const formId = value === undefined || value === null ? '' : String(value).toLowerCase();
+        return HUNDO_FORM_ID_VALUES.has(formId) ? formId : 'uncertain';
+    };
+
+    const normalizeHundoFormEvidence = (evidence = {}) => {
+        const regionVisibility = stringValue(evidence?.region_visibility).toLowerCase();
+        const recognitionBasis = stringValue(evidence?.recognition_basis).toLowerCase();
+        const visualSignature = stringValue(evidence?.visual_signature).toLowerCase();
+        const labelRelationship = stringValue(evidence?.label_relationship).toLowerCase();
+        return {
+            region_visibility: REGION_VISIBILITY_VALUES.has(regionVisibility) ? regionVisibility : 'uncertain',
+            recognition_basis: FORM_RECOGNITION_BASIS_VALUES.has(recognitionBasis) ? recognitionBasis : 'uncertain',
+            visual_signature: FORM_VISUAL_SIGNATURE_VALUES.has(visualSignature) ? visualSignature : 'uncertain',
+            key_features_visible: evidence?.key_features_visible === true,
+            label_relationship: FORM_LABEL_RELATIONSHIP_VALUES.has(labelRelationship) ? labelRelationship : 'uncertain'
+        };
+    };
+
+    const adaptLegacyHundoForm = (card = {}, normalizeOfficialName) => {
+        const legacyValue = stringValue(card?.official_name) || stringValue(card?.base_species);
+        const sanitized = stripSmartHundoPresentationPrefixes(legacyValue);
+        const alias = HUNDO_FORM_ALIASES[sanitized];
+        const baseSpecies = normalizeHundoBaseSpecies(legacyValue, normalizeOfficialName);
+        return {
+            base_species: baseSpecies,
+            form_id: alias?.candidate_form_id || (Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)
+                ? 'uncertain'
+                : 'not_applicable')
+        };
+    };
+
     const normalizeSmartHundoCard = (card = {}, normalizeOfficialName, options = {}) => {
         const screenshotIndex = normalizeCoordinate(options?.screenshotIndex);
+        const formContractPresent = ['base_species', 'form_id', 'form_confidence', 'form_evidence']
+            .some(field => Object.hasOwn(card || {}, field));
         const hasRocketState = card?.rocket_state !== undefined && card?.rocket_state !== null;
         const rawStates = {
             shiny: normalizeRawValue(card?.shiny_state),
@@ -354,6 +507,16 @@
             rocket: normalizeRocketEvidence(card?.rocket_evidence),
             background: normalizeBackgroundEvidence(card?.background_evidence)
         };
+        const rawForm = {
+            base_species: stringValue(card?.base_species),
+            form_id: card?.form_id === undefined || card?.form_id === null ? '' : String(card?.form_id).toLowerCase(),
+            form_confidence: card?.form_confidence,
+            form_evidence: normalizeHundoFormEvidence(card?.form_evidence)
+        };
+        const legacyForm = adaptLegacyHundoForm(card, normalizeOfficialName);
+        const baseSpecies = normalizeHundoBaseSpecies(rawForm.base_species || legacyForm.base_species, normalizeOfficialName);
+        const formId = normalizeHundoFormId(rawForm.form_id || (rawForm.base_species ? 'uncertain' : legacyForm.form_id));
+        const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
         const order = normalizeSmartHundoCoordinate(card?.order);
         const row = normalizeSmartHundoCoordinate(card?.row);
         const column = normalizeSmartHundoCoordinate(card?.column);
@@ -365,9 +528,13 @@
             row,
             column,
             visible_label: stringValue(card?.visible_label),
-            official_name: normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName),
+            official_name: officialName,
             recognition_status: normalizeRecognitionStatus(card?.recognition_status),
-            species_confidence: clampConfidence(card?.species_confidence),
+            species_confidence: clampStrictConfidence(card?.species_confidence),
+            base_species: baseSpecies,
+            form_id: formId,
+            form_confidence: clampStrictConfidence(rawForm.form_confidence),
+            form_evidence: rawForm.form_evidence,
             cp: stringValue(card?.cp),
             shiny_state: normalizeIndependentState(rawStates.shiny),
             shiny_confidence: clampConfidence(rawConfidences.shiny),
@@ -389,11 +556,15 @@
             effective_favorite_state: EFFECTIVE_STATE_DEFAULTS.favorite,
             effective_rocket_state: EFFECTIVE_STATE_DEFAULTS.rocket,
             effective_background_type: EFFECTIVE_STATE_DEFAULTS.background,
+            effective_form_id: 'uncertain',
+            canonical_official_name: '',
             manual_review_reasons: [],
             raw: {
                 states: rawStates,
                 confidences: rawConfidences,
-                evidence: rawEvidence
+                evidence: rawEvidence,
+                form: rawForm,
+                form_contract_present: formContractPresent
             }
         };
     };
@@ -413,8 +584,10 @@
 
     const overlapCardSignature = (card = {}) => JSON.stringify([
         stringValue(card?.cp),
-        stripSmartHundoPresentationPrefixes(card?.official_name),
         normalizeVisibleLabel(card?.visible_label),
+        stringValue(card?.base_species),
+        stringValue(card?.effective_form_id),
+        stringValue(card?.canonical_official_name),
         stringValue(card?.effective_shiny_state),
         stringValue(card?.effective_lucky_state),
         stringValue(card?.effective_favorite_state),
@@ -422,11 +595,23 @@
         stringValue(card?.effective_background_type)
     ]);
 
-    const hasUsableOverlapIdentity = (card = {}) => (
+    const hasUsableCanonicalOverlapIdentity = (card = {}) => (
         stringValue(card?.cp) !== ''
-        && stripSmartHundoPresentationPrefixes(card?.official_name) !== ''
         && normalizeVisibleLabel(card?.visible_label) !== ''
+        && stringValue(card?.canonical_official_name) !== ''
     );
+
+    const hasUsableOverlapIdentity = (card = {}) => hasUsableCanonicalOverlapIdentity(card);
+
+    const overlapCardsMatch = (leftCard = {}, rightCard = {}) => {
+        if (
+            hasUsableCanonicalOverlapIdentity(leftCard)
+            && hasUsableCanonicalOverlapIdentity(rightCard)
+        ) {
+            return overlapCardSignature(leftCard) === overlapCardSignature(rightCard);
+        }
+        return false;
+    };
 
     const boundaryOverlapCount = (suffixCards, prefixCards) => {
         const maximum = Math.min(suffixCards.length, prefixCards.length);
@@ -438,7 +623,7 @@
                 return (
                     hasUsableOverlapIdentity(suffixCard)
                     && hasUsableOverlapIdentity(prefixCard)
-                    && overlapCardSignature(suffixCard) === overlapCardSignature(prefixCard)
+                    && overlapCardsMatch(suffixCard, prefixCard)
                 );
             }).every(Boolean);
             if (matches) return count;
@@ -503,14 +688,8 @@
         manual_review_reasons: ['screenshot_overlap_uncertain']
     });
 
-    const mergeSmartHundoScreenshots = (screenshots = [], normalizeOfficialName) => {
+    const mergeSmartHundoScreenshots = (screenshots = []) => {
         const screenshotList = Array.isArray(screenshots) ? screenshots : [];
-        const comparisonScreenshots = screenshotList.map(screenshot => ({
-            cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(card => ({
-                ...card,
-                official_name: normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName)
-            }))
-        }));
         const pairRecords = [];
 
         for (let leftIndex = 0; leftIndex < screenshotList.length; leftIndex += 1) {
@@ -519,8 +698,8 @@
                     leftIndex,
                     rightIndex,
                     decision: detectScreenshotOverlap(
-                        comparisonScreenshots[leftIndex],
-                        comparisonScreenshots[rightIndex]
+                        screenshotList[leftIndex],
+                        screenshotList[rightIndex]
                     )
                 });
             }
@@ -682,6 +861,16 @@
                 : diagnosticEnum(source[field], values)
         ]));
     };
+    const diagnosticFormEvidence = (evidence) => {
+        const source = evidence && typeof evidence === 'object' ? evidence : {};
+        return {
+            region_visibility: diagnosticEnum(source.region_visibility, REGION_VISIBILITY_VALUES),
+            recognition_basis: diagnosticEnum(source.recognition_basis, FORM_RECOGNITION_BASIS_VALUES),
+            visual_signature: diagnosticEnum(source.visual_signature, FORM_VISUAL_SIGNATURE_VALUES),
+            key_features_visible: source.key_features_visible === true,
+            label_relationship: diagnosticEnum(source.label_relationship, FORM_LABEL_RELATIONSHIP_VALUES)
+        };
+    };
     const diagnosticCard = (card = {}) => {
         const rawStates = card?.raw?.states && typeof card.raw.states === 'object'
             ? card.raw.states
@@ -691,6 +880,9 @@
             : {};
         const rawEvidence = card?.raw?.evidence && typeof card.raw.evidence === 'object'
             ? card.raw.evidence
+            : {};
+        const rawForm = card?.raw?.form && typeof card.raw.form === 'object'
+            ? card.raw.form
             : {};
         const rawState = (dimension, field, values) => diagnosticEnum(
             rawStates[dimension] ?? card?.[field],
@@ -703,6 +895,9 @@
             rawEvidence[dimension] ?? card?.[field],
             enumFields
         );
+        const diagnosticBaseSpecies = diagnosticString(card?.base_species);
+        const rawFormId = diagnosticEnum(rawForm.form_id ?? card?.form_id, HUNDO_FORM_ID_VALUES);
+        const effectiveFormId = diagnosticEnum(card?.effective_form_id, HUNDO_FORM_ID_VALUES);
 
         return {
             card_id: diagnosticString(card?.card_id),
@@ -769,6 +964,16 @@
                 rocket: diagnosticEnum(card?.effective_rocket_state, ROCKET_STATE_VALUES),
                 background: diagnosticEnum(card?.effective_background_type, BACKGROUND_TYPE_VALUES)
             },
+            base_species: diagnosticBaseSpecies,
+            raw_form_id: rawFormId,
+            form_confidence: clampConfidence(rawForm.form_confidence ?? card?.form_confidence),
+            form_evidence: diagnosticFormEvidence(rawForm.form_evidence ?? card?.form_evidence),
+            effective_form_id: effectiveFormId,
+            canonical_official_name: HUNDO_SUPPORTED_FORM_IDS.has(effectiveFormId)
+                ? HUNDO_FORM_CANONICAL_NAMES[effectiveFormId]
+                : effectiveFormId === 'not_applicable'
+                    ? diagnosticString(card?.canonical_official_name)
+                    : '',
             manual_review_reasons: diagnosticReviewReasons(card?.manual_review_reasons)
         };
     };
@@ -876,15 +1081,30 @@
         hundo_count_uncertain: '百神總數需人工確認',
         hundo_count_conflict: '百神總數結果衝突',
         screenshot_overlap_uncertain: '截圖重疊需人工確認',
-        smart_hundo_request_failed: '百神辨識請求失敗'
+        smart_hundo_request_failed: '百神辨識請求失敗',
+        form_uncertain: '型態需人工確認',
+        form_species_mismatch: '物種與型態結果衝突',
+        form_region_not_clear: '型態主要外觀區域看不清楚',
+        form_confidence_low: '型態辨識信心不足',
+        form_label_only: '型態只有文字證據，需人工確認',
+        form_signature_mismatch: '型態與視覺證據不一致',
+        unsupported_form: '此型態尚未納入支援範圍'
     });
 
     const isHundoReviewReason = (reason) => Object.prototype.hasOwnProperty.call(HUNDO_REVIEW_REASON_MESSAGES, reason);
 
-    const hasUsableRecognizedSpecies = (card = {}) => (
+    const hasConfidentRecognizedBaseSpecies = (card = {}) => (
         card?.recognition_status === 'recognized'
-        && stripSmartHundoPresentationPrefixes(card?.official_name) !== ''
+        && (
+            stringValue(card?.base_species) !== ''
+            || stripSmartHundoPresentationPrefixes(card?.official_name) !== ''
+        )
         && Number(card?.species_confidence) >= SPECIES_CONFIDENCE_THRESHOLD
+    );
+
+    const hasUsableRecognizedSpecies = (card = {}) => (
+        hasConfidentRecognizedBaseSpecies(card)
+        && stringValue(card?.canonical_official_name) !== ''
     );
 
     const deriveIndependentState = (rawState, confidence, evidence, positiveValidator, evidenceFields) => {
@@ -978,7 +1198,7 @@
         const appendReasonOnce = (reason) => {
             if (!manualReviewReasons.includes(reason)) manualReviewReasons.push(reason);
         };
-        if (!hasUsableRecognizedSpecies(card)) appendReasonOnce('species_uncertain');
+        if (!hasConfidentRecognizedBaseSpecies(card)) appendReasonOnce('species_uncertain');
         Object.entries(effectiveStates).forEach(([dimension, state]) => {
             if (state === 'uncertain') appendReasonOnce(stateReasonByDimension[dimension]);
         });
@@ -994,11 +1214,143 @@
         };
     };
 
+    const FORM_VALIDATION_REASON_CODES = new Set([
+        'form_uncertain',
+        'form_species_mismatch',
+        'form_region_not_clear',
+        'form_confidence_low',
+        'form_label_only',
+        'form_signature_mismatch',
+        'unsupported_form'
+    ]);
+
+    const buildHundoCanonicalOfficialName = (card = {}, normalizeOfficialName) => {
+        if (HUNDO_SUPPORTED_FORM_IDS.has(card?.effective_form_id)) {
+            return HUNDO_FORM_CANONICAL_NAMES[card.effective_form_id];
+        }
+        if (card?.effective_form_id === 'not_applicable') {
+            return normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
+        }
+        return '';
+    };
+
+    const validateHundoPokemonForm = (card = {}, normalizeOfficialName) => {
+        const existingReasons = Array.isArray(card?.manual_review_reasons)
+            ? card.manual_review_reasons.filter(reason => !FORM_VALIDATION_REASON_CODES.has(reason))
+            : [];
+        const manualReviewReasons = [...new Set(existingReasons)];
+        const reject = (...reasons) => {
+            reasons.forEach(reason => {
+                if (!manualReviewReasons.includes(reason)) manualReviewReasons.push(reason);
+            });
+            return {
+                ...card,
+                effective_form_id: 'uncertain',
+                canonical_official_name: '',
+                manual_review_reasons: manualReviewReasons
+            };
+        };
+        const baseSpecies = card?.base_species;
+        const formId = card?.form_id;
+        const formEvidence = card?.form_evidence || {};
+        const speciesConfidence = clampStrictConfidence(card?.species_confidence);
+        const formConfidence = clampStrictConfidence(card?.form_confidence);
+
+        if (!Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)) {
+            const hasRawFormSnapshot = card?.raw?.form && typeof card.raw.form === 'object';
+            const rawForm = hasRawFormSnapshot ? card.raw.form : {};
+            const hasFormContractFlag = card?.raw
+                && typeof card.raw === 'object'
+                && Object.hasOwn(card.raw, 'form_contract_present');
+            const hasStructuredForm = hasFormContractFlag
+                ? card.raw.form_contract_present === true
+                : hasRawFormSnapshot
+                    ? stringValue(rawForm.base_species) !== '' || stringValue(rawForm.form_id) !== ''
+                    : ['base_species', 'form_id', 'form_confidence', 'form_evidence']
+                        .some(field => Object.hasOwn(card || {}, field));
+            if (hasStructuredForm) {
+                const validationReasons = [];
+                const addValidationReason = (reason) => {
+                    if (!validationReasons.includes(reason)) validationReasons.push(reason);
+                };
+                const structuredFormId = hasRawFormSnapshot
+                    ? stringValue(rawForm.form_id).toLowerCase()
+                    : stringValue(formId).toLowerCase();
+                const structuredVisualSignature = hasRawFormSnapshot
+                    ? rawForm.form_evidence?.visual_signature
+                    : formEvidence.visual_signature;
+                if (structuredFormId === 'uncertain') addValidationReason('form_uncertain');
+                else if (structuredFormId === 'unsupported') addValidationReason('unsupported_form');
+                else if (HUNDO_SUPPORTED_FORM_IDS.has(structuredFormId)) addValidationReason('form_species_mismatch');
+                else if (structuredFormId !== 'not_applicable') addValidationReason('form_uncertain');
+                if (structuredVisualSignature !== 'not_applicable') {
+                    addValidationReason('form_signature_mismatch');
+                }
+                if (validationReasons.length > 0) return reject(...validationReasons);
+            }
+            const result = {
+                ...card,
+                effective_form_id: 'not_applicable',
+                manual_review_reasons: manualReviewReasons
+            };
+            return {
+                ...result,
+                canonical_official_name: buildHundoCanonicalOfficialName(result, normalizeOfficialName)
+            };
+        }
+        if (formId === 'unsupported') return reject('unsupported_form');
+        if (formId === 'uncertain' || !HUNDO_SUPPORTED_FORM_IDS.has(formId)) return reject('form_uncertain');
+        if (!HUNDO_FORMS_BY_BASE_SPECIES[baseSpecies].includes(formId)) return reject('form_species_mismatch');
+        if (formEvidence.visual_signature !== formId) return reject('form_signature_mismatch');
+        const validationReasons = [];
+        const addValidationReason = (reason) => {
+            if (!validationReasons.includes(reason)) validationReasons.push(reason);
+        };
+        const isPartiallyOccluded = formEvidence.region_visibility === 'partially_occluded';
+        if (formEvidence.label_relationship === 'conflicting') addValidationReason('form_species_mismatch');
+        if (formEvidence.recognition_basis === 'label_only') addValidationReason('form_label_only');
+        if (!['clear', 'partially_occluded'].includes(formEvidence.region_visibility)) {
+            addValidationReason('form_region_not_clear');
+        }
+        if (speciesConfidence < SPECIES_CONFIDENCE_THRESHOLD) {
+            addValidationReason('species_uncertain');
+            addValidationReason('form_uncertain');
+        }
+        const minimumFormConfidence = isPartiallyOccluded
+            ? FORM_PARTIAL_VISIBILITY_THRESHOLD
+            : FORM_CONFIDENCE_THRESHOLD;
+        if (formConfidence < minimumFormConfidence) {
+            if (isPartiallyOccluded) addValidationReason('form_region_not_clear');
+            addValidationReason('form_confidence_low');
+        }
+        if (!['direct_visual_match', 'visual_and_label'].includes(formEvidence.recognition_basis)) {
+            addValidationReason('form_uncertain');
+        }
+        if (formEvidence.key_features_visible !== true) addValidationReason('form_uncertain');
+        if (
+            isPartiallyOccluded
+            && (formEvidence.recognition_basis !== 'direct_visual_match' || formEvidence.key_features_visible !== true)
+        ) {
+            addValidationReason('form_region_not_clear');
+        }
+        if (validationReasons.length > 0) return reject(...validationReasons);
+
+        const result = {
+            ...card,
+            effective_form_id: formId,
+            manual_review_reasons: manualReviewReasons
+        };
+        return {
+            ...result,
+            canonical_official_name: buildHundoCanonicalOfficialName(result, normalizeOfficialName)
+        };
+    };
+
     const reviewReasonCodes = (card = {}) => {
         const reasons = Array.isArray(card?.manual_review_reasons)
             ? card.manual_review_reasons.filter(isHundoReviewReason)
             : [];
-        if (!hasUsableRecognizedSpecies(card)) reasons.push('species_uncertain');
+        if (!hasConfidentRecognizedBaseSpecies(card)) reasons.push('species_uncertain');
         if (card?.effective_shiny_state === 'uncertain') reasons.push('shiny_uncertain');
         if (card?.effective_lucky_state === 'uncertain') reasons.push('lucky_uncertain');
         if (card?.effective_favorite_state === 'uncertain') reasons.push('favorite_uncertain');
@@ -1018,17 +1370,17 @@
         return reasons.filter(isHundoReviewReason);
     };
 
-    const buildHundoDisplayName = (card = {}, normalizeOfficialName) => {
+    const buildHundoDisplayName = (card = {}) => {
         if (!hasUsableRecognizedSpecies(card)) return '';
-        const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
-        if (!officialName) return '';
+        const canonicalOfficialName = stringValue(card?.canonical_official_name);
+        if (!canonicalOfficialName) return '';
         const prefix = [
             card?.effective_shiny_state === 'yes' ? '色違' : '',
             card?.effective_rocket_state === 'shadow' ? '暗影' : '',
             card?.effective_background_type === 'commemorative' ? '紀念背卡' : '',
             card?.effective_background_type === 'special' ? '特別背卡' : ''
         ].join('');
-        return `${prefix}${officialName}`;
+        return `${prefix}${canonicalOfficialName}`;
     };
 
     const summarizeHundoManualReview = (cards = [], screenshotReasons = []) => {
@@ -1054,15 +1406,12 @@
         };
     };
 
-    const smartHundoCardsToPokemonList = (cards = [], normalizeOfficialName) => {
+    const smartHundoCardsToPokemonList = (cards = []) => {
         const displayGroups = new Map();
         let recognizedCount = 0;
 
         (Array.isArray(cards) ? cards : []).forEach(card => {
-            const officialName = normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
-            if (!hasUsableRecognizedSpecies(card) || !officialName) return;
-
-            const displayName = buildHundoDisplayName(card, normalizeOfficialName);
+            const displayName = buildHundoDisplayName(card);
             if (!displayName) return;
             displayGroups.set(displayName, (displayGroups.get(displayName) || 0) + 1);
             recognizedCount += 1;
@@ -1082,6 +1431,12 @@
         isSmartHundoClassification,
         partitionImageJobs,
         adaptLegacyRocketState,
+        HUNDO_FORM_CANONICAL_NAMES,
+        HUNDO_FORMS_BY_BASE_SPECIES,
+        normalizeHundoBaseSpecies,
+        normalizeHundoFormId,
+        normalizeHundoFormEvidence,
+        adaptLegacyHundoForm,
         normalizeSmartHundoCard,
         normalizeSmartHundoResult,
         normalizeVisibleLabel,
@@ -1094,6 +1449,8 @@
         mergeHundoCountResults,
         HUNDO_COUNT_CONFIDENCE_THRESHOLD,
         SPECIES_CONFIDENCE_THRESHOLD,
+        FORM_CONFIDENCE_THRESHOLD,
+        FORM_PARTIAL_VISIBILITY_THRESHOLD,
         STATE_YES_CONFIDENCE_THRESHOLD,
         STATE_NEGATIVE_CONFIDENCE_THRESHOLD,
         ENUMERATION_CONFIDENCE_THRESHOLD,
@@ -1103,6 +1460,8 @@
         deriveRocketStateFromEvidence,
         deriveBackgroundTypeFromEvidence,
         validateHundoCardStates,
+        validateHundoPokemonForm,
+        buildHundoCanonicalOfficialName,
         HUNDO_REVIEW_REASON_MESSAGES,
         buildHundoDisplayName,
         smartHundoCardsToPokemonList,

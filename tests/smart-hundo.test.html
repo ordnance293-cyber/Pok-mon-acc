@@ -164,6 +164,14 @@
         appearance: 'none',
         ...overrides
       });
+      const formEvidence = (overrides = {}) => ({
+        region_visibility: 'clear',
+        recognition_basis: 'direct_visual_match',
+        visual_signature: 'moltres_galarian',
+        key_features_visible: true,
+        label_relationship: 'base_species_only',
+        ...overrides
+      });
       const cyanPurificationEvidence = () => ({
         present: true,
         region_visibility: 'clear',
@@ -201,6 +209,13 @@
         shadow_confidence: 0.9,
         ...overrides
       });
+      const formCard = (overrides = {}) => card({
+        base_species: '火焰鳥',
+        form_id: 'moltres_galarian',
+        form_confidence: 0.98,
+        form_evidence: formEvidence(),
+        ...overrides
+      });
       const validatedCard = (overrides = {}) => ({
         ...card(),
         screenshot_index: 0,
@@ -210,6 +225,7 @@
         effective_favorite_state: 'no',
         effective_rocket_state: 'normal',
         effective_background_type: 'none',
+        canonical_official_name: normalizeName(overrides.official_name ?? '超夢'),
         manual_review_reasons: [],
         ...overrides
       });
@@ -233,6 +249,12 @@
           isSmartHundoClassification,
           partitionImageJobs,
           adaptLegacyRocketState,
+          HUNDO_FORM_CANONICAL_NAMES,
+          HUNDO_FORMS_BY_BASE_SPECIES,
+          normalizeHundoBaseSpecies,
+          normalizeHundoFormId,
+          normalizeHundoFormEvidence,
+          adaptLegacyHundoForm,
           normalizeSmartHundoCard,
           normalizeSmartHundoResult: normalizeSmartHundoResultV2,
           validateSmartHundoStructure,
@@ -242,6 +264,8 @@
           HUNDO_REVIEW_REASON_MESSAGES,
           HUNDO_COUNT_CONFIDENCE_THRESHOLD,
           SPECIES_CONFIDENCE_THRESHOLD,
+          FORM_CONFIDENCE_THRESHOLD,
+          FORM_PARTIAL_VISIBILITY_THRESHOLD,
           STATE_YES_CONFIDENCE_THRESHOLD,
           STATE_NEGATIVE_CONFIDENCE_THRESHOLD,
           ENUMERATION_CONFIDENCE_THRESHOLD,
@@ -251,6 +275,8 @@
           deriveRocketStateFromEvidence,
           deriveBackgroundTypeFromEvidence,
           validateHundoCardStates,
+          validateHundoPokemonForm,
+          buildHundoCanonicalOfficialName,
           normalizeHundoCountResult,
           validateHundoCountEvidence,
           mergeHundoCountResults,
@@ -264,12 +290,588 @@
           normalizeName,
           { screenshotIndex: 0 }
         );
-        const makeCards = (count, overrides = {}) => Array.from({ length: count }, (_, index) => card({
+        const validatedFormCard = (overrides = {}) => validateHundoPokemonForm(
+          normalizeSmartHundoCard(formCard(overrides), normalizeName, { screenshotIndex: 0 }),
+          normalizeName
+        );
+        const displayFormCard = (formId, overrides = {}) => {
+          const baseByForm = Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
+            .find(([, ids]) => ids.includes(formId))[0];
+          return {
+            ...validatedCard(),
+            base_species: baseByForm,
+            form_id: formId,
+            form_confidence: 0.99,
+            form_evidence: formEvidence({
+              visual_signature: formId,
+              label_relationship: 'exact_form'
+            }),
+            effective_form_id: formId,
+            canonical_official_name: HUNDO_FORM_CANONICAL_NAMES[formId],
+            official_name: baseByForm,
+            ...overrides
+          };
+        };
+        const modelCard = (overrides = {}) => {
+          const officialName = String(overrides.official_name ?? '超夢');
+          const normalized = card({
+            base_species: officialName,
+            form_id: 'not_applicable',
+            form_confidence: 1,
+            form_evidence: {
+              region_visibility: 'clear',
+              recognition_basis: 'direct_visual_match',
+              visual_signature: 'not_applicable',
+              key_features_visible: true,
+              label_relationship: 'not_applicable'
+            },
+            ...overrides
+          });
+          normalized.cp = String(normalized.cp ?? '');
+          delete normalized.purified_state;
+          delete normalized.purified_confidence;
+          delete normalized.shadow_state;
+          delete normalized.shadow_confidence;
+          return normalized;
+        };
+        const makeModelCards = (count, overrides = {}) => Array.from({ length: count }, (_, index) => modelCard({
           order: index + 1,
           row: Math.floor(index / 3) + 1,
           column: (index % 3) + 1,
           ...overrides
         }));
+        test('keeps API-shaped model fixtures on the current four-field form contract', () => {
+          const fixture = modelCard();
+          ['base_species', 'form_id', 'form_confidence', 'form_evidence'].forEach(field => {
+            equal(Object.hasOwn(fixture, field), true, field);
+          });
+          equal(typeof fixture.cp, 'string', 'default cp is schema-valid');
+          equal(typeof modelCard({ cp: 42 }).cp, 'string', 'numeric override cp is schema-valid');
+          equal(Object.hasOwn(fixture, 'purified_state'), false);
+          equal(Object.hasOwn(fixture, 'shadow_state'), false);
+        });
+
+        test('maps all 23 approved form IDs to exact canonical names', () => {
+          const expected = {
+            articuno_standard: '急凍鳥',
+            articuno_galarian: '伽勒爾急凍鳥',
+            zapdos_standard: '閃電鳥',
+            zapdos_galarian: '伽勒爾閃電鳥',
+            moltres_standard: '火焰鳥',
+            moltres_galarian: '伽勒爾火焰鳥',
+            zacian_standard: '蒼響',
+            zacian_crowned: '蒼響劍盾型態',
+            zamazenta_standard: '藏瑪然特',
+            zamazenta_crowned: '藏瑪然特劍盾型態',
+            dialga_standard: '帝牙盧卡',
+            dialga_origin: '起源帝牙盧卡',
+            palkia_standard: '帕路奇亞',
+            palkia_origin: '起源帕路奇亞',
+            zygarde_10: '基格爾德（10%形態）',
+            zygarde_50: '基格爾德（50%形態）',
+            zygarde_complete: '基格爾德（完全體形態）',
+            necrozma_base: '奈克洛茲瑪',
+            necrozma_dusk_mane: '奈克洛茲瑪（黃昏之鬃）',
+            necrozma_dawn_wings: '奈克洛茲瑪（拂曉之翼）',
+            kyurem_base: '酋雷姆',
+            kyurem_white: '焰白酋雷姆',
+            kyurem_black: '闇黑酋雷姆'
+          };
+          deepEqual(HUNDO_FORM_CANONICAL_NAMES, expected);
+          equal(Object.isFrozen(HUNDO_FORM_CANONICAL_NAMES), true);
+          equal(Object.keys(HUNDO_FORM_CANONICAL_NAMES).length, 23);
+        });
+
+        test('allows each supported form only for its approved base species', () => {
+          const expectedCompatibility = {
+            急凍鳥: ['articuno_standard', 'articuno_galarian'],
+            閃電鳥: ['zapdos_standard', 'zapdos_galarian'],
+            火焰鳥: ['moltres_standard', 'moltres_galarian'],
+            蒼響: ['zacian_standard', 'zacian_crowned'],
+            藏瑪然特: ['zamazenta_standard', 'zamazenta_crowned'],
+            帝牙盧卡: ['dialga_standard', 'dialga_origin'],
+            帕路奇亞: ['palkia_standard', 'palkia_origin'],
+            基格爾德: ['zygarde_10', 'zygarde_50', 'zygarde_complete'],
+            奈克洛茲瑪: ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'],
+            酋雷姆: ['kyurem_base', 'kyurem_white', 'kyurem_black']
+          };
+          deepEqual(HUNDO_FORMS_BY_BASE_SPECIES, expectedCompatibility);
+          equal(Object.isFrozen(HUNDO_FORMS_BY_BASE_SPECIES), true);
+          equal(Object.keys(HUNDO_FORMS_BY_BASE_SPECIES).length, 10);
+          const ownership = new Map();
+          Object.entries(HUNDO_FORMS_BY_BASE_SPECIES).forEach(([species, ids]) => {
+            equal(Object.isFrozen(ids), true);
+            ids.forEach(id => {
+              equal(ownership.has(id), false, `${id} has exactly one owner`);
+              ownership.set(id, species);
+            });
+          });
+          equal(ownership.size, 23);
+          equal(ownership.get('moltres_galarian'), '火焰鳥');
+          equal(HUNDO_FORMS_BY_BASE_SPECIES['火焰鳥'].includes('dialga_origin'), false);
+          const whitelistSpecies = Object.keys(expectedCompatibility);
+          Object.entries(expectedCompatibility).forEach(([literalOwner, formIds]) => {
+            formIds.forEach(formId => {
+              const validateForSpecies = (baseSpecies) => validateHundoPokemonForm(
+                normalizeSmartHundoCard(formCard({
+                  official_name: baseSpecies,
+                  visible_label: baseSpecies,
+                  base_species: baseSpecies,
+                  form_id: formId,
+                  form_evidence: formEvidence({ visual_signature: formId })
+                }), normalizeName, { screenshotIndex: 0 }),
+                normalizeName
+              );
+              equal(validateForSpecies(literalOwner).effective_form_id, formId, `${formId} literal owner`);
+              whitelistSpecies.filter(species => species !== literalOwner).forEach(otherSpecies => {
+                const rejected = validateForSpecies(otherSpecies);
+                equal(rejected.effective_form_id, 'uncertain', `${formId} rejects ${otherSpecies}`);
+                equal(rejected.manual_review_reasons.includes('form_species_mismatch'), true, `${formId} rejects ${otherSpecies}`);
+              });
+            });
+          });
+        });
+
+        test('normalizes all supported base aliases without generic standard-form fallback', () => {
+          const aliases = [
+            ['伽勒爾急凍鳥', '急凍鳥'], ['伽勒爾閃電鳥', '閃電鳥'], ['伽勒爾火焰鳥', '火焰鳥'],
+            ['蒼響劍王', '蒼響'], ['蒼響（劍之王）', '蒼響'], ['蒼響劍盾型態', '蒼響'],
+            ['藏瑪然特盾王', '藏瑪然特'], ['藏瑪然特（盾之王）', '藏瑪然特'], ['藏瑪然特劍盾型態', '藏瑪然特'],
+            ['帝牙盧卡（起源形態）', '帝牙盧卡'], ['起源型態帝牙盧卡', '帝牙盧卡'], ['起源帝牙盧卡', '帝牙盧卡'],
+            ['帕路奇亞（起源形態）', '帕路奇亞'], ['起源型態帕路奇亞', '帕路奇亞'], ['起源帕路奇亞', '帕路奇亞'],
+            ['基格爾德（10%形態）', '基格爾德'], ['基格爾德（50%形態）', '基格爾德'], ['基格爾德（完全體形態）', '基格爾德'],
+            ['奈克洛茲瑪（黃昏之鬃）', '奈克洛茲瑪'], ['奈克洛茲瑪（拂曉之翼）', '奈克洛茲瑪'],
+            ['焰白酋雷姆', '酋雷姆'], ['炎白酋雷姆', '酋雷姆'], ['闇黑酋雷姆', '酋雷姆']
+          ];
+          aliases.forEach(([alias, species]) => equal(normalizeHundoBaseSpecies(alias, normalizeName), species, alias));
+          equal(normalizeHundoBaseSpecies('蒼響（劍之王）', normalizeName), '蒼響');
+          equal(normalizeHundoBaseSpecies('超夢', normalizeName), '超夢');
+          deepEqual(adaptLegacyHundoForm({ official_name: '伽勒爾火焰鳥' }, normalizeName), {
+            base_species: '火焰鳥', form_id: 'moltres_galarian'
+          });
+          deepEqual(adaptLegacyHundoForm({ official_name: '火焰鳥' }, normalizeName), {
+            base_species: '火焰鳥', form_id: 'uncertain'
+          });
+          deepEqual(adaptLegacyHundoForm({ official_name: '超夢' }, normalizeName), {
+            base_species: '超夢', form_id: 'not_applicable'
+          });
+        });
+
+        test('normalizes the raw form contract without trusting it as effective output', () => {
+          const normalized = normalizeSmartHundoCard(formCard(), normalizeName, { screenshotIndex: 2 });
+          equal(normalized.base_species, '火焰鳥');
+          equal(normalized.form_id, 'moltres_galarian');
+          equal(normalized.form_confidence, 0.98);
+          deepEqual(normalized.form_evidence, formEvidence());
+          equal(normalized.effective_form_id, 'uncertain');
+          equal(normalized.canonical_official_name, '');
+          deepEqual(normalized.raw.form, {
+            base_species: '火焰鳥',
+            form_id: 'moltres_galarian',
+            form_confidence: 0.98,
+            form_evidence: formEvidence()
+          });
+          equal(normalizeHundoFormId('unsupported'), 'unsupported');
+          ['', 'standard', 'moltres_galarian ', 'dialga-origin', null].forEach(value => {
+            equal(normalizeHundoFormId(value), 'uncertain', `invalid form ${JSON.stringify(value)}`);
+          });
+          const outsideWhitelist = normalizeSmartHundoCard(formCard({
+            base_species: '超夢', form_id: 'not_applicable'
+          }), normalizeName);
+          equal(outsideWhitelist.base_species, '超夢');
+          equal(outsideWhitelist.form_id, 'not_applicable');
+          equal(outsideWhitelist.effective_form_id, 'uncertain');
+          equal(outsideWhitelist.canonical_official_name, '');
+          const illegalCombination = normalizeSmartHundoCard(formCard({ form_id: 'dialga_origin' }), normalizeName);
+          equal(illegalCombination.base_species, '火焰鳥');
+          equal(illegalCombination.form_id, 'dialga_origin');
+        });
+
+        test('normalizes form evidence to its five controlled fields', () => {
+          const normalized = normalizeHundoFormEvidence({
+            region_visibility: 'cropped', recognition_basis: 'label_only', visual_signature: 'other',
+            key_features_visible: 'yes', label_relationship: 'custom_nickname', unexpected: 'discarded'
+          });
+          deepEqual(Object.keys(normalized), [
+            'region_visibility', 'recognition_basis', 'visual_signature', 'key_features_visible', 'label_relationship'
+          ]);
+          deepEqual(normalized, {
+            region_visibility: 'cropped', recognition_basis: 'label_only', visual_signature: 'other',
+            key_features_visible: false, label_relationship: 'custom_nickname'
+          });
+          deepEqual(normalizeHundoFormEvidence({
+            region_visibility: 'invalid', recognition_basis: 'invalid', visual_signature: 'invalid',
+            key_features_visible: true, label_relationship: 'invalid'
+          }), {
+            region_visibility: 'uncertain', recognition_basis: 'uncertain', visual_signature: 'uncertain',
+            key_features_visible: true, label_relationship: 'uncertain'
+          });
+        });
+
+        test('accepts clear direct visual form evidence', () => {
+          const result = validatedFormCard();
+          equal(result.effective_form_id, 'moltres_galarian');
+          equal(result.canonical_official_name, '伽勒爾火焰鳥');
+          deepEqual(result.manual_review_reasons, []);
+          equal(buildHundoCanonicalOfficialName(result, normalizeName), '伽勒爾火焰鳥');
+        });
+
+        test('accepts strong visuals with a generic base-species label', () => {
+          const result = validatedFormCard({
+            visible_label: '火焰鳥',
+            form_evidence: formEvidence({
+              recognition_basis: 'visual_and_label',
+              label_relationship: 'base_species_only'
+            })
+          });
+          equal(result.canonical_official_name, '伽勒爾火焰鳥');
+        });
+
+        test('accepts a custom nickname when direct visual evidence is strong', () => {
+          const result = validatedFormCard({
+            visible_label: '151515',
+            form_evidence: formEvidence({ label_relationship: 'custom_nickname' })
+          });
+          equal(result.effective_form_id, 'moltres_galarian');
+        });
+
+        test('rejects label-only whitelist form evidence', () => {
+          const result = validatedFormCard({
+            form_evidence: formEvidence({ recognition_basis: 'label_only' })
+          });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_label_only'), true);
+        });
+
+        test('rejects cropped form evidence', () => {
+          const result = validatedFormCard({
+            form_evidence: formEvidence({ region_visibility: 'cropped' })
+          });
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+        });
+
+        test('rejects not-visible form evidence', () => {
+          const result = validatedFormCard({
+            form_evidence: formEvidence({ region_visibility: 'not_visible' })
+          });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+        });
+
+        test('accepts partially occluded direct evidence at 0.93', () => {
+          const result = validatedFormCard({
+            form_confidence: 0.93,
+            form_evidence: formEvidence({
+              region_visibility: 'partially_occluded',
+              recognition_basis: 'direct_visual_match'
+            })
+          });
+          equal(result.effective_form_id, 'moltres_galarian');
+        });
+
+        test('rejects partially occluded visual-and-label evidence even at 0.93', () => {
+          const result = validatedFormCard({
+            form_confidence: 0.93,
+            form_evidence: formEvidence({
+              region_visibility: 'partially_occluded',
+              recognition_basis: 'visual_and_label'
+            })
+          });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+        });
+
+        test('rejects partially occluded evidence below 0.93', () => {
+          const result = validatedFormCard({
+            form_confidence: 0.92,
+            form_evidence: formEvidence({
+              region_visibility: 'partially_occluded',
+              recognition_basis: 'direct_visual_match'
+            })
+          });
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_confidence_low'), true);
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+        });
+
+        test('keeps every applicable partial-visibility rejection reason', () => {
+          const result = validatedFormCard({
+            form_confidence: 0.92,
+            form_evidence: formEvidence({
+              region_visibility: 'partially_occluded',
+              key_features_visible: false
+            })
+          });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+          equal(result.manual_review_reasons.includes('form_confidence_low'), true);
+          equal(result.manual_review_reasons.includes('form_uncertain'), true);
+        });
+
+        test('rejects invalid direct-call form evidence values', () => {
+          const normalized = normalizeSmartHundoCard(formCard(), normalizeName, { screenshotIndex: 0 });
+          const result = validateHundoPokemonForm({
+            ...normalized,
+            form_evidence: {
+              ...normalized.form_evidence,
+              recognition_basis: 'invalid',
+              region_visibility: 'invalid'
+            }
+          }, normalizeName);
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_uncertain'), true);
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+        });
+
+        test('accepts clear form confidence at 0.85 and rejects 0.849', () => {
+          equal(validatedFormCard({ form_confidence: 0.85 }).effective_form_id, 'moltres_galarian');
+          const belowThreshold = validatedFormCard({ form_confidence: 0.849 });
+          equal(belowThreshold.effective_form_id, 'uncertain');
+          equal(belowThreshold.manual_review_reasons.includes('form_confidence_low'), true);
+        });
+
+        test('fails closed for missing, nonfinite, and non-number direct-call species confidence', () => {
+          [
+            ['missing', undefined],
+            ['nonnumeric string', 'not-a-number'],
+            ['numeric string', '0.99'],
+            ['boolean', true],
+            ['array', [0.99]],
+            ['NaN', Number.NaN],
+            ['Infinity', Number.POSITIVE_INFINITY]
+          ].forEach(([label, speciesConfidence]) => {
+            const result = validateHundoPokemonForm({
+              ...normalizeSmartHundoCard(formCard(), normalizeName, { screenshotIndex: 0 }),
+              species_confidence: speciesConfidence
+            }, normalizeName);
+            equal(result.effective_form_id, 'uncertain', label);
+            equal(result.canonical_official_name, '', label);
+            equal(result.manual_review_reasons.includes('species_uncertain'), true, label);
+            equal(result.manual_review_reasons.includes('form_uncertain'), true, label);
+          });
+        });
+
+        test('fails closed for missing, nonfinite, and non-number direct-call form confidence', () => {
+          [
+            ['missing', undefined],
+            ['nonnumeric string', 'not-a-number'],
+            ['numeric string', '0.99'],
+            ['boolean', true],
+            ['array', [0.99]],
+            ['NaN', Number.NaN],
+            ['Infinity', Number.POSITIVE_INFINITY]
+          ].forEach(([label, formConfidence]) => {
+            const result = validateHundoPokemonForm({
+              ...normalizeSmartHundoCard(formCard(), normalizeName, { screenshotIndex: 0 }),
+              form_confidence: formConfidence
+            }, normalizeName);
+            equal(result.effective_form_id, 'uncertain', label);
+            equal(result.canonical_official_name, '', label);
+            equal(result.manual_review_reasons.includes('form_confidence_low'), true, label);
+          });
+        });
+
+        test('preserves strict species confidence types through normalization and validation', () => {
+          [
+            ['missing', undefined],
+            ['nonnumeric string', 'not-a-number'],
+            ['numeric string', '0.99'],
+            ['boolean', true],
+            ['array', [0.99]],
+            ['NaN', Number.NaN],
+            ['Infinity', Number.POSITIVE_INFINITY]
+          ].forEach(([label, speciesConfidence]) => {
+            const result = validateHundoPokemonForm(
+              normalizeSmartHundoCard(
+                formCard({ species_confidence: speciesConfidence }),
+                normalizeName,
+                { screenshotIndex: 0 }
+              ),
+              normalizeName
+            );
+            equal(result.effective_form_id, 'uncertain', label);
+            equal(result.canonical_official_name, '', label);
+            equal(result.manual_review_reasons.includes('species_uncertain'), true, label);
+            equal(result.manual_review_reasons.includes('form_uncertain'), true, label);
+          });
+        });
+
+        test('preserves strict form confidence types through normalization and validation', () => {
+          [
+            ['missing', undefined],
+            ['nonnumeric string', 'not-a-number'],
+            ['numeric string', '0.99'],
+            ['boolean', true],
+            ['array', [0.99]],
+            ['NaN', Number.NaN],
+            ['Infinity', Number.POSITIVE_INFINITY]
+          ].forEach(([label, formConfidence]) => {
+            const result = validateHundoPokemonForm(
+              normalizeSmartHundoCard(
+                formCard({ form_confidence: formConfidence }),
+                normalizeName,
+                { screenshotIndex: 0 }
+              ),
+              normalizeName
+            );
+            equal(result.effective_form_id, 'uncertain', label);
+            equal(result.canonical_official_name, '', label);
+            equal(result.manual_review_reasons.includes('form_confidence_low'), true, label);
+          });
+        });
+
+        test('rejects mismatched visual signature', () => {
+          const result = validatedFormCard({ form_evidence: formEvidence({ visual_signature: 'moltres_standard' }) });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.manual_review_reasons.includes('form_signature_mismatch'), true);
+        });
+
+        test('rejects an incompatible species-form combination', () => {
+          const result = validatedFormCard({ form_id: 'dialga_origin' });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.manual_review_reasons.includes('form_species_mismatch'), true);
+        });
+
+        test('rejects uncertain form IDs without outputting a base species name', () => {
+          const result = validatedFormCard({ form_id: 'uncertain' });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_uncertain'), true);
+        });
+
+        test('rejects unsupported form IDs', () => {
+          const result = validatedFormCard({
+            form_id: 'unsupported',
+            form_evidence: formEvidence({ visual_signature: 'other' })
+          });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.manual_review_reasons.includes('unsupported_form'), true);
+        });
+
+        test('rejects missing key features and uncertain recognition basis', () => {
+          const noFeatures = validatedFormCard({ form_evidence: formEvidence({ key_features_visible: false }) });
+          const uncertainBasis = validatedFormCard({ form_evidence: formEvidence({ recognition_basis: 'uncertain' }) });
+          equal(noFeatures.effective_form_id, 'uncertain');
+          equal(noFeatures.manual_review_reasons.includes('form_uncertain'), true);
+          equal(uncertainBasis.effective_form_id, 'uncertain');
+          equal(uncertainBasis.manual_review_reasons.includes('form_uncertain'), true);
+        });
+
+        test('rejects conflicting labels and low species confidence', () => {
+          const conflicting = validatedFormCard({ form_evidence: formEvidence({ label_relationship: 'conflicting' }) });
+          const lowSpecies = validatedFormCard({ species_confidence: 0.799 });
+          equal(conflicting.effective_form_id, 'uncertain');
+          equal(conflicting.manual_review_reasons.includes('form_species_mismatch'), true);
+          equal(lowSpecies.effective_form_id, 'uncertain');
+          equal(lowSpecies.manual_review_reasons.includes('species_uncertain'), true);
+          equal(lowSpecies.manual_review_reasons.includes('form_uncertain'), true);
+        });
+
+        test('keeps non-whitelist species canonical names without form reasons', () => {
+          ['夢幻', '超夢', '鳳王', '炎帝', '固拉多'].forEach(officialName => {
+            const result = validateHundoPokemonForm(normalizedCard({ official_name: officialName }), normalizeName);
+            equal(result.effective_form_id, 'not_applicable', officialName);
+            equal(result.canonical_official_name, officialName, officialName);
+            equal(result.manual_review_reasons.some(reason => reason.startsWith('form_') || reason === 'unsupported_form'), false, officialName);
+          });
+        });
+
+        test('requires an exact structured non-whitelist control tuple while preserving legacy raw-form absence', () => {
+          const structured = (overrides = {}) => normalizeSmartHundoCard(card({
+            official_name: 'Mewtwo',
+            base_species: 'Mewtwo',
+            form_id: 'not_applicable',
+            form_confidence: 1,
+            form_evidence: {
+              region_visibility: 'clear',
+              recognition_basis: 'direct_visual_match',
+              visual_signature: 'not_applicable',
+              key_features_visible: true,
+              label_relationship: 'not_applicable'
+            },
+            ...overrides
+          }), normalizeName, { screenshotIndex: 0 });
+          const valid = validateHundoPokemonForm(structured(), normalizeName);
+          equal(valid.effective_form_id, 'not_applicable');
+          equal(valid.canonical_official_name, 'Mewtwo');
+          deepEqual(valid.manual_review_reasons, []);
+
+          const malformed = [
+            [{ form_id: 'uncertain' }, 'form_uncertain'],
+            [{ form_id: 'unsupported' }, 'unsupported_form'],
+            [{ form_id: 'moltres_standard' }, 'form_species_mismatch'],
+            [{ form_evidence: { ...structured().form_evidence, visual_signature: 'other' } }, 'form_signature_mismatch']
+          ];
+          malformed.forEach(([overrides, reason]) => {
+            const result = validateHundoPokemonForm(structured(overrides), normalizeName);
+            equal(result.effective_form_id, 'uncertain', reason);
+            equal(result.canonical_official_name, '', reason);
+            equal(result.manual_review_reasons.includes(reason), true, reason);
+          });
+
+          const directMalformed = structured({ form_id: 'unsupported' });
+          delete directMalformed.raw;
+          const directResult = validateHundoPokemonForm(directMalformed, normalizeName);
+          equal(directResult.effective_form_id, 'uncertain', 'direct structured unsupported form');
+          equal(directResult.manual_review_reasons.includes('unsupported_form'), true, 'direct structured unsupported form');
+
+          const partialStructuredCases = [
+            [
+              { form_evidence: formEvidence({ visual_signature: 'other' }) },
+              ['form_uncertain', 'form_signature_mismatch'],
+              'evidence-only structured form'
+            ],
+            [
+              { form_confidence: 0.99 },
+              ['form_uncertain', 'form_signature_mismatch'],
+              'confidence-only structured form'
+            ],
+            [
+              {
+                base_species: '',
+                form_id: '',
+                form_confidence: 0.99,
+                form_evidence: formEvidence({ visual_signature: 'not_applicable' })
+              },
+              ['form_uncertain'],
+              'explicitly empty structured identifiers'
+            ]
+          ];
+          partialStructuredCases.forEach(([overrides, expectedReasons, label]) => {
+            const result = validateHundoPokemonForm(
+              normalizeSmartHundoCard(card({ official_name: 'Mewtwo', ...overrides }), normalizeName),
+              normalizeName
+            );
+            equal(result.raw.form_contract_present, true, `${label} provenance`);
+            equal(result.effective_form_id, 'uncertain', label);
+            equal(result.canonical_official_name, '', label);
+            expectedReasons.forEach(reason => {
+              equal(result.manual_review_reasons.includes(reason), true, `${label} ${reason}`);
+            });
+          });
+
+          const directConfidenceOnly = validateHundoPokemonForm({
+            official_name: 'Mewtwo',
+            species_confidence: 0.99,
+            form_confidence: 0.99
+          }, normalizeName);
+          equal(directConfidenceOnly.effective_form_id, 'uncertain', 'direct confidence-only structured form');
+          equal(
+            directConfidenceOnly.manual_review_reasons.includes('form_uncertain'),
+            true,
+            'direct confidence-only form is not legacy'
+          );
+
+          const legacy = validateHundoPokemonForm(normalizedCard({ official_name: 'Mewtwo' }), normalizeName);
+          equal(legacy.raw.form_contract_present, false);
+          equal(legacy.effective_form_id, 'not_applicable');
+          equal(legacy.canonical_official_name, 'Mewtwo');
+        });
 
         test('normalizes each required hundo query variant', () => {
           const canonical = '傳說的寶可夢,幻,究極異獸&4*';
@@ -536,7 +1138,7 @@
         });
 
         test('validates dark teal CP-area sparkles as shiny', () => {
-          const validated = validateHundoCardStates(normalizedCard({
+          const validated = validateHundoCardStates(validateHundoPokemonForm(normalizedCard({
             shiny_state: 'yes',
             shiny_confidence: 0.98,
             shiny_evidence: {
@@ -546,13 +1148,13 @@
               color: 'dark_blue_teal',
               shape: 'multiple_four_point_sparkles'
             }
-          }));
+          }), normalizeName));
           equal(validated.effective_shiny_state, 'yes');
-          equal(buildHundoDisplayName(validated, normalizeName), '色違超夢');
+          equal(buildHundoDisplayName(validated), '色違超夢');
         });
 
         test('purified Groudon never becomes shiny from cyan radial evidence', () => {
-          const validated = validateHundoCardStates(normalizedCard({
+          const validated = validateHundoCardStates(validateHundoPokemonForm(normalizedCard({
             official_name: '固拉多',
             shiny_state: 'yes',
             shiny_confidence: 0.98,
@@ -560,14 +1162,14 @@
             rocket_state: 'purified',
             rocket_confidence: 0.98,
             rocket_evidence: cyanPurificationEvidence()
-          }));
+          }), normalizeName));
           equal(validated.effective_shiny_state, 'uncertain');
           equal(validated.effective_rocket_state, 'purified');
-          equal(buildHundoDisplayName(validated, normalizeName), '固拉多');
+          equal(buildHundoDisplayName(validated), '固拉多');
         });
 
         test('validates combined shiny and shadow evidence in fixed display order', () => {
-          const validated = validateHundoCardStates(normalizedCard({
+          const validated = validateHundoCardStates(validateHundoPokemonForm(normalizedCard({
             official_name: '超夢',
             shiny_state: 'yes',
             shiny_confidence: 0.98,
@@ -585,10 +1187,10 @@
               color: 'purple',
               shape: 'purple_flame'
             })
-          }));
+          }), normalizeName));
           equal(validated.effective_shiny_state, 'yes');
           equal(validated.effective_rocket_state, 'shadow');
-          equal(buildHundoDisplayName(validated, normalizeName), '色違暗影超夢');
+          equal(buildHundoDisplayName(validated), '色違暗影超夢');
         });
 
         test('rejects raw and positive-evidence contradictions without inferring alternatives', () => {
@@ -740,24 +1342,47 @@
           equal(validated.manual_review_reasons.includes('background_uncertain'), true);
         });
 
-        test('uses species confidence in the downstream recognition gate without inventing a name', () => {
-          const belowThreshold = validateHundoCardStates(normalizedCard({
-            official_name: '固拉多',
-            recognition_status: 'recognized',
-            species_confidence: 0.799
-          }));
-          const atThreshold = validateHundoCardStates(normalizedCard({
-            official_name: '固拉多',
-            recognition_status: 'recognized',
-            species_confidence: 0.80
-          }));
-          const belowConversion = effectiveSmartHundoCardsToPokemonList([belowThreshold], normalizeName);
-          const atConversion = effectiveSmartHundoCardsToPokemonList([atThreshold], normalizeName);
-          equal(belowThreshold.official_name, '固拉多');
-          equal(belowThreshold.recognition_status, 'recognized');
+        test('uses species confidence in the downstream structured-form recognition gate', () => {
+          const belowThreshold = validateHundoCardStates(validateHundoPokemonForm(
+            normalizeSmartHundoCard(formCard({ species_confidence: 0.799 }), normalizeName, { screenshotIndex: 0 }),
+            normalizeName
+          ));
+          const atThreshold = validateHundoCardStates(validateHundoPokemonForm(
+            normalizeSmartHundoCard(formCard({ species_confidence: 0.80 }), normalizeName, { screenshotIndex: 0 }),
+            normalizeName
+          ));
+          const belowConversion = effectiveSmartHundoCardsToPokemonList([belowThreshold]);
+          const atConversion = effectiveSmartHundoCardsToPokemonList([atThreshold]);
           equal(belowConversion.pokemon_list, '');
           equal(belowConversion.review_reason_counts.species_uncertain, 1);
-          equal(atConversion.pokemon_list, '固拉多');
+          equal(atConversion.pokemon_list, HUNDO_FORM_CANONICAL_NAMES.moltres_galarian);
+        });
+
+        test('accepts a structured form at the exact species confidence threshold', () => {
+          const result = validateHundoPokemonForm(normalizeSmartHundoCard(formCard({
+            species_confidence: 0.80
+          }), normalizeName, { screenshotIndex: 0 }), normalizeName);
+          equal(result.effective_form_id, 'moltres_galarian');
+          equal(result.canonical_official_name, HUNDO_FORM_CANONICAL_NAMES.moltres_galarian);
+          equal(result.manual_review_reasons.includes('species_uncertain'), false);
+        });
+
+        test('repeated form validation preserves and deduplicates existing state and screenshot reasons', () => {
+          const first = validateHundoPokemonForm({
+            ...validatedFormCard(),
+            manual_review_reasons: [
+              'shiny_uncertain',
+              'incomplete_card_enumeration',
+              'shiny_uncertain',
+              'form_uncertain'
+            ]
+          }, normalizeName);
+          const second = validateHundoPokemonForm(first, normalizeName);
+          deepEqual(second.manual_review_reasons, [
+            'shiny_uncertain',
+            'incomplete_card_enumeration'
+          ]);
+          equal(second.effective_form_id, 'moltres_galarian');
         });
 
         test('normalizes the five-dimension screenshot root without deduplicating coordinates', () => {
@@ -766,7 +1391,7 @@
             scan_complete: true,
             bottom_edge_checked: true,
             enumeration_confidence: 1.2,
-            cards: [card(), card()]
+            cards: [modelCard(), modelCard()]
           }, normalizeName, { screenshotIndex: 7 });
           equal(normalized.detected_card_count, 2);
           equal(normalized.scan_complete, true);
@@ -783,7 +1408,7 @@
               scan_complete: true,
               bottom_edge_checked: true,
               enumeration_confidence: 0.99,
-              cards: makeCards(count)
+              cards: makeModelCards(count)
             }, normalizeName, { screenshotIndex: 4 });
             equal(normalized.cards.length, count, `${count} cards survive`);
             equal(normalized.detected_card_count, count, `${count} detected cards survive`);
@@ -797,7 +1422,7 @@
             scan_complete: true,
             bottom_edge_checked: true,
             enumeration_confidence: 0.8,
-            cards: makeCards(1, {
+            cards: makeModelCards(1, {
               visible_label: 'GLO蒼響151515',
               official_name: '',
               recognition_status: 'partial',
@@ -816,7 +1441,7 @@
             scan_complete: true,
             bottom_edge_checked: true,
             enumeration_confidence: 0.01,
-            cards: makeCards(2, {
+            cards: makeModelCards(2, {
               official_name: '',
               recognition_status: 'uncertain',
               shiny_state: 'uncertain'
@@ -854,14 +1479,14 @@
         });
 
         test('builds display names only from effective states', () => {
-          const modelYesButRejected = card({
+          const modelYesButRejected = validatedCard({
             official_name: '超夢',
             shiny_state: 'yes',
             effective_shiny_state: 'uncertain',
             effective_rocket_state: 'purified',
             effective_background_type: 'none'
           });
-          equal(buildHundoDisplayName(modelYesButRejected, normalizeName), '超夢');
+          equal(buildHundoDisplayName(modelYesButRejected), '超夢');
         });
 
         test('strips repeated model presentation labels before effective-state display conversion', () => {
@@ -888,12 +1513,12 @@
             }), normalizeName);
             equal(normalized.official_name, '固拉多', `${official_name} normalizes to species only`);
             equal(
-              buildHundoDisplayName(validatedCard({
-                ...normalized,
+              buildHundoDisplayName({
+                ...validateHundoPokemonForm(normalized, normalizeName),
                 effective_shiny_state: 'no',
                 effective_rocket_state: 'normal',
                 effective_background_type: 'none'
-              }), normalizeName),
+              }),
               '固拉多',
               `${official_name} cannot bypass effective states`
             );
@@ -912,9 +1537,9 @@
             normalizeName
           );
           equal(buildHundoDisplayName(validatedCard({
-            ...normalized,
+            ...validateHundoPokemonForm(normalized, normalizeName),
             effective_background_type: 'special'
-          }), normalizeName), '特別背卡固拉多');
+          })), '特別背卡固拉多');
         });
 
         test('requires a usable recognized species before building any display name', () => {
@@ -925,8 +1550,82 @@
             validatedCard({ species_confidence: SPECIES_CONFIDENCE_THRESHOLD - 0.001 })
           ];
           unusableCards.forEach((unusable, index) => {
-            equal(buildHundoDisplayName(unusable, normalizeName), '', `unusable species ${index + 1}`);
+            equal(buildHundoDisplayName(unusable), '', `unusable species ${index + 1}`);
           });
+        });
+
+        test('renders canonical form names for every supported display group', () => {
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('articuno_standard'),
+            displayFormCard('articuno_galarian')
+          ]).pokemon_list, '急凍鳥,伽勒爾急凍鳥');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zapdos_standard'),
+            displayFormCard('zapdos_galarian')
+          ]).pokemon_list, '閃電鳥,伽勒爾閃電鳥');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('moltres_standard'),
+            displayFormCard('moltres_galarian')
+          ]).pokemon_list, '火焰鳥,伽勒爾火焰鳥');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zacian_standard'),
+            displayFormCard('zacian_crowned'),
+            displayFormCard('zacian_crowned')
+          ]).pokemon_list, '蒼響,蒼響劍盾型態*2');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zamazenta_crowned')
+          ]).pokemon_list, '藏瑪然特劍盾型態');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('dialga_standard'),
+            displayFormCard('dialga_origin')
+          ]).pokemon_list, '帝牙盧卡,起源帝牙盧卡');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('palkia_standard'),
+            displayFormCard('palkia_origin')
+          ]).pokemon_list, '帕路奇亞,起源帕路奇亞');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zygarde_10'),
+            displayFormCard('zygarde_50'),
+            displayFormCard('zygarde_complete')
+          ]).pokemon_list, '基格爾德（10%形態）,基格爾德（50%形態）,基格爾德（完全體形態）');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('necrozma_base'),
+            displayFormCard('necrozma_dusk_mane'),
+            displayFormCard('necrozma_dawn_wings')
+          ]).pokemon_list, '奈克洛茲瑪,奈克洛茲瑪（黃昏之鬃）,奈克洛茲瑪（拂曉之翼）');
+          equal(effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('kyurem_base'),
+            displayFormCard('kyurem_white'),
+            displayFormCard('kyurem_white'),
+            displayFormCard('kyurem_black')
+          ]).pokemon_list, '酋雷姆,焰白酋雷姆*2,闇黑酋雷姆');
+        });
+
+        test('uses the canonical form name after state prefixes and omits unresolved whitelist forms', () => {
+          equal(buildHundoDisplayName(displayFormCard('moltres_galarian', {
+            effective_shiny_state: 'yes',
+            effective_background_type: 'special'
+          })), '色違特別背卡伽勒爾火焰鳥');
+          equal(buildHundoDisplayName(displayFormCard('zacian_crowned', {
+            effective_shiny_state: 'yes',
+            effective_rocket_state: 'shadow'
+          })), '色違暗影蒼響劍盾型態');
+          equal(buildHundoDisplayName(displayFormCard('kyurem_black', {
+            effective_rocket_state: 'purified'
+          })), '闇黑酋雷姆');
+
+          const conversion = effectiveSmartHundoCardsToPokemonList([
+            displayFormCard('zacian_standard'),
+            displayFormCard('necrozma_base'),
+            displayFormCard('moltres_galarian'),
+            displayFormCard('moltres_standard', {
+              effective_form_id: 'uncertain',
+              canonical_official_name: ''
+            })
+          ]);
+          equal(conversion.pokemon_list, '蒼響,奈克洛茲瑪,伽勒爾火焰鳥');
+          equal(conversion.pokemon_list.includes('*1'), false);
+          equal(conversion.recognized_count, 3);
         });
 
         test('exposes the exact manual-review reason messages', () => {
@@ -941,17 +1640,24 @@
             hundo_count_uncertain: '百神總數需人工確認',
             hundo_count_conflict: '百神總數結果衝突',
             screenshot_overlap_uncertain: '截圖重疊需人工確認',
-            smart_hundo_request_failed: '百神辨識請求失敗'
+            smart_hundo_request_failed: '百神辨識請求失敗',
+            form_uncertain: '型態需人工確認',
+            form_species_mismatch: '物種與型態結果衝突',
+            form_region_not_clear: '型態主要外觀區域看不清楚',
+            form_confidence_low: '型態辨識信心不足',
+            form_label_only: '型態只有文字證據，需人工確認',
+            form_signature_mismatch: '型態與視覺證據不一致',
+            unsupported_form: '此型態尚未納入支援範圍'
           });
         });
 
         test('keeps hidden states internal and groups by display name', () => {
           const cards = [
-            validatedCard({ official_name: '固拉多', effective_rocket_state: 'normal' }),
-            validatedCard({ official_name: '淨化固拉多', effective_rocket_state: 'purified' }),
-            validatedCard({ official_name: '亮晶晶固拉多', effective_lucky_state: 'yes' })
+            validatedCard({ official_name: '固拉多', canonical_official_name: '固拉多', effective_rocket_state: 'normal' }),
+            validatedCard({ official_name: '淨化固拉多', canonical_official_name: '固拉多', effective_rocket_state: 'purified' }),
+            validatedCard({ official_name: '亮晶晶固拉多', canonical_official_name: '固拉多', effective_lucky_state: 'yes' })
           ];
-          equal(effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list, '固拉多*3');
+          equal(effectiveSmartHundoCardsToPokemonList(cards).pokemon_list, '固拉多*3');
         });
 
         test('separates visible states in fixed prefix order without one-count suffixes', () => {
@@ -960,7 +1666,7 @@
             validatedCard({ official_name: '固拉多', effective_shiny_state: 'yes' }),
             validatedCard({ official_name: '固拉多', effective_background_type: 'special' })
           ];
-          const pokemonList = effectiveSmartHundoCardsToPokemonList(cards, normalizeName).pokemon_list;
+          const pokemonList = effectiveSmartHundoCardsToPokemonList(cards).pokemon_list;
           equal(pokemonList, '固拉多,色違固拉多,特別背卡固拉多');
           equal(pokemonList.includes('*1'), false);
           equal(buildHundoDisplayName(validatedCard({
@@ -968,7 +1674,7 @@
             effective_shiny_state: 'yes',
             effective_rocket_state: 'shadow',
             effective_background_type: 'special'
-          }), normalizeName), '色違暗影特別背卡超夢');
+          })), '色違暗影特別背卡超夢');
         });
 
         test('counts a reviewed card once while retaining every reason bucket', () => {
@@ -991,6 +1697,32 @@
           ]);
         });
 
+        test('keeps each form review bucket while counting its card once', () => {
+          const summary = summarizeHundoManualReview([
+            displayFormCard('moltres_galarian', {
+              card_id: '0:2:1:1',
+              manual_review_reasons: ['form_uncertain', 'form_confidence_low', 'shiny_uncertain']
+            })
+          ]);
+          equal(summary.review_card_count, 1);
+          deepEqual(summary.review_reason_counts, {
+            form_uncertain: 1,
+            form_confidence_low: 1,
+            shiny_uncertain: 1
+          });
+        });
+
+        test('keeps recognized unresolved forms in form review without a false species warning', () => {
+          const unresolved = validateHundoCardStates(validatedFormCard({ form_id: 'uncertain' }));
+          const conversion = effectiveSmartHundoCardsToPokemonList([unresolved]);
+          const summary = summarizeHundoManualReview([unresolved]);
+          equal(buildHundoDisplayName(unresolved), '');
+          equal(conversion.pokemon_list, '');
+          deepEqual(summary.review_reason_counts, { form_uncertain: 1 });
+          equal(summary.review_card_count, 1);
+          equal(summary.review_reason_counts.species_uncertain, undefined);
+        });
+
         test('retains repeated screenshot review reason occurrences without adding card reviews', () => {
           const summary = summarizeHundoManualReview([], [
             'incomplete_card_enumeration',
@@ -1003,7 +1735,7 @@
         test('keeps recognized species visible with effective uncertainty review reasons', () => {
           const conversion = effectiveSmartHundoCardsToPokemonList([
             validatedCard({ official_name: '固拉多', effective_shiny_state: 'uncertain' })
-          ], normalizeName);
+          ]);
           equal(conversion.pokemon_list, '固拉多');
           equal(conversion.pokemon_list.includes('色違固拉多'), false);
           equal(conversion.review_reason_counts.shiny_uncertain, 1);
@@ -1016,7 +1748,7 @@
               visible_label: '畫面名稱',
               recognition_status: 'partial'
             })
-          ], normalizeName);
+          ]);
           equal(conversion.pokemon_list, '');
           equal(conversion.pokemon_list.includes('畫面名稱'), false);
           equal(conversion.review_reason_counts.species_uncertain, 1);
@@ -1183,14 +1915,20 @@
               effective_lucky_state: 'no',
               effective_favorite_state: 'no',
               effective_rocket_state: 'normal',
-              effective_background_type: 'none'
+              effective_background_type: 'none',
+              base_species: index === 0 ? '固拉多' : '超夢',
+              effective_form_id: 'not_applicable',
+              canonical_official_name: index === 0 ? '固拉多' : '超夢'
             });
             Object.assign(canonical[index], {
               effective_shiny_state: 'no',
               effective_lucky_state: 'no',
               effective_favorite_state: 'no',
               effective_rocket_state: 'normal',
-              effective_background_type: 'none'
+              effective_background_type: 'none',
+              base_species: index === 0 ? '固拉多' : '超夢',
+              effective_form_id: 'not_applicable',
+              canonical_official_name: index === 0 ? '固拉多' : '超夢'
             });
           });
 
@@ -1213,6 +1951,86 @@
           equal(decision.overlap_count, 2);
           equal(decision.direction, 'left_suffix_right_prefix');
           equal(decision.ambiguous, false);
+        });
+
+        test('keeps form identity in two-card overlap signatures without weakening the minimum', () => {
+          const sameSurfaceDifferentForms = detectScreenshotOverlap(
+            {
+              index: 1,
+              cards: [
+                displayFormCard('moltres_standard', { card_id: '1:1:1:1', cp: '100', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_galarian', { card_id: '1:2:1:2', order: 2, column: 2, cp: '200', visible_label: '火焰鳥' })
+              ]
+            },
+            {
+              index: 2,
+              cards: [
+                displayFormCard('moltres_galarian', { card_id: '2:1:1:1', cp: '100', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_standard', { card_id: '2:2:1:2', order: 2, column: 2, cp: '200', visible_label: '火焰鳥' })
+              ]
+            }
+          );
+          equal(sameSurfaceDifferentForms.overlap_count, 0);
+          equal(sameSurfaceDifferentForms.ambiguous, false);
+
+          const identicalGalarian = detectScreenshotOverlap(
+            {
+              index: 3,
+              cards: [
+                displayFormCard('moltres_standard', { card_id: '3:0:1:0', cp: '250', visible_label: '領頭' }),
+                displayFormCard('moltres_galarian', { card_id: '3:1:1:1', cp: '300', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_galarian', { card_id: '3:2:1:2', order: 2, column: 2, cp: '400', visible_label: '火焰鳥' })
+              ]
+            },
+            {
+              index: 4,
+              cards: [
+                displayFormCard('moltres_galarian', { card_id: '4:1:1:1', cp: '300', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_galarian', { card_id: '4:2:1:2', order: 2, column: 2, cp: '400', visible_label: '火焰鳥' }),
+                displayFormCard('moltres_standard', { card_id: '4:3:1:3', order: 3, column: 3, cp: '450', visible_label: '結尾' })
+              ]
+            }
+          );
+          equal(identicalGalarian.overlap_count, 2);
+          equal(identicalGalarian.direction, 'left_suffix_right_prefix');
+          equal(identicalGalarian.ambiguous, false);
+        });
+
+        test('matches structured canonical form identities even when raw official names are blank', () => {
+          const structuredCard = (cardId, order, cp, label) => displayFormCard('moltres_galarian', {
+            card_id: cardId,
+            order,
+            cp,
+            visible_label: label,
+            official_name: ''
+          });
+          const decision = detectScreenshotOverlap(
+            {
+              cards: [
+                displayFormCard('moltres_standard', { card_id: '5:1:1:1', cp: '500', visible_label: '領頭' }),
+                structuredCard('5:2:1:2', 2, '600', '火焰鳥'),
+                structuredCard('5:3:1:3', 3, '700', '火焰鳥')
+              ]
+            },
+            {
+              cards: [
+                structuredCard('6:1:1:1', 1, '600', '火焰鳥'),
+                structuredCard('6:2:1:2', 2, '700', '火焰鳥'),
+                displayFormCard('moltres_standard', { card_id: '6:3:1:3', order: 3, cp: '800', visible_label: '結尾' })
+              ]
+            }
+          );
+          equal(decision.overlap_count, 2);
+          equal(decision.direction, 'left_suffix_right_prefix');
+          equal(decision.ambiguous, false);
+        });
+
+        test('displays a validated structured canonical form when its raw official name is blank', () => {
+          const structured = displayFormCard('moltres_galarian', { official_name: '' });
+          equal(
+            buildHundoDisplayName(structured),
+            HUNDO_FORM_CANONICAL_NAMES.moltres_galarian
+          );
         });
 
         test('removes only a two-card suffix-prefix overlap and restores scroll order from reversed uploads', () => {
@@ -1241,7 +2059,7 @@
             manual_review_reasons: []
           });
 
-          const merged = mergeSmartHundoScreenshots([secondScreenshot, firstScreenshot], normalizeName);
+          const merged = mergeSmartHundoScreenshots([secondScreenshot, firstScreenshot]);
           deepEqual(merged.cards.map(item => item.card_id), [
             '8:1:1:1',
             '8:2:2:1',
@@ -1275,7 +2093,7 @@
           deepEqual(decision.matched_card_ids, ['1:1:1:1']);
           deepEqual(decision.manual_review_reasons, ['screenshot_overlap_uncertain']);
 
-          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          const merged = mergeSmartHundoScreenshots([left, right]);
           equal(merged.cards.length, 4);
           deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
         });
@@ -1319,7 +2137,7 @@
             matched_card_ids: [],
             manual_review_reasons: []
           });
-          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          const merged = mergeSmartHundoScreenshots([left, right]);
           equal(merged.cards.length, 6);
           deepEqual(merged.manual_review_reasons, []);
         });
@@ -1337,7 +2155,7 @@
             { index: 1, cards: [weakCard(1, 1, '11', 'WeakA'), weakCard(1, 2, '12', 'TailA')] },
             { index: 2, cards: [weakCard(2, 1, '20', 'LeadB'), weakCard(2, 2, '21', 'WeakB')] },
             { index: 3, cards: [weakCard(3, 1, '21', 'WeakB'), weakCard(3, 2, '22', 'TailB')] }
-          ], normalizeName);
+          ]);
 
           equal(merged.cards.length, 8);
           equal(merged.overlap_decisions.filter(decision => decision.ambiguous).length, 2);
@@ -1371,17 +2189,19 @@
                 validatedCard({ card_id: '1:3:3:1', order: 3, official_name: 'D' })
               ]
             }
-          ], normalizeName);
+          ]);
           equal(merged.cards.length, 6);
           equal(merged.cards.filter(item => item.official_name === 'LegitimateDuplicate').length, 2);
           deepEqual(merged.manual_review_reasons, []);
         });
 
-        test('requires CP, official name, normalized label, and all five effective states in every overlap signature', () => {
+        test('requires CP, normalized label, form identity, and all five effective states in every overlap signature', () => {
           const signatureFields = [
             ['cp', 'different-cp'],
-            ['official_name', 'DifferentName'],
             ['visible_label', 'DIFFERENT_LABEL'],
+            ['base_species', 'DifferentBase'],
+            ['effective_form_id', 'moltres_galarian'],
+            ['canonical_official_name', 'DifferentName'],
             ['effective_shiny_state', 'yes'],
             ['effective_lucky_state', 'yes'],
             ['effective_favorite_state', 'yes'],
@@ -1420,7 +2240,7 @@
                   validatedCard({ card_id: '1:3:3:1', order: 3, official_name: 'Tail' })
                 ]
               }
-            ], normalizeName);
+            ]);
             equal(merged.cards.length, 6, `${field} mismatch prevents overlap removal`);
             equal(merged.overlap_decisions[0].overlap_count, 0, `${field} remains in the signature`);
           });
@@ -1463,7 +2283,7 @@
             '0:2:2:1'
           ]);
           deepEqual(decision.manual_review_reasons, ['screenshot_overlap_uncertain']);
-          const merged = mergeSmartHundoScreenshots([left, right], normalizeName);
+          const merged = mergeSmartHundoScreenshots([left, right]);
           equal(merged.cards.length, 8);
           deepEqual(merged.manual_review_reasons, ['screenshot_overlap_uncertain']);
         });
@@ -1510,7 +2330,7 @@
                 ...competingSequence
               ]
             }
-          ], normalizeName);
+          ]);
           equal(merged.cards.length, 9);
           equal(merged.overlap_decisions.filter(decision => decision.ambiguous).length, 2);
           deepEqual(merged.manual_review_reasons, [
@@ -1679,6 +2499,79 @@
           });
           equal(diagnostics.screenshots[0].cards[0].official_name, '固拉多');
           equal(diagnostics.pokemon_list, '固拉多');
+        });
+
+        test('uses raw form diagnostics when present and reconstructs them through safe enums', () => {
+          const formCardForDiagnostics = displayFormCard('moltres_galarian', {
+            raw: {
+              form: {
+                form_id: 'unsupported',
+                form_evidence: { Authorization: 'Bearer raw-form-secret' },
+                request: { body: 'data:image/png;base64,RAW_FORM_BODY' }
+              }
+            }
+          });
+          const diagnostics = shapeSmartHundoDiagnostics({
+            screenshots: [{ cards: [formCardForDiagnostics] }]
+          });
+          const safeCard = diagnostics.screenshots[0].cards[0];
+          deepEqual(safeCard.form_evidence, {
+            region_visibility: 'uncertain',
+            recognition_basis: 'uncertain',
+            visual_signature: 'uncertain',
+            key_features_visible: false,
+            label_relationship: 'uncertain'
+          });
+          equal(safeCard.base_species, '火焰鳥');
+          equal(safeCard.raw_form_id, 'unsupported');
+          equal(safeCard.effective_form_id, 'moltres_galarian');
+          equal(safeCard.canonical_official_name, '伽勒爾火焰鳥');
+          const serialized = JSON.stringify(diagnostics);
+          [
+            'Authorization', 'Bearer', 'data:image/', 'raw-form-secret', 'RAW_FORM_BODY',
+            'request', 'body'
+          ].forEach(sentinel => equal(serialized.includes(sentinel), false, `form diagnostics exclude ${sentinel}`));
+        });
+
+        test('keeps sanitized non-whitelist form diagnostics while redacting hostile raw form values', () => {
+          const nonWhitelist = validateHundoPokemonForm(
+            normalizeSmartHundoCard(card({ official_name: '超夢' }), normalizeName),
+            normalizeName
+          );
+          const diagnostics = shapeSmartHundoDiagnostics({
+            screenshots: [{
+              cards: [{
+                ...nonWhitelist,
+                raw: {
+                  ...nonWhitelist.raw,
+                  form: {
+                    base_species: 'Authorization',
+                    form_id: 'Bearer raw-form-secret',
+                    form_confidence: 1,
+                    form_evidence: {
+                      recognition_basis: 'data:image/png;base64,RAW_FORM_BODY'
+                    }
+                  }
+                }
+              }]
+            }]
+          });
+          const safeCard = diagnostics.screenshots[0].cards[0];
+          equal(safeCard.base_species, '超夢');
+          equal(safeCard.effective_form_id, 'not_applicable');
+          equal(safeCard.canonical_official_name, '超夢');
+          equal(safeCard.raw_form_id, 'uncertain');
+          deepEqual(safeCard.form_evidence, {
+            region_visibility: 'uncertain',
+            recognition_basis: 'uncertain',
+            visual_signature: 'uncertain',
+            key_features_visible: false,
+            label_relationship: 'uncertain'
+          });
+          const serialized = JSON.stringify(diagnostics);
+          ['Authorization', 'Bearer', 'raw-form-secret', 'data:image/', 'RAW_FORM_BODY'].forEach(sentinel => {
+            equal(serialized.includes(sentinel), false, `non-whitelist diagnostics exclude ${sentinel}`);
+          });
         });
 
         test('validates allowed diagnostic values and redacts secrets injected into allowlisted fields', () => {
@@ -1915,6 +2808,49 @@
           'pokemon_go_hundo_smart_extractor_v2',
           'pokemon_go_trainer_team_fixed_ui_extractor'
         ]);
+        const assertJsonSchemaValue = (value, schema, path = 'result') => {
+          if (Array.isArray(schema?.enum) && !schema.enum.some(candidate => Object.is(candidate, value))) {
+            fail(`${path} must be one of ${JSON.stringify(schema.enum)}, got ${JSON.stringify(value)}`);
+          }
+          if (schema?.type === 'object') {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) {
+              fail(`${path} must be an object`);
+            }
+            const properties = schema.properties || {};
+            (schema.required || []).forEach(field => {
+              if (!Object.hasOwn(value, field)) fail(`${path}.${field} is required`);
+            });
+            if (schema.additionalProperties === false) {
+              Object.keys(value).forEach(field => {
+                if (!Object.hasOwn(properties, field)) fail(`${path}.${field} is not allowed`);
+              });
+            }
+            Object.entries(properties).forEach(([field, fieldSchema]) => {
+              if (Object.hasOwn(value, field)) assertJsonSchemaValue(value[field], fieldSchema, `${path}.${field}`);
+            });
+            return;
+          }
+          if (schema?.type === 'array') {
+            if (!Array.isArray(value)) fail(`${path} must be an array`);
+            value.forEach((item, index) => assertJsonSchemaValue(item, schema.items, `${path}[${index}]`));
+            return;
+          }
+          if (schema?.type === 'integer') {
+            if (!Number.isInteger(value)) fail(`${path} must be an integer`);
+          } else if (schema?.type === 'number') {
+            if (typeof value !== 'number' || !Number.isFinite(value)) fail(`${path} must be a finite number`);
+          } else if (schema?.type === 'string') {
+            if (typeof value !== 'string') fail(`${path} must be a string`);
+          } else if (schema?.type === 'boolean') {
+            if (typeof value !== 'boolean') fail(`${path} must be a boolean`);
+          }
+          if (typeof value === 'number' && Number.isFinite(schema?.minimum) && value < schema.minimum) {
+            fail(`${path} must be >= ${schema.minimum}`);
+          }
+          if (typeof value === 'number' && Number.isFinite(schema?.maximum) && value > schema.maximum) {
+            fail(`${path} must be <= ${schema.maximum}`);
+          }
+        };
         const installStrictOpenAiFetchMock = (responder) => {
           globalThis.fetch = async (url, options = {}) => {
             if (url !== expectedOpenAiUrl) throw new Error(`strict OpenAI mock rejected unknown URL: ${url}`);
@@ -1925,6 +2861,31 @@
             }
             const response = await responder({ url, options, payload, schemaName });
             if (!response) throw new Error(`strict OpenAI mock has no response for schema: ${schemaName}`);
+            if (typeof response.json === 'function') {
+              const responseJson = response.json.bind(response);
+              response.json = async (...args) => {
+                const body = await responseJson(...args);
+                if (response.ok !== false) {
+                  const content = body?.choices?.[0]?.message?.content;
+                  if (typeof content === 'string') {
+                    let parsedContent;
+                    try {
+                      parsedContent = JSON.parse(content);
+                    } catch (error) {
+                      if (error instanceof SyntaxError) return body;
+                      throw error;
+                    }
+                    try {
+                      assertJsonSchemaValue(parsedContent, payload.response_format.json_schema.schema, `mock ${schemaName}`);
+                    } catch (error) {
+                      harnessErrorRecorder.consoleError(`invalid successful mock for ${schemaName}`, error);
+                      throw error;
+                    }
+                  }
+                }
+                return body;
+              };
+            }
             return response;
           };
           return globalThis.fetch;
@@ -2054,6 +3015,7 @@
             requestSmartHundoExtractionV2,
             requestSmartHundoWithStructuralRetry,
             smartHundoScan,
+            formatSmartHundoStatus,
             normalizeAiClassification,
             beginSmartHundoScanSession,
             markSmartHundoAiValue,
@@ -2074,6 +3036,39 @@
             setTrainerTeamStatus: typeof setTrainerTeamStatus === 'undefined' ? undefined : setTrainerTeamStatus
           });`;
         (0, eval)(pageModule);
+
+        test('renders each form review reason as a card-level status detail', () => {
+          const status = formatSmartHundoStatus({
+            countMerge: { hundo_leg: '1' },
+            conversion: { recognized_count: 1 },
+            detectedCardCount: 1,
+            reviewSummary: {
+              review_card_count: 1,
+              review_reason_counts: {
+                form_uncertain: 1,
+                form_confidence_low: 1
+              }
+            }
+          });
+          equal(
+            status,
+            '百神掃描完成：總數1，偵測1張卡片，辨識1張；共1張卡片需人工確認；1張型態需人工確認；1張型態辨識信心不足'
+          );
+        });
+
+        test('reports an unresolved recognized form without a species-uncertain status detail', () => {
+          const status = formatSmartHundoStatus({
+            countMerge: { hundo_leg: '1' },
+            conversion: { recognized_count: 0 },
+            detectedCardCount: 1,
+            reviewSummary: {
+              review_card_count: 1,
+              review_reason_counts: { form_uncertain: 1 }
+            }
+          });
+          equal(status.includes(HUNDO_REVIEW_REASON_MESSAGES.form_uncertain), true);
+          equal(status.includes(HUNDO_REVIEW_REASON_MESSAGES.species_uncertain), false);
+        });
 
         const requiredTrainerProductionContracts = [
           'TRAINER_TEAM_SCHEMA',
@@ -2306,6 +3301,17 @@
         equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_count_extractor');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
         equal(lastPayload.messages[0].content[1].image_url.url.startsWith('data:image/png'), true);
+        deepEqual({
+          schema: lastPayload.response_format.json_schema,
+          prompt: lastPayload.messages[0].content[0].text,
+          imageUrl: lastPayload.messages[0].content[1].image_url.url,
+          detail: lastPayload.messages[0].content[1].image_url.detail
+        }, {
+          schema: HUNDO_COUNT_SCHEMA,
+          prompt: countPrompt,
+          imageUrl: croppedCountRegion,
+          detail: 'high'
+        }, 'hundo-count request payload remains the origin/main fixture');
         installStrictOpenAiFetchMock(async () => ({
           ok: true,
           json: async () => ({
@@ -2313,9 +3319,10 @@
               finish_reason: 7,
               message: {
                 content: JSON.stringify({
-                  hundo_leg: '',
-                  hundo_leg_confidence: 0,
                   detected_card_count: 0,
+                  scan_complete: true,
+                  bottom_edge_checked: true,
+                  enumeration_confidence: 1,
                   cards: []
                 })
               }
@@ -2346,6 +3353,10 @@
           'detected_card_count', 'scan_complete', 'bottom_edge_checked', 'enumeration_confidence', 'cards'
         ]);
         const smartCardSchema = HUNDO_SMART_SCHEMA.schema.properties.cards.items;
+        test('keeps modelCard fixtures valid against the recursive smart-card schema', () => {
+          assertJsonSchemaValue(modelCard(), smartCardSchema, 'modelCard');
+          assertJsonSchemaValue(modelCard({ cp: 42 }), smartCardSchema, 'modelCard numeric CP override');
+        });
         equal(smartCardSchema.additionalProperties, false);
         ['order', 'row', 'column'].forEach(field => {
           equal(smartCardSchema.properties[field].minimum, 1, `${field} is 1-based`);
@@ -2354,6 +3365,88 @@
         ['hundo_leg', 'shadow_state', 'purified_state'].forEach(field => {
           equal(Object.hasOwn(smartCardSchema.properties, field), false, field);
         });
+        ['base_species', 'form_id', 'form_confidence', 'form_evidence'].forEach(field => {
+          equal(Object.hasOwn(smartCardSchema.properties, field), true, `${field} exists`);
+          equal(smartCardSchema.required.includes(field), true, `${field} is required`);
+        });
+        deepEqual(smartCardSchema.properties.form_id.enum, [
+          'not_applicable',
+          'uncertain',
+          'unsupported',
+          'articuno_standard',
+          'articuno_galarian',
+          'zapdos_standard',
+          'zapdos_galarian',
+          'moltres_standard',
+          'moltres_galarian',
+          'zacian_standard',
+          'zacian_crowned',
+          'zamazenta_standard',
+          'zamazenta_crowned',
+          'dialga_standard',
+          'dialga_origin',
+          'palkia_standard',
+          'palkia_origin',
+          'zygarde_10',
+          'zygarde_50',
+          'zygarde_complete',
+          'necrozma_base',
+          'necrozma_dusk_mane',
+          'necrozma_dawn_wings',
+          'kyurem_base',
+          'kyurem_white',
+          'kyurem_black'
+        ]);
+        deepEqual(smartCardSchema.properties.form_evidence, {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            region_visibility: {
+              type: 'string',
+              enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain']
+            },
+            recognition_basis: {
+              type: 'string',
+              enum: ['direct_visual_match', 'visual_and_label', 'label_only', 'uncertain']
+            },
+            visual_signature: {
+              type: 'string',
+              enum: [
+                'articuno_standard', 'articuno_galarian', 'zapdos_standard', 'zapdos_galarian',
+                'moltres_standard', 'moltres_galarian', 'zacian_standard', 'zacian_crowned',
+                'zamazenta_standard', 'zamazenta_crowned', 'dialga_standard', 'dialga_origin',
+                'palkia_standard', 'palkia_origin', 'zygarde_10', 'zygarde_50', 'zygarde_complete',
+                'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'kyurem_base',
+                'kyurem_white', 'kyurem_black', 'not_applicable', 'other', 'uncertain'
+              ]
+            },
+            key_features_visible: { type: 'boolean' },
+            label_relationship: {
+              type: 'string',
+              enum: ['exact_form', 'base_species_only', 'custom_nickname', 'conflicting', 'unreadable', 'not_applicable', 'uncertain']
+            }
+          },
+          required: [
+            'region_visibility', 'recognition_basis', 'visual_signature',
+            'key_features_visible', 'label_relationship'
+          ]
+        });
+        const assertStrictObjectSchemas = (schema, path = 'root') => {
+          if (schema.type === 'object') {
+            equal(schema.additionalProperties, false, `${path} rejects extra properties`);
+            deepEqual(
+              [...schema.required].sort(),
+              Object.keys(schema.properties).sort(),
+              `${path} requires every declared property`
+            );
+            Object.entries(schema.properties).forEach(([name, child]) => {
+              assertStrictObjectSchemas(child, `${path}.${name}`);
+            });
+          }
+          if (schema.type === 'array') assertStrictObjectSchemas(schema.items, `${path}[]`);
+        };
+        assertStrictObjectSchemas(HUNDO_SMART_SCHEMA.schema);
+        equal(Object.hasOwn(HUNDO_SMART_SCHEMA.schema.properties.cards, 'maxItems'), false);
         equal(JSON.stringify(HUNDO_SMART_SCHEMA).includes('global'), false);
         ['shiny_evidence', 'lucky_evidence', 'favorite_evidence', 'rocket_evidence', 'background_evidence'].forEach(field => {
           const evidenceSchema = smartCardSchema.properties[field];
@@ -2380,7 +3473,7 @@
             '全圖由上到下、每列由左到右', '超過 10 張仍必須繼續掃描到底部邊緣',
             '完整可見與部分可見', '每一張都各自輸出', '不得把相鄰卡片的符號或狀態轉移',
             '合法重複的寶可夢仍是不同卡片', '不得發明',
-            '身體輪廓、頭部、四肢、翅膀、尾巴、角、裝甲', 'visible_label 只能作為次要證據',
+            '整體身體結構', '頭部', '四肢', '翅膀', '尾巴', '武器', '裝甲', 'visible_label 只能作為次要證據',
             'GLO蒼響151515', 'official_name 留空', 'recognition_status 填 uncertain',
             '焰白酋雷姆', '闇黑酋雷姆', '蒼響劍王', '藏瑪然特盾王', '起源型態', '融合型態',
             'dark-blue／teal 的 multiple_four_point_sparkles', 'CP area',
@@ -2394,14 +3487,101 @@
             'region_visibility', 'clear', 'partially_occluded', 'cropped',
             '顏色或身體顏色本身永遠不足'
           ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `V2 smart prompt protects ${fragment}`));
+          const b2 = smartPrompt.slice(
+            smartPrompt.indexOf('【B2. 基礎物種與型態辨識】'),
+            smartPrompt.indexOf('【B3. form_evidence】')
+          );
+          const b3 = smartPrompt.slice(
+            smartPrompt.indexOf('【B3. form_evidence】'),
+            smartPrompt.indexOf('【C. 五維狀態 evidence 共通規則】')
+          );
+          const approvedFormVisualDetails = [
+            ['articuno_standard', '藍色冰鳥、寬大藍翼、長條帶狀尾羽與冰系羽毛特徵。'],
+            ['articuno_galarian', '深紫／黑紫色系，眼部有明顯面罩感，羽翼、頭冠與尾部結構不同於一般急凍鳥。不能只因為紫色就判定。'],
+            ['zapdos_standard', '黃色尖刺羽毛、黑色鋸齒狀翼尾、標準飛鳥輪廓。'],
+            ['zapdos_galarian', '橘紅色系、雙腿特別長而強壯、接近陸行／奔跑鳥姿態。腿部與身體結構比顏色更重要。'],
+            ['moltres_standard', '黃橘色鳥體，橘紅色真正火焰構成頭冠、翅膀與尾部。'],
+            ['moltres_galarian', '黑色／深色鳥體，桃紅、洋紅、深紅色氣場式火焰翅膀與尾部。不能只看深色或紅色。'],
+            ['zacian_standard', '蒼響狼型本體，沒有嘴持大型劍，也沒有完整劍之王裝甲。'],
+            ['zacian_crowned', '嘴中明確持有大型劍，具有金藍色劍之王武裝與裝甲。'],
+            ['zamazenta_standard', '藏瑪然特狼型本體，沒有完整盾之王大型盾牌鬃甲。'],
+            ['zamazenta_crowned', '頭頸與胸前具有巨大盾牌式鬃甲及金紅藍防禦裝甲。'],
+            ['dialga_standard', '標準帝牙盧卡四足龍型，身體較厚實，四肢、頸部及胸部為一般型態比例。'],
+            ['dialga_origin', '身體比例明顯拉長，偏馬型／起源四足結構，頸胸、喉部與四肢構造不同於一般帝牙盧卡。'],
+            ['palkia_standard', '標準直立／雙足龍型，可看見一般型態手臂與腿部結構。'],
+            ['palkia_origin', '接近四足／半人馬式起源結構，肢體與軀幹配置和一般型態差異明顯。'],
+            ['zygarde_10', '四足犬型，身體低而長，呈黑綠色狗型結構。'],
+            ['zygarde_50', '長條蛇型／眼鏡蛇型，上半身直立，下半身為蛇形。'],
+            ['zygarde_complete', '巨大直立人形／機甲型，中央軀幹與左右大型延伸構造明顯。'],
+            ['necrozma_base', '黑色結晶狀直立本體，不是四足獅型，也不是大型翼型。'],
+            ['necrozma_dusk_mane', '以索爾迦雷歐般四足獅型為主，覆蓋奈克洛茲瑪黑色結晶裝甲。'],
+            ['necrozma_dawn_wings', '以露奈雅拉般巨大蝙蝠／月翼型為主，覆蓋奈克洛茲瑪黑色結晶構造。'],
+            ['kyurem_base', '灰色冰晶龍型，沒有完整萊希拉姆或捷克羅姆融合結構。'],
+            ['kyurem_white', '整體偏白，具有萊希拉姆相關白色羽毛、翼狀與融合結構，同時保留酋雷姆特徵。'],
+            ['kyurem_black', '整體偏黑，具有捷克羅姆相關黑色裝甲、大型手臂及發電機式融合構造，同時保留酋雷姆特徵。']
+          ];
+          equal(approvedFormVisualDetails.length, 23, 'locks every approved form visual discriminator');
+          approvedFormVisualDetails.forEach(([formId, detail], index) => {
+            const approvedLine = `${index + 1}. ${formId}：\n${' '.repeat(index < 9 ? 3 : 4)}${detail}`;
+            equal(b2.includes(approvedLine), true, `exact approved B2 line for ${formId}`);
+          });
+          equal(b2.includes(
+            '例如畫面文字只寫「火焰鳥」，但圖片中是黑色本體與桃紅／深紅火焰狀翅膀的伽勒爾外觀時：\n\n'
+            + 'base_species = "火焰鳥"\nform_id = "moltres_galarian"'
+          ), true, 'exact Galarian Moltres visible-text/base/form tuple');
+          equal(b2.includes(
+            '若只靠 visible_label，沒有足夠圖片證據：\n\n'
+            + 'recognition_basis = "label_only"\nform_id = "uncertain"'
+          ), true, 'label-only evidence is coupled to uncertain form output');
+          equal(b2.includes('不得自動退回 standard。'), true, 'unclear forms never auto-fallback to standard');
+          [
+            '每張卡片都必須先辨識 base_species，再辨識 form_id。',
+            '你是直接觀看完整原始圖片中的寶可夢外觀，不是只抄寫 visible_label，也不是只根據單一顏色判斷。',
+            '不得因 visible_label 只有「火焰鳥」就自動回傳 moltres_standard。',
+            '若主要外觀區域看不清楚、被裁切、被遮擋，或無法可靠區分普通／特殊型態：',
+            'form_id = "uncertain"', 'form_id = "unsupported"', 'form_id = "not_applicable"'
+          ].forEach(fragment => equal(b2.includes(fragment), true, `approved B2 rule ${fragment}`));
+          [
+            'clear：主要外觀與型態特徵完整可辨識',
+            'partially_occluded：部分被遮住，但仍看到部分特徵',
+            'cropped：主要身體或關鍵型態部位被截圖邊緣裁切',
+            'not_visible：無法看到足夠寶可夢本體',
+            'uncertain：無法判斷可見程度',
+            'direct_visual_match：主要由圖片完整外觀直接辨識',
+            'visual_and_label：圖片與文字共同支持',
+            'label_only：只有文字支持，圖片不足',
+            'exact_form：文字直接指出相同完整型態',
+            'base_species_only：文字只顯示基礎物種',
+            'custom_nickname：文字是暱稱、IV 或其他自訂內容',
+            'conflicting：可讀文字和圖片顯示不同基礎物種',
+            'unreadable：文字看不清楚',
+            'not_applicable：不適用', 'uncertain：無法判斷',
+            'key_features_visible 只有在該型態的關鍵部位確實可見時才能為 true。',
+            '只輸出 strict JSON，不要輸出推理過程或額外說明。'
+          ].forEach(fragment => equal(b3.includes(fragment), true, `approved B3 rule ${fragment}`));
+          [
+            '若圖片顯示白名單外型態：\n\nform_id = "unsupported"\nvisual_signature = "other"',
+            '對不在十個型態白名單中的其他寶可夢：\n\nform_id = "not_applicable"\nvisual_signature = "not_applicable"',
+            '若型態證據不足：\n\nform_id = "uncertain"\nvisual_signature = "uncertain"'
+          ].forEach(tuple => equal(b3.includes(tuple), true, `exact approved B3 control tuple ${tuple}`));
+          [
+            '白灰鳥身、黑色眼罩般臉部與較長細腿',
+            '蛇形、四肢融合的起源身軀',
+            '四足粉白珍珠裝甲與雙肩圓盤',
+            '蛇形、四肢融合的起源珍珠身軀',
+            '火焰般紅色頭冠與流線長尾'
+          ].forEach(fragment => equal(b2.includes(fragment), false, `B2 excludes unapproved guidance ${fragment}`));
         });
         const v2Result = (count, officialName, overrides = {}) => ({
           detected_card_count: count,
           scan_complete: true,
           bottom_edge_checked: true,
           enumeration_confidence: 0.99,
-          cards: makeCards(count, { official_name: officialName }),
+          cards: makeModelCards(count, { official_name: officialName }),
           ...overrides
+        });
+        test('keeps v2Result fixtures valid against the recursive smart-result schema', () => {
+          assertJsonSchemaValue(v2Result(2, 'Mewtwo'), HUNDO_SMART_SCHEMA.schema, 'v2Result');
         });
         await asyncTest('retries one structurally incomplete V2 extraction and replaces every first-attempt field', async () => {
           const attempts = [];
@@ -2411,7 +3591,7 @@
             const content = attempts.length === 1
               ? v2Result(15, '第一次卡片', {
                 enumeration_confidence: 0.91,
-                cards: makeCards(10, { official_name: '第一次卡片' })
+                cards: makeModelCards(10, { official_name: '第一次卡片' })
               })
               : v2Result(15, '夢幻', { enumeration_confidence: 0.97 });
             return {
@@ -2455,7 +3635,7 @@
             attempts += 1;
             const content = v2Result(1, '', {
               enumeration_confidence: 0.05,
-              cards: makeCards(1, {
+              cards: makeModelCards(1, {
                 official_name: '',
                 recognition_status: 'uncertain',
                 species_confidence: 0.05,
@@ -2493,7 +3673,7 @@
               : v2Result(4, '第二次不完整名稱', {
                 bottom_edge_checked: false,
                 enumeration_confidence: 0.22,
-                cards: makeCards(3, { official_name: '第二次不完整名稱' })
+                cards: makeModelCards(3, { official_name: '第二次不完整名稱' })
               });
             return {
               ok: true,
@@ -2829,29 +4009,43 @@
           UNRECOGNIZED_ONLY: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' },
           POLLUTED_NAME: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
         };
-        const extractionForPrompt = (prompt, identity = '') => {
+        const ordinaryModelResult = (overrides = {}) => ({
+          legendary: '', hundo_leg: '', shiny: '', shiny_leg: '', costume: '',
+          bg_comm: '', bg_special: '', dyna: '', giga: '', perfect: '',
+          old_poke: '', old_leg: '', masterball: '', greenpass: '', rarecandy: '', coin: '',
+          poke_bag: '', item_bag: '', level: '', xp: '', stardust: '', pokemon_list: '',
+          ...overrides
+        });
+        const extractionForPrompt = (prompt) => {
           if (prompt.includes('image_type = TRAINER_PROFILE_SCREEN')) {
-            return {
+            return ordinaryModelResult({
               level: '50',
-              team: identity.startsWith('TEAM_') ? '藍隊' : '紅隊',
               xp: '3500000'
-            };
+            });
           }
-          if (prompt.includes('image_type = SHINY_CATEGORY_SCREEN')) return { shiny: '77' };
-          if (prompt.includes('image_type = SHINY_LEGENDARY_SCREEN')) return { shiny_leg: '12' };
-          if (prompt.includes('image_type = OLD_POKEMON_SCREEN')) return { old_poke: '42' };
+          if (prompt.includes('image_type = SHINY_CATEGORY_SCREEN')) return ordinaryModelResult({ shiny: '77' });
+          if (prompt.includes('image_type = SHINY_LEGENDARY_SCREEN')) return ordinaryModelResult({ shiny_leg: '12' });
+          if (prompt.includes('image_type = OLD_POKEMON_SCREEN')) return ordinaryModelResult({ old_poke: '42' });
           if (prompt.includes('image_type = RESOURCE_SCREEN')) {
-            return { coin: '123', poke_bag: '7800', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' };
+            return ordinaryModelResult({ coin: '123', poke_bag: '7800', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' });
           }
           fail(`unexpected ordinary extraction prompt: ${prompt.slice(0, 120)}`);
         };
-        const v2Card = (overrides = {}) => {
-          const normalized = card(overrides);
-          delete normalized.purified_state;
-          delete normalized.purified_confidence;
-          delete normalized.shadow_state;
-          delete normalized.shadow_confidence;
-          return normalized;
+        const v2Card = modelCard;
+        const structuredV2Card = (formId, overrides = {}) => {
+          const baseSpecies = Object.entries(HUNDO_FORMS_BY_BASE_SPECIES)
+            .find(([, formIds]) => formIds.includes(formId))[0];
+          return v2Card({
+            official_name: baseSpecies,
+            base_species: baseSpecies,
+            form_id: formId,
+            form_confidence: 0.98,
+            form_evidence: formEvidence({
+              visual_signature: formId,
+              label_relationship: 'base_species_only'
+            }),
+            ...overrides
+          });
         };
         const completeCardResult = (cards, overrides = {}) => ({
           detected_card_count: cards.length,
@@ -2978,7 +4172,7 @@
                 notifyDelayedOrdinary?.();
               });
             }
-            return openAiResponse(extractionForPrompt(prompt, identity), () => requestStageEvents.push({ event: 'finish', schemaName }));
+            return openAiResponse(extractionForPrompt(prompt), () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           fail(`unexpected schema ${schemaName}`);
         });
@@ -3626,12 +4820,128 @@
           equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
         });
 
+        await asyncTest('keeps schema-complete non-whitelist cards in the production list', async () => {
+          resetScanScenario();
+          classificationByImage.LEGACY_WHITELIST = classificationByImage.EXACT_A;
+          setScanFiles(['LEGACY_WHITELIST']);
+          countResultByImage.set('LEGACY_WHITELIST', validCount('(5)', '5'));
+          cardResultByImage.set('LEGACY_WHITELIST', completeCardResult([
+            v2Card({ official_name: 'Mewtwo', visible_label: 'Mewtwo 100', cp: '1234' }),
+            v2Card({ order: 2, column: 2, official_name: 'Groudon', visible_label: 'Groudon 100', cp: '1235' }),
+            v2Card({ order: 3, column: 3, official_name: 'Kyogre', visible_label: 'Kyogre 100', cp: '1236' }),
+            v2Card({ order: 4, row: 2, official_name: 'Ho-Oh', visible_label: 'Ho-Oh 100', cp: '1237' }),
+            v2Card({ order: 5, row: 2, column: 2, official_name: 'Xerneas', visible_label: 'Xerneas 100', cp: '1238' })
+          ]));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, 'Mewtwo,Groudon,Kyogre,Ho-Oh,Xerneas');
+          equal(window.lastSmartHundoDiagnostics.screenshots[0].cards[0].canonical_official_name, 'Mewtwo');
+        });
+
+        await asyncTest('validates structured Galarian Moltres and the requested three-card form list in production', async () => {
+          resetScanScenario();
+          classificationByImage.FORM_GALARIAN_MOLTRES = classificationByImage.EXACT_A;
+          setScanFiles(['FORM_GALARIAN_MOLTRES']);
+          countResultByImage.set('FORM_GALARIAN_MOLTRES', validCount('(3)', '3'));
+          const galarianMoltres = structuredV2Card('moltres_galarian', {
+            cp: '1460',
+            base_species: '火焰鳥',
+            official_name: '火焰鳥',
+            visible_label: '火焰鳥'
+          });
+          cardResultByImage.set('FORM_GALARIAN_MOLTRES', completeCardResult([
+            structuredV2Card('zacian_standard', {
+              order: 1, row: 1, column: 1, cp: '3829',
+              base_species: '蒼響', official_name: '蒼響', visible_label: '蒼響'
+            }),
+            structuredV2Card('necrozma_base', {
+              order: 2, row: 1, column: 2, cp: '4212',
+              base_species: '奈克洛茲瑪', official_name: '奈克洛茲瑪', visible_label: '奈克洛茲瑪'
+            }),
+            { ...galarianMoltres, order: 3, row: 1, column: 3 }
+          ]));
+
+          await autoScan();
+
+          const expected = '蒼響,奈克洛茲瑪,伽勒爾火焰鳥';
+          const moltresDiagnostic = window.lastSmartHundoDiagnostics.screenshots[0].cards[2];
+          equal(document.getElementById('g_hundos').value, expected);
+          equal(moltresDiagnostic.base_species, '火焰鳥');
+          equal(moltresDiagnostic.raw_form_id, 'moltres_galarian');
+          equal(moltresDiagnostic.effective_form_id, 'moltres_galarian');
+          equal(moltresDiagnostic.canonical_official_name, '伽勒爾火焰鳥');
+          equal(window.lastSmartHundoDiagnostics.pokemon_list, expected);
+        });
+
+        await asyncTest('keeps unresolved, mismatch, label-only, cropped, and unsupported forms diagnostic-only in production', async () => {
+          resetScanScenario();
+          classificationByImage.FORM_REVIEW_CASES = classificationByImage.EXACT_A;
+          setScanFiles(['FORM_REVIEW_CASES']);
+          countResultByImage.set('FORM_REVIEW_CASES', validCount('(5)', '5'));
+          cardResultByImage.set('FORM_REVIEW_CASES', completeCardResult([
+            structuredV2Card('moltres_galarian', {
+              cp: '1',
+              form_id: 'uncertain',
+              form_evidence: formEvidence({ visual_signature: 'uncertain', recognition_basis: 'uncertain', key_features_visible: false })
+            }),
+            structuredV2Card('moltres_galarian', {
+              order: 2,
+              column: 2,
+              cp: '2',
+              form_id: 'dialga_origin',
+              form_evidence: formEvidence({ visual_signature: 'dialga_origin' })
+            }),
+            structuredV2Card('moltres_galarian', {
+              order: 3,
+              column: 3,
+              cp: '3',
+              form_evidence: formEvidence({ recognition_basis: 'label_only' })
+            }),
+            structuredV2Card('moltres_galarian', {
+              order: 4,
+              row: 2,
+              cp: '4',
+              form_evidence: formEvidence({ region_visibility: 'cropped' })
+            }),
+            structuredV2Card('necrozma_base', {
+              order: 5,
+              row: 2,
+              column: 2,
+              cp: '5',
+              form_id: 'unsupported',
+              form_evidence: formEvidence({ visual_signature: 'other' })
+            })
+          ]));
+
+          await autoScan();
+
+          equal(document.getElementById('g_hundos').value, '');
+          const diagnostics = window.lastSmartHundoDiagnostics;
+          equal(diagnostics.screenshots[0].cards.length, 5);
+          [
+            'form_uncertain',
+            'form_species_mismatch',
+            'form_label_only',
+            'form_region_not_clear',
+            'unsupported_form'
+          ].forEach(reason => equal(diagnostics.manual_review_reasons.includes(reason), true, `${reason} remains diagnostic`));
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_uncertain').length, 2);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_species_mismatch').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_label_only').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_region_not_clear').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'unsupported_form').length, 1);
+          equal(diagnostics.manual_review_reasons.filter(reason => reason === 'species_uncertain').length, 0);
+          equal(document.getElementById('aiAutoStatus').textContent.includes('共5張卡片需人工確認'), true);
+        });
+
         await asyncTest('sanitizes model-polluted species names before production list and diagnostics', async () => {
           resetScanScenario();
           setScanFiles(['POLLUTED_NAME']);
           countResultByImage.set('POLLUTED_NAME', validCount('(1)', '1'));
           cardResultByImage.set('POLLUTED_NAME', completeCardResult([
             v2Card({
+              base_species: '固拉多',
               official_name: '色違：GLOBAL_BACKGROUND／固拉多',
               visible_label: '固拉多100',
               shiny_state: 'yes',

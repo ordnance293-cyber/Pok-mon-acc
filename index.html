@@ -957,6 +957,50 @@
                                 official_name: { type: 'string' },
                                 recognition_status: { type: 'string', enum: ['recognized', 'partial', 'uncertain'] },
                                 species_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                base_species: { type: 'string' },
+                                form_id: {
+                                    type: 'string',
+                                    enum: [
+                                        'not_applicable', 'uncertain', 'unsupported',
+                                        'articuno_standard', 'articuno_galarian',
+                                        'zapdos_standard', 'zapdos_galarian',
+                                        'moltres_standard', 'moltres_galarian',
+                                        'zacian_standard', 'zacian_crowned',
+                                        'zamazenta_standard', 'zamazenta_crowned',
+                                        'dialga_standard', 'dialga_origin',
+                                        'palkia_standard', 'palkia_origin',
+                                        'zygarde_10', 'zygarde_50', 'zygarde_complete',
+                                        'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings',
+                                        'kyurem_base', 'kyurem_white', 'kyurem_black'
+                                    ]
+                                },
+                                form_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                form_evidence: {
+                                    type: 'object', additionalProperties: false,
+                                    properties: {
+                                        region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
+                                        recognition_basis: { type: 'string', enum: ['direct_visual_match', 'visual_and_label', 'label_only', 'uncertain'] },
+                                        visual_signature: {
+                                            type: 'string',
+                                            enum: [
+                                                'articuno_standard', 'articuno_galarian',
+                                                'zapdos_standard', 'zapdos_galarian',
+                                                'moltres_standard', 'moltres_galarian',
+                                                'zacian_standard', 'zacian_crowned',
+                                                'zamazenta_standard', 'zamazenta_crowned',
+                                                'dialga_standard', 'dialga_origin',
+                                                'palkia_standard', 'palkia_origin',
+                                                'zygarde_10', 'zygarde_50', 'zygarde_complete',
+                                                'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings',
+                                                'kyurem_base', 'kyurem_white', 'kyurem_black',
+                                                'not_applicable', 'other', 'uncertain'
+                                            ]
+                                        },
+                                        key_features_visible: { type: 'boolean' },
+                                        label_relationship: { type: 'string', enum: ['exact_form', 'base_species_only', 'custom_nickname', 'conflicting', 'unreadable', 'not_applicable', 'uncertain'] }
+                                    },
+                                    required: ['region_visibility', 'recognition_basis', 'visual_signature', 'key_features_visible', 'label_relationship']
+                                },
                                 cp: { type: 'string' },
                                 shiny_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
                                 shiny_confidence: { type: 'number', minimum: 0, maximum: 1 },
@@ -1023,7 +1067,8 @@
                                 }
                             },
                             required: [
-                                'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence', 'cp',
+                                'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
+                                'base_species', 'form_id', 'form_confidence', 'form_evidence', 'cp',
                                 'shiny_state', 'shiny_confidence', 'shiny_evidence',
                                 'lucky_state', 'lucky_confidence', 'lucky_evidence',
                                 'favorite_state', 'favorite_confidence', 'favorite_evidence',
@@ -1850,9 +1895,211 @@ ${outputTemplate}
 掃描全圖由上到下、每列由左到右；超過 10 張仍必須繼續掃描到底部邊緣。完整可見與部分可見（包括任一邊緣被裁切）的卡片，每一張都各自輸出。detected_card_count 必須等於所有完整與部分可見卡片的總數；只有確實掃描完整張圖片才可填 scan_complete=true，只有確實檢查圖片最底部邊緣才可填 bottom_edge_checked=true。
 order、row、column 都從 1 開始並且每張卡片的座標組合必須唯一。不得把相鄰卡片合併，不得把相鄰卡片的符號或狀態轉移給本卡，也不得發明隱藏、畫面外或不存在的卡片。相同物種、CP 或標籤可能合法重複；合法重複的寶可夢仍是不同卡片，必須依各自位置分別輸出。
 
-【B. 物種與型態】
-official_name 必須是官方繁體中文物種與型態名稱，主要依身體輪廓、頭部、四肢、翅膀、尾巴、角、裝甲與型態專屬視覺特徵辨識。顏色只能輔助。visible_label 只能作為次要證據，可能是暱稱、IV、151515、100、百分比、縮寫、招式、使用者符號或其他前後綴，絕對不得直接複製為 official_name。
-例如標籤「GLO蒼響151515」不得成為 official_name；只有外觀可靠支持時才可輸出「蒼響」。保留可靠可辨識的型態，例如焰白酋雷姆、闇黑酋雷姆、蒼響劍王（蒼響／劍之王）、藏瑪然特盾王（藏瑪然特／盾之王）、起源型態與融合型態。視覺與標籤衝突或證據不可靠時，official_name 留空、recognition_status 填 uncertain，不得猜測或發明；部分可見卡片仍必須留在 cards。
+【B. 物種】
+official_name 必須是可靠辨識後的官方繁體中文名稱；visible_label 只能作為次要證據，可能是暱稱、IV、151515、100、百分比、縮寫、招式、使用者符號或其他前後綴，絕對不得直接複製為 official_name。視覺與標籤衝突或證據不可靠時，official_name 留空、recognition_status 填 uncertain，不得猜測或發明；部分可見卡片仍必須留在 cards。
+例如標籤「GLO蒼響151515」不得成為 official_name；只有外觀可靠支持時才可輸出「蒼響」。保留可靠可辨識的型態，例如焰白酋雷姆、闇黑酋雷姆、蒼響劍王（蒼響／劍之王）、藏瑪然特盾王（藏瑪然特／盾之王）、起源型態與融合型態。
+
+【B2. 基礎物種與型態辨識】
+
+每張卡片都必須先辨識 base_species，再辨識 form_id。你是直接觀看完整原始圖片中的寶可夢外觀，不是只抄寫 visible_label，也不是只根據單一顏色判斷。
+
+型態判斷可綜合：
+
+- 整體身體結構
+- 頭部
+- 翅膀
+- 尾巴
+- 四肢
+- 武器
+- 裝甲
+- 姿勢
+- 身體比例
+- 型態專屬部位
+- 顏色分布
+- visible_label 作為次要核對證據
+
+visible_label 可能只是基礎物種名稱、自訂暱稱、IV 數字、151515、100、百分比、縮寫、招式或其他使用者符號。
+
+例如畫面文字只寫「火焰鳥」，但圖片中是黑色本體與桃紅／深紅火焰狀翅膀的伽勒爾外觀時：
+
+base_species = "火焰鳥"
+form_id = "moltres_galarian"
+
+不得因 visible_label 只有「火焰鳥」就自動回傳 moltres_standard。
+
+對以下十個 base_species，form_id 必須從相容白名單中選擇：
+
+急凍鳥：
+articuno_standard / articuno_galarian
+
+閃電鳥：
+zapdos_standard / zapdos_galarian
+
+火焰鳥：
+moltres_standard / moltres_galarian
+
+蒼響：
+zacian_standard / zacian_crowned
+
+藏瑪然特：
+zamazenta_standard / zamazenta_crowned
+
+帝牙盧卡：
+dialga_standard / dialga_origin
+
+帕路奇亞：
+palkia_standard / palkia_origin
+
+基格爾德：
+zygarde_10 / zygarde_50 / zygarde_complete
+
+奈克洛茲瑪：
+necrozma_base / necrozma_dusk_mane / necrozma_dawn_wings
+
+酋雷姆：
+kyurem_base / kyurem_white / kyurem_black
+
+型態辨識細節：
+
+1. articuno_standard：
+   藍色冰鳥、寬大藍翼、長條帶狀尾羽與冰系羽毛特徵。
+
+2. articuno_galarian：
+   深紫／黑紫色系，眼部有明顯面罩感，羽翼、頭冠與尾部結構不同於一般急凍鳥。不能只因為紫色就判定。
+
+3. zapdos_standard：
+   黃色尖刺羽毛、黑色鋸齒狀翼尾、標準飛鳥輪廓。
+
+4. zapdos_galarian：
+   橘紅色系、雙腿特別長而強壯、接近陸行／奔跑鳥姿態。腿部與身體結構比顏色更重要。
+
+5. moltres_standard：
+   黃橘色鳥體，橘紅色真正火焰構成頭冠、翅膀與尾部。
+
+6. moltres_galarian：
+   黑色／深色鳥體，桃紅、洋紅、深紅色氣場式火焰翅膀與尾部。不能只看深色或紅色。
+
+7. zacian_standard：
+   蒼響狼型本體，沒有嘴持大型劍，也沒有完整劍之王裝甲。
+
+8. zacian_crowned：
+   嘴中明確持有大型劍，具有金藍色劍之王武裝與裝甲。
+
+9. zamazenta_standard：
+   藏瑪然特狼型本體，沒有完整盾之王大型盾牌鬃甲。
+
+10. zamazenta_crowned：
+    頭頸與胸前具有巨大盾牌式鬃甲及金紅藍防禦裝甲。
+
+11. dialga_standard：
+    標準帝牙盧卡四足龍型，身體較厚實，四肢、頸部及胸部為一般型態比例。
+
+12. dialga_origin：
+    身體比例明顯拉長，偏馬型／起源四足結構，頸胸、喉部與四肢構造不同於一般帝牙盧卡。
+
+13. palkia_standard：
+    標準直立／雙足龍型，可看見一般型態手臂與腿部結構。
+
+14. palkia_origin：
+    接近四足／半人馬式起源結構，肢體與軀幹配置和一般型態差異明顯。
+
+15. zygarde_10：
+    四足犬型，身體低而長，呈黑綠色狗型結構。
+
+16. zygarde_50：
+    長條蛇型／眼鏡蛇型，上半身直立，下半身為蛇形。
+
+17. zygarde_complete：
+    巨大直立人形／機甲型，中央軀幹與左右大型延伸構造明顯。
+
+18. necrozma_base：
+    黑色結晶狀直立本體，不是四足獅型，也不是大型翼型。
+
+19. necrozma_dusk_mane：
+    以索爾迦雷歐般四足獅型為主，覆蓋奈克洛茲瑪黑色結晶裝甲。
+
+20. necrozma_dawn_wings：
+    以露奈雅拉般巨大蝙蝠／月翼型為主，覆蓋奈克洛茲瑪黑色結晶構造。
+
+21. kyurem_base：
+    灰色冰晶龍型，沒有完整萊希拉姆或捷克羅姆融合結構。
+
+22. kyurem_white：
+    整體偏白，具有萊希拉姆相關白色羽毛、翼狀與融合結構，同時保留酋雷姆特徵。
+
+23. kyurem_black：
+    整體偏黑，具有捷克羅姆相關黑色裝甲、大型手臂及發電機式融合構造，同時保留酋雷姆特徵。
+
+不得只靠顏色判定任何型態。必須綜合基礎物種、身體結構、型態專屬部位與完整視覺外觀。
+
+若主要外觀區域看不清楚、被裁切、被遮擋，或無法可靠區分普通／特殊型態：
+
+form_id = "uncertain"
+
+不得自動退回 standard。
+
+若只靠 visible_label，沒有足夠圖片證據：
+
+recognition_basis = "label_only"
+form_id = "uncertain"
+
+若圖片顯示白名單以外的型態，例如本版不支援的究極奈克洛茲瑪：
+
+form_id = "unsupported"
+
+對不在十個型態白名單中的其他寶可夢：
+
+form_id = "not_applicable"
+
+【B3. form_evidence】
+
+region_visibility：
+
+- clear：主要外觀與型態特徵完整可辨識
+- partially_occluded：部分被遮住，但仍看到部分特徵
+- cropped：主要身體或關鍵型態部位被截圖邊緣裁切
+- not_visible：無法看到足夠寶可夢本體
+- uncertain：無法判斷可見程度
+
+recognition_basis：
+
+- direct_visual_match：主要由圖片完整外觀直接辨識
+- visual_and_label：圖片與文字共同支持
+- label_only：只有文字支持，圖片不足
+- uncertain：無法判斷
+
+visual_signature 必須與你實際看見的外觀一致。若選擇 moltres_galarian，visual_signature 也必須是 moltres_galarian。不能一邊回傳特殊型態、一邊提供其他型態的 visual_signature。
+
+key_features_visible 只有在該型態的關鍵部位確實可見時才能為 true。
+
+label_relationship：
+
+- exact_form：文字直接指出相同完整型態
+- base_species_only：文字只顯示基礎物種，例如畫面寫火焰鳥，但圖片可辨識為伽勒爾火焰鳥
+- custom_nickname：文字是暱稱、IV 或其他自訂內容
+- conflicting：可讀文字和圖片顯示不同基礎物種
+- unreadable：文字看不清楚
+- not_applicable：不適用
+- uncertain：無法判斷
+
+若圖片顯示支援的白名單型態，visual_signature 必須與 form_id 完全相同。
+
+若圖片顯示白名單外型態：
+
+form_id = "unsupported"
+visual_signature = "other"
+
+對不在十個型態白名單中的其他寶可夢：
+
+form_id = "not_applicable"
+visual_signature = "not_applicable"
+
+若型態證據不足：
+
+form_id = "uncertain"
+visual_signature = "uncertain"
+
+只輸出 strict JSON，不要輸出推理過程或額外說明。
 
 【C. 五維狀態 evidence 共通規則】
 shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判斷，證據只能歸屬同一張卡。每一個 evidence object 都必須明確填 region_visibility：區域完整可判讀填 clear，被遮擋填 partially_occluded，位於裁切邊緣填 cropped，不可見填 not_visible，仍無法判斷填 uncertain。只有 region_visibility=clear 且沒有相符正向證據時，才可輸出 no、normal 或 none；partially_occluded、cropped、not_visible 或 uncertain 不得建立負向狀態。顏色或身體顏色本身永遠不足。
@@ -2292,7 +2539,9 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 enumeration_confidence: 0,
                 cards: []
             };
-            const validatedCards = cardResult.cards.map(card => helpers.validateHundoCardStates(card));
+            const validatedCards = cardResult.cards.map(card => helpers.validateHundoCardStates(
+                helpers.validateHundoPokemonForm(card, normalizePokemonBaseName)
+            ));
             const manualReviewReasons = [];
             if (
                 cardExtraction
@@ -2340,7 +2589,14 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 'lucky_uncertain',
                 'favorite_uncertain',
                 'rocket_state_uncertain',
-                'background_uncertain'
+                'background_uncertain',
+                'form_uncertain',
+                'form_species_mismatch',
+                'form_region_not_clear',
+                'form_confidence_low',
+                'form_label_only',
+                'form_signature_mismatch',
+                'unsupported_form'
             ];
             const detailMessages = [];
             const activeCardReasonCodes = cardReasonCodes.filter(
@@ -2833,14 +3089,8 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                             index: result.imageIndex,
                             cards: result.card_result.cards
                         }));
-                    const overlapMerge = helpers.mergeSmartHundoScreenshots(
-                        successfulCardScreenshots,
-                        normalizePokemonBaseName
-                    );
-                    const conversion = helpers.smartHundoCardsToPokemonList(
-                        overlapMerge.cards,
-                        normalizePokemonBaseName
-                    );
+                    const overlapMerge = helpers.mergeSmartHundoScreenshots(successfulCardScreenshots);
+                    const conversion = helpers.smartHundoCardsToPokemonList(overlapMerge.cards);
                     const allCardOperationsSucceeded = smartResults.every(result => result.card_operation_succeeded);
                     const hasCompleteConfidentEmptyCardExtraction = (
                         smartResults.length > 0

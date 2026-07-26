@@ -17,7 +17,9 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "index.html"
 SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
-MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
+TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
+MANUAL_V2_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
+MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
 EXTRACTION_PROMPT_HASH = "1b061471ee97eeb1f6e0e9061acc8d6150b386fe6b46e4350b23b658a708b669"
@@ -30,10 +32,16 @@ NEW_ITEM_HASH = "5f7736d381b8c5f3914db57f5e1b9f33e358b205be918c314a3df6da6d07e2c
 NEW_ITEM_LENGTH = 1666
 GENERATE_TEXT_HASH = "9d288f3924c6a8d397546900c558f5335f0dfa5dde536249355850aff15a7eff"
 GENERATE_TEXT_LENGTH = 4589
-SMART_HUNDO_HELPERS_HASH = "7dc16a5450017b102054dfcd212737f87411948fd42fd1f17dd125631df3e72b"
-SMART_HUNDO_HELPERS_LENGTH = 52801
-SMART_HUNDO_SCHEMA_HASH = "a48c2113d70b1ef67be8f5c1bf02f258fdaae774d0e4fe982212392619f87094"
-SMART_HUNDO_SCHEMA_LENGTH = 8388
+HUNDO_COUNT_HELPERS_HASH = "218f80f1c30bc6247f214cc62e7a2959b3c16d33b061c01af1445a669e38152d"
+HUNDO_COUNT_HELPERS_LENGTH = 4332
+HUNDO_COUNT_SCHEMA_HASH = "98a1d9191cf3aef23a34b2613edace96db7ae0664e9a26e422ef63c91e60eac5"
+HUNDO_COUNT_SCHEMA_LENGTH = 1128
+HUNDO_COUNT_PROMPT_HASH = "d93623450e28e7da3672ed22cd9b5c4b7a2f6d2cdb5609e58f4637a92e33b307"
+HUNDO_COUNT_PROMPT_LENGTH = 856
+TRAINER_TEAM_HELPERS_HASH = "bb34294f7f5359292add2cb930f73250b5eb91e5037f90e9fefd63e3c193aa18"
+TRAINER_TEAM_HELPERS_LENGTH = 12158
+SMART_HUNDO_SCHEMA_HASH = "35636fba67d8b7e27f26c6cec802ff9fa1645eed647a8487dbba8eee2954a203"
+SMART_HUNDO_SCHEMA_LENGTH = 12032
 
 
 def normalized_source(path: Path) -> str:
@@ -98,10 +106,89 @@ def assert_forbidden_identifiers(source: str, forbidden: tuple[str, ...], label:
             raise AssertionError(f"{label}: forbidden identifier {identifier!r} is present")
 
 
-def assert_manual_acceptance_doc() -> None:
-    if not MANUAL_ACCEPTANCE_DOC.is_file():
-        raise AssertionError(f"manual acceptance document does not exist: {MANUAL_ACCEPTANCE_DOC}")
-    document = normalized_source(MANUAL_ACCEPTANCE_DOC)
+def assert_manual_v1_form_acceptance_doc() -> None:
+    if not MANUAL_V1_FORM_ACCEPTANCE_DOC.is_file():
+        raise AssertionError(f"manual V1 form acceptance document does not exist: {MANUAL_V1_FORM_ACCEPTANCE_DOC}")
+    document = normalized_source(MANUAL_V1_FORM_ACCEPTANCE_DOC)
+    require_fragment(
+        document,
+        "mocked browser tests verify data flow and validation boundaries only; they do not prove visual-recognition accuracy on real images",
+        "manual acceptance document",
+    )
+    expected_header = [
+        "full commit SHA", "anonymized screenshot ID", "visible label", "base_species",
+        "raw form_id", "form confidence", "form evidence", "effective form_id",
+        "canonical official name", "final pokemon_list", "pass/fail", "failure summary",
+    ]
+    expected_sections = {
+        "A. standard Articuno vs Galarian Articuno": [("急凍鳥", "articuno_standard / articuno_galarian")],
+        "B. standard Zapdos vs Galarian Zapdos": [("閃電鳥", "zapdos_standard / zapdos_galarian")],
+        "C. standard Moltres vs Galarian Moltres": [("火焰鳥", "moltres_standard / moltres_galarian")],
+        "D. standard Zacian vs Crowned Zacian": [("蒼響", "zacian_standard / zacian_crowned")],
+        "E. standard Zamazenta vs Crowned Zamazenta": [("藏瑪然特", "zamazenta_standard / zamazenta_crowned")],
+        "F. standard Dialga vs Origin Dialga": [("帝牙盧卡", "dialga_standard / dialga_origin")],
+        "G. standard Palkia vs Origin Palkia": [("帕路奇亞", "palkia_standard / palkia_origin")],
+        "H. all three Zygarde forms": [
+            ("基格爾德", "zygarde_10"), ("基格爾德", "zygarde_50"), ("基格爾德", "zygarde_complete"),
+        ],
+        "I. all three supported Necrozma forms": [
+            ("奈克洛茲瑪", "necrozma_base"),
+            ("奈克洛茲瑪", "necrozma_dusk_mane"),
+            ("奈克洛茲瑪", "necrozma_dawn_wings"),
+        ],
+        "J. all three Kyurem forms": [
+            ("酋雷姆", "kyurem_base"), ("酋雷姆", "kyurem_white"), ("酋雷姆", "kyurem_black"),
+        ],
+        "K. 蒼響 / 奈克洛茲瑪 / 伽勒爾火焰鳥": [
+            ("蒼響 / 奈克洛茲瑪 / 火焰鳥", "zacian_standard / necrozma_base / moltres_galarian"),
+        ],
+    }
+
+    def table_cells(line: str) -> list[str]:
+        return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+    section_names = list(expected_sections)
+    for section_index, (section_name, expected_rows) in enumerate(expected_sections.items()):
+        marker = f"## {section_name}"
+        section_start = document.find(marker)
+        if section_start < 0:
+            raise AssertionError(f"manual acceptance document: missing section {section_name!r}")
+        next_marker = f"## {section_names[section_index + 1]}" if section_index + 1 < len(section_names) else None
+        section_end = document.find(next_marker, section_start) if next_marker else len(document)
+        section = document[section_start:section_end]
+        table_lines = [line.strip() for line in section.splitlines() if line.strip().startswith("|")]
+        if len(table_lines) != len(expected_rows) + 2:
+            raise AssertionError(
+                f"manual acceptance document: section {section_name!r} must have one header, one separator, "
+                f"and {len(expected_rows)} result rows"
+            )
+        if table_cells(table_lines[0]) != expected_header:
+            raise AssertionError(f"manual acceptance document: section {section_name!r} has incorrect columns")
+        separator = table_cells(table_lines[1])
+        if len(separator) != len(expected_header) or any(cell != "---" for cell in separator):
+            raise AssertionError(f"manual acceptance document: section {section_name!r} has an invalid separator row")
+        for row_index, ((expected_species, expected_form), line) in enumerate(zip(expected_rows, table_lines[2:]), start=1):
+            cells = table_cells(line)
+            if len(cells) != len(expected_header):
+                raise AssertionError(
+                    f"manual acceptance document: section {section_name!r} row {row_index} must have 12 columns"
+                )
+            if cells[3:5] != [expected_species, expected_form]:
+                raise AssertionError(
+                    f"manual acceptance document: section {section_name!r} row {row_index} has wrong species/form"
+                )
+            for cell_index in (0, 1, 2, 5, 6, 7, 8, 9, 10, 11):
+                if cells[cell_index] != "待人工執行":
+                    raise AssertionError(
+                        f"manual acceptance document: section {section_name!r} row {row_index} "
+                        f"column {expected_header[cell_index]!r} must remain pending"
+                    )
+
+
+def assert_manual_v2_acceptance_doc() -> None:
+    if not MANUAL_V2_ACCEPTANCE_DOC.is_file():
+        raise AssertionError(f"manual V2 acceptance document does not exist: {MANUAL_V2_ACCEPTANCE_DOC}")
+    document = normalized_source(MANUAL_V2_ACCEPTANCE_DOC)
     for fragment in (
         "hundo_leg=3\npokemon_list=鳳王,哲爾尼亞斯,雷吉奇卡斯",
         "藏瑪然特*2,拉帝亞斯,蒼響,固拉多,酋雷姆",
@@ -112,6 +199,36 @@ def assert_manual_acceptance_doc() -> None:
         "固拉多,色違固拉多,特別背卡固拉多",
     ):
         require_fragment(document, fragment, "manual acceptance document")
+
+
+def assert_hundo_form_schema(smart_schema: str) -> None:
+    expected_form_ids = [
+        "not_applicable", "uncertain", "unsupported",
+        "articuno_standard", "articuno_galarian",
+        "zapdos_standard", "zapdos_galarian",
+        "moltres_standard", "moltres_galarian",
+        "zacian_standard", "zacian_crowned",
+        "zamazenta_standard", "zamazenta_crowned",
+        "dialga_standard", "dialga_origin",
+        "palkia_standard", "palkia_origin",
+        "zygarde_10", "zygarde_50", "zygarde_complete",
+        "necrozma_base", "necrozma_dusk_mane", "necrozma_dawn_wings",
+        "kyurem_base", "kyurem_white", "kyurem_black",
+    ]
+    match = re.search(
+        r"form_id:\s*\{\s*type:\s*'string',\s*enum:\s*\[(.*?)\]\s*\}",
+        smart_schema,
+        flags=re.DOTALL,
+    )
+    if not match:
+        raise AssertionError("form_id enum is missing")
+    actual_form_ids = re.findall(r"'([^']+)'", match.group(1))
+    if actual_form_ids != expected_form_ids:
+        raise AssertionError(f"form_id enum must contain exactly 26 IDs, got {actual_form_ids!r}")
+    if "maxItems" in smart_schema:
+        raise AssertionError("smart hundo cards must not impose maxItems")
+    for field in ("base_species", "form_id", "form_confidence", "form_evidence"):
+        require_fragment(smart_schema, f"{field}:", "smart hundo form schema")
 
 
 def assert_script_before_module(source: str, script_name: str) -> None:
@@ -169,6 +286,7 @@ def assert_trainer_diagnostics_and_logging_are_safe(source: str, console_argumen
 def main() -> int:
     source = normalized_source(INDEX_HTML)
     helpers_source = normalized_source(SMART_HUNDO_HELPERS)
+    trainer_helpers_source = normalized_source(TRAINER_TEAM_HELPERS)
     checks: list[tuple[str, Callable[[], object]]] = []
 
     classification_prompt = source_span(
@@ -225,6 +343,27 @@ def main() -> int:
         "V2 smart-hundo schema",
         include_end=False,
     )
+    hundo_count_helpers = source_span(
+        helpers_source,
+        "    const normalizeHundoCountResult =",
+        "\n    const normalizeCoordinate =",
+        "hundo-count helpers",
+        include_end=False,
+    )
+    hundo_count_schema = source_span(
+        source,
+        "        const HUNDO_COUNT_SCHEMA = {",
+        "\n        const HUNDO_SMART_SCHEMA =",
+        "hundo-count schema",
+        include_end=False,
+    )
+    hundo_count_prompt = source_span(
+        source,
+        "        const buildHundoCountPrompt =",
+        "\n        const fileToOriginalDataUrl =",
+        "hundo-count prompt",
+        include_end=False,
+    )
     safe_error_summary = source_span(
         source,
         "        const safeSmartHundoErrorSummary =",
@@ -257,11 +396,29 @@ def main() -> int:
             source,
             "trainer-team-helpers.js",
         )),
-        ("whole smart-hundo helper has the origin/main snapshot", lambda: assert_snapshot(
-            "whole smart-hundo helper",
-            helpers_source,
-            SMART_HUNDO_HELPERS_HASH,
-            SMART_HUNDO_HELPERS_LENGTH,
+        ("hundo-count helpers have the origin/main snapshot", lambda: assert_snapshot(
+            "hundo-count helpers",
+            hundo_count_helpers,
+            HUNDO_COUNT_HELPERS_HASH,
+            HUNDO_COUNT_HELPERS_LENGTH,
+        )),
+        ("hundo-count schema has the origin/main snapshot", lambda: assert_snapshot(
+            "hundo-count schema",
+            hundo_count_schema,
+            HUNDO_COUNT_SCHEMA_HASH,
+            HUNDO_COUNT_SCHEMA_LENGTH,
+        )),
+        ("hundo-count prompt has the origin/main snapshot", lambda: assert_snapshot(
+            "hundo-count prompt",
+            hundo_count_prompt,
+            HUNDO_COUNT_PROMPT_HASH,
+            HUNDO_COUNT_PROMPT_LENGTH,
+        )),
+        ("whole trainer-team helper has the origin/main snapshot", lambda: assert_snapshot(
+            "whole trainer-team helper",
+            trainer_helpers_source,
+            TRAINER_TEAM_HELPERS_HASH,
+            TRAINER_TEAM_HELPERS_LENGTH,
         )),
         ("smart-hundo schema span has the origin/main snapshot", lambda: assert_snapshot(
             "smart-hundo schema span",
@@ -436,6 +593,8 @@ def main() -> int:
             save_account,
             (
                 "purified", "shadow_state", "purified_state",
+                "base_species", "form_id", "form_confidence", "form_evidence",
+                "effective_form_id", "canonical_official_name",
                 "lastSmartHundoDiagnostics", "lastSmartHundoScanResult",
                 "lastTrainerTeamDiagnostics", "trainerTeamDiagnostics",
                 "fixed_ui_evidence", "model_team_candidate",
@@ -443,10 +602,11 @@ def main() -> int:
             ),
             "Firebase/GAS save path",
         )),
-        ("V2 smart schema contains only the five-dimension card contract", lambda: (
+        ("V2 smart schema contains the strict form and five-dimension card contract", lambda: (
             require_fragment(smart_schema, "name: 'pokemon_go_hundo_smart_extractor_v2'", "V2 smart schema"),
             require_fragment(smart_schema, "rocket_state:", "V2 rocket dimension"),
             require_fragment(smart_schema, "background_type:", "V2 background dimension"),
+            assert_hundo_form_schema(smart_schema),
             assert_forbidden_identifiers(
                 smart_schema,
                 ("hundo_leg", "shadow_state", "purified_state", "global"),
@@ -456,6 +616,13 @@ def main() -> int:
         ("smart diagnostics and logs exclude sensitive structures", lambda: [
             require_fragment(safe_error_summary, "reasonCode:", "safe error summary"),
             require_fragment(source, "console.warn('Smart hundo operation failed', summary);", "smart warning"),
+            *[
+                require_fragment(smart_diagnostics_shape, field, "safe smart form diagnostics")
+                for field in (
+                    "base_species", "raw_form_id", "form_confidence", "form_evidence",
+                    "effective_form_id", "canonical_official_name",
+                )
+            ],
             assert_forbidden_identifiers(
                 "\n".join((
                     safe_error_summary,
@@ -479,7 +646,16 @@ def main() -> int:
         ("trainer-team diagnostics and logs exclude sensitive structures", lambda: (
             assert_trainer_diagnostics_and_logging_are_safe(source, console_arguments)
         )),
-        ("manual V2 acceptance document has required exact outcomes", assert_manual_acceptance_doc),
+        ("Phase 3 legacy form bridge is removed from production and helpers", lambda: [
+            assert_forbidden(source, ("allowLegacyUnstructuredCards",), "production source"),
+            assert_forbidden(
+                helpers_source,
+                ("allowLegacyUnstructuredCards", "legacyOverlapCardSignature", "buildLegacyUnstructuredHundoDisplayName"),
+                "smart hundo helper",
+            ),
+        ]),
+        ("manual V2 acceptance document preserves pipeline cases", assert_manual_v2_acceptance_doc),
+        ("manual V1 form acceptance document has pending real-image cases", assert_manual_v1_form_acceptance_doc),
     ])
 
     failures: list[str] = []
@@ -499,6 +675,8 @@ def main() -> int:
     else:
         forbidden = (
             "purified", "shadow_state", "purified_state",
+            "base_species", "form_id", "form_confidence", "form_evidence",
+            "effective_form_id", "canonical_official_name",
             "lastSmartHundoDiagnostics", "lastSmartHundoScanResult",
             "lastTrainerTeamDiagnostics", "trainerTeamDiagnostics",
             "fixed_ui_evidence", "model_team_candidate",
