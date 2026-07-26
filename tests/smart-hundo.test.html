@@ -327,6 +327,7 @@
             },
             ...overrides
           });
+          normalized.cp = String(normalized.cp ?? '');
           delete normalized.purified_state;
           delete normalized.purified_confidence;
           delete normalized.shadow_state;
@@ -344,6 +345,8 @@
           ['base_species', 'form_id', 'form_confidence', 'form_evidence'].forEach(field => {
             equal(Object.hasOwn(fixture, field), true, field);
           });
+          equal(typeof fixture.cp, 'string', 'default cp is schema-valid');
+          equal(typeof modelCard({ cp: 42 }).cp, 'string', 'numeric override cp is schema-valid');
           equal(Object.hasOwn(fixture, 'purified_state'), false);
           equal(Object.hasOwn(fixture, 'shadow_state'), false);
         });
