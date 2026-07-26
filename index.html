@@ -2218,6 +2218,201 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             reader.readAsDataURL(file);
         });
 
+        const SMART_HUNDO_FORM_CROP_SIZE = 320;
+        const SMART_HUNDO_FORM_TILE_WIDTH = 360;
+        const SMART_HUNDO_FORM_TILE_HEIGHT = 380;
+        const SMART_HUNDO_FORM_TILE_COLUMNS = 2;
+        const SMART_HUNDO_FORM_CROP_MIN_SOURCE_PIXELS = 64;
+        const SMART_HUNDO_FORM_CROP_PADDING_RATIO = 0.12;
+        const smartHundoCropFailure = (candidate, reason = 'form_crop_missing') => ({
+            card_id: typeof candidate?.card_id === 'string' && candidate.card_id === candidate.card_id.trim()
+                ? candidate.card_id
+                : '',
+            reason
+        });
+        const hasSmartHundoCropBoundingBox = bbox => {
+            const keys = ['x_min', 'y_min', 'x_max', 'y_max'];
+            return !!bbox
+                && typeof bbox === 'object'
+                && !Array.isArray(bbox)
+                && Object.getOwnPropertyNames(bbox).length === keys.length
+                && Object.getOwnPropertySymbols(bbox).length === 0
+                && keys.every(key => Object.hasOwn(bbox, key) && Number.isSafeInteger(bbox[key]))
+                && bbox.x_min >= 0
+                && bbox.y_min >= 0
+                && bbox.x_max <= 1000
+                && bbox.y_max <= 1000
+                && bbox.x_min < bbox.x_max
+                && bbox.y_min < bbox.y_max;
+        };
+        const isSmartHundoCropCandidate = candidate => (
+            !!candidate
+            && typeof candidate === 'object'
+            && Object.hasOwn(candidate, 'card_id')
+            && typeof candidate.card_id === 'string'
+            && candidate.card_id.trim() !== ''
+            && candidate.card_id === candidate.card_id.trim()
+            && Object.hasOwn(candidate, 'screenshot_index')
+            && Number.isSafeInteger(candidate.screenshot_index)
+            && candidate.screenshot_index >= 0
+            && Object.hasOwn(candidate, 'base_species')
+            && typeof candidate.base_species === 'string'
+            && Object.hasOwn(candidate, 'candidate_form_ids')
+            && Array.isArray(candidate.candidate_form_ids)
+            && candidate.candidate_form_ids.length > 0
+            && Array.isArray(globalThis.SmartHundoFormVerifier?.VERIFIED_FORM_IDS_BY_BASE_SPECIES?.[candidate.base_species])
+            && candidate.candidate_form_ids.length === globalThis.SmartHundoFormVerifier.VERIFIED_FORM_IDS_BY_BASE_SPECIES[candidate.base_species].length
+            && candidate.candidate_form_ids.every((formId, index) => (
+                formId === globalThis.SmartHundoFormVerifier.VERIFIED_FORM_IDS_BY_BASE_SPECIES[candidate.base_species][index]
+            ))
+            && Object.hasOwn(candidate, 'pokemon_bbox')
+            && hasSmartHundoCropBoundingBox(candidate.pokemon_bbox)
+        );
+        const loadSmartHundoOriginalImage = originalDataUrl => new Promise((resolve, reject) => {
+            if (typeof originalDataUrl !== 'string' || !originalDataUrl.startsWith('data:image/')) {
+                reject(new Error('無法載入原始圖片。'));
+                return;
+            }
+            const image = new Image();
+            image.onerror = () => reject(new Error('無法載入原始圖片。'));
+            image.onload = () => resolve(image);
+            image.src = originalDataUrl;
+        });
+        const createSmartHundoPokemonCrop = (sourceImage, candidate) => {
+            if (!isSmartHundoCropCandidate(candidate)) return smartHundoCropFailure(candidate);
+            const sourceWidth = Number(sourceImage?.naturalWidth || sourceImage?.width);
+            const sourceHeight = Number(sourceImage?.naturalHeight || sourceImage?.height);
+            if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0) {
+                return smartHundoCropFailure(candidate);
+            }
+            const bbox = candidate.pokemon_bbox;
+            const bodyX = (bbox.x_min / 1000) * sourceWidth;
+            const bodyY = (bbox.y_min / 1000) * sourceHeight;
+            const bodyWidth = ((bbox.x_max - bbox.x_min) / 1000) * sourceWidth;
+            const bodyHeight = ((bbox.y_max - bbox.y_min) / 1000) * sourceHeight;
+            if (bodyWidth < SMART_HUNDO_FORM_CROP_MIN_SOURCE_PIXELS || bodyHeight < SMART_HUNDO_FORM_CROP_MIN_SOURCE_PIXELS) {
+                return smartHundoCropFailure(candidate, 'form_crop_too_small');
+            }
+            const padding = Math.max(bodyWidth, bodyHeight) * SMART_HUNDO_FORM_CROP_PADDING_RATIO;
+            const cropX = Math.max(0, bodyX - padding);
+            const cropY = Math.max(0, bodyY - padding);
+            const cropRight = Math.min(sourceWidth, bodyX + bodyWidth + padding);
+            const cropBottom = Math.min(sourceHeight, bodyY + bodyHeight + padding);
+            const cropWidth = cropRight - cropX;
+            const cropHeight = cropBottom - cropY;
+            if (cropWidth <= 0 || cropHeight <= 0) return smartHundoCropFailure(candidate);
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = SMART_HUNDO_FORM_CROP_SIZE;
+                canvas.height = SMART_HUNDO_FORM_CROP_SIZE;
+                const context = canvas.getContext('2d');
+                if (!context) return smartHundoCropFailure(candidate);
+                const scale = Math.min(SMART_HUNDO_FORM_CROP_SIZE / cropWidth, SMART_HUNDO_FORM_CROP_SIZE / cropHeight);
+                const destinationWidth = cropWidth * scale;
+                const destinationHeight = cropHeight * scale;
+                context.imageSmoothingEnabled = true;
+                context.imageSmoothingQuality = 'high';
+                context.drawImage(
+                    sourceImage,
+                    cropX,
+                    cropY,
+                    cropWidth,
+                    cropHeight,
+                    (SMART_HUNDO_FORM_CROP_SIZE - destinationWidth) / 2,
+                    (SMART_HUNDO_FORM_CROP_SIZE - destinationHeight) / 2,
+                    destinationWidth,
+                    destinationHeight
+                );
+                return {
+                    card_id: candidate.card_id,
+                    crop_canvas: canvas,
+                    crop_data_url: canvas.toDataURL('image/png'),
+                    crop_source_size: { width: cropWidth, height: cropHeight }
+                };
+            } catch (error) {
+                return smartHundoCropFailure(candidate);
+            }
+        };
+        const buildSmartHundoFormContactSheets = async (originalDataUrl, candidates) => {
+            const requestedCandidates = Array.isArray(candidates) ? candidates : [];
+            if (requestedCandidates.length === 0) return { contact_sheets: [], crop_failures: [] };
+            const requestedScreenshotIndexes = new Set(requestedCandidates
+                .filter(isSmartHundoCropCandidate)
+                .map(candidate => candidate.screenshot_index));
+            if (requestedScreenshotIndexes.size > 1) {
+                return {
+                    contact_sheets: [],
+                    crop_failures: requestedCandidates.map(candidate => smartHundoCropFailure(candidate))
+                };
+            }
+            const invalidCandidates = requestedCandidates.filter(candidate => !isSmartHundoCropCandidate(candidate));
+            const validCandidates = requestedCandidates.filter(isSmartHundoCropCandidate);
+            if (validCandidates.length === 0) {
+                return {
+                    contact_sheets: [],
+                    crop_failures: invalidCandidates.map(candidate => smartHundoCropFailure(candidate))
+                };
+            }
+            let sourceImage;
+            try {
+                sourceImage = await loadSmartHundoOriginalImage(originalDataUrl);
+            } catch (error) {
+                return {
+                    contact_sheets: [],
+                    crop_failures: requestedCandidates.map(candidate => smartHundoCropFailure(candidate))
+                };
+            }
+            const successfulCrops = [];
+            const cropFailures = invalidCandidates.map(candidate => smartHundoCropFailure(candidate));
+            validCandidates.forEach(candidate => {
+                const crop = createSmartHundoPokemonCrop(sourceImage, candidate);
+                if (crop.reason) {
+                    cropFailures.push(crop);
+                    return;
+                }
+                successfulCrops.push({ candidate, crop });
+            });
+            const batches = globalThis.SmartHundoFormVerifier
+                ?.planHundoFormVerificationBatches(successfulCrops.map(({ candidate }) => candidate)) || [];
+            if (successfulCrops.length > 0 && batches.length === 0) {
+                return {
+                    contact_sheets: [],
+                    crop_failures: [...cropFailures, ...successfulCrops.map(({ candidate }) => smartHundoCropFailure(candidate))]
+                };
+            }
+            const cropsByCardId = new Map(successfulCrops.map(({ candidate, crop }) => [candidate.card_id, crop]));
+            const contactSheets = [];
+            batches.forEach(batch => {
+                const jobs = batch.jobs.slice(0, 6);
+                try {
+                    const rows = Math.ceil(jobs.length / SMART_HUNDO_FORM_TILE_COLUMNS);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = SMART_HUNDO_FORM_TILE_COLUMNS * SMART_HUNDO_FORM_TILE_WIDTH;
+                    canvas.height = rows * SMART_HUNDO_FORM_TILE_HEIGHT;
+                    const context = canvas.getContext('2d');
+                    if (!context) throw new Error('form contact sheet canvas is unavailable');
+                    context.imageSmoothingEnabled = true;
+                    context.imageSmoothingQuality = 'high';
+                    jobs.forEach((job, index) => {
+                        const column = index % SMART_HUNDO_FORM_TILE_COLUMNS;
+                        const row = Math.floor(index / SMART_HUNDO_FORM_TILE_COLUMNS);
+                        const tileX = column * SMART_HUNDO_FORM_TILE_WIDTH;
+                        const tileY = row * SMART_HUNDO_FORM_TILE_HEIGHT;
+                        context.fillText(job.tile_id, tileX + 20, tileY + 24);
+                        context.drawImage(cropsByCardId.get(job.card_id).crop_canvas, tileX + 20, tileY + 40, 320, 320);
+                    });
+                    contactSheets.push({
+                        contact_sheet_id: batch.contact_sheet_id,
+                        contact_sheet_data_url: canvas.toDataURL('image/png'),
+                        verification_jobs: jobs
+                    });
+                } catch (error) {
+                    cropFailures.push(...jobs.map(job => smartHundoCropFailure(job)));
+                }
+            });
+            return { contact_sheets: contactSheets, crop_failures: cropFailures };
+        };
+
         const fileToResizedDataUrl = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onerror = () => reject(new Error('讀取圖片失敗，請重新選擇圖片。'));

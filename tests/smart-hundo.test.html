@@ -2825,12 +2825,17 @@
         let canvasCalls = 0;
         const canvasRecords = [];
         const canvasDrawRecords = [];
+        const canvasTextRecords = [];
+        const canvasContexts = [];
+        let canvasFailureHook = null;
         let lastPayload = null;
         let countRequestCount = 0;
         const fileReadCounts = new Map();
         const resizedByOriginal = new Map();
         const countRegionByOriginal = new Map();
         const trainerTeamEvidenceByOriginal = new Map();
+        const imageDimensionsBySource = new Map();
+        const imageLoadCounts = new Map();
         const originalDataUrl = 'data:image/png;base64,SMART_ORIGINAL_DO_NOT_EXPOSE';
         const resizedUrl = 'data:image/jpeg;base64,RESIZED';
         const countRegionUrl = 'data:image/png;base64,HUNDO_COUNT_REGION_SENTINEL';
@@ -2940,12 +2945,16 @@
         class MockImage {
           set src(value) {
             this.source = value;
+            imageLoadCounts.set(value, (imageLoadCounts.get(value) || 0) + 1);
             if (String(value).includes('IMAGE_ERROR')) {
               this.onerror?.(new Event('error'));
               return;
             }
-            this.width = 1600;
-            this.height = 900;
+            const dimensions = imageDimensionsBySource.get(value) || { width: 1600, height: 900 };
+            this.width = dimensions.width;
+            this.height = dimensions.height;
+            this.naturalWidth = dimensions.width;
+            this.naturalHeight = dimensions.height;
             this.onload?.();
           }
         }
@@ -2958,22 +2967,39 @@
           let drawnImage = null;
           let drawArguments = [];
           const drawCalls = [];
+          const context = {
+            imageSmoothingEnabled: false,
+            imageSmoothingQuality: 'low',
+            drawImage: (...drawArgs) => {
+              const failure = canvasFailureHook?.('drawImage', canvas);
+              if (failure) throw failure;
+              [drawnImage] = drawArgs;
+              drawArguments = drawArgs.slice(1);
+              const drawRecord = {
+                source: drawnImage?.source,
+                drawArguments: [...drawArguments]
+              };
+              drawCalls.push(drawRecord);
+              canvasDrawRecords.push(drawRecord);
+            },
+            fillText: (text, x, y) => {
+              const failure = canvasFailureHook?.('fillText', canvas);
+              if (failure) throw failure;
+              canvasTextRecords.push({ canvas, text: String(text), x, y });
+            }
+          };
           const canvas = {
             width: 0,
             height: 0,
-            getContext: () => ({
-              drawImage: (...drawArgs) => {
-                [drawnImage] = drawArgs;
-                drawArguments = drawArgs.slice(1);
-                const drawRecord = {
-                  source: drawnImage?.source,
-                  drawArguments: [...drawArguments]
-                };
-                drawCalls.push(drawRecord);
-                canvasDrawRecords.push(drawRecord);
-              }
-            }),
+            getContext: () => {
+              const failure = canvasFailureHook?.('getContext', canvas);
+              if (failure === 'null') return null;
+              if (failure) throw failure;
+              return context;
+            },
             toDataURL: (type, quality) => {
+              const failure = canvasFailureHook?.('toDataURL', canvas);
+              if (failure) throw failure;
               canvasRecords.push({
                 width: canvas.width,
                 height: canvas.height,
@@ -2991,6 +3017,7 @@
                 : resizedByOriginal.get(drawnImage?.source) || resizedUrl;
             }
           };
+          canvasContexts.push({ canvas, context, drawCalls });
           return canvas;
         };
         globalThis.initializeApp = () => ({});
@@ -3044,6 +3071,9 @@
             fileToOriginalDataUrl,
             fileToResizedDataUrl,
             fileToHundoCountRegionDataUrl,
+            loadSmartHundoOriginalImage: typeof loadSmartHundoOriginalImage === 'undefined' ? undefined : loadSmartHundoOriginalImage,
+            createSmartHundoPokemonCrop: typeof createSmartHundoPokemonCrop === 'undefined' ? undefined : createSmartHundoPokemonCrop,
+            buildSmartHundoFormContactSheets: typeof buildSmartHundoFormContactSheets === 'undefined' ? undefined : buildSmartHundoFormContactSheets,
             buildAiRequestContent,
             requestOpenAiJsonSchema,
             requestHundoCountExtraction,
@@ -3071,6 +3101,278 @@
             setTrainerTeamStatus: typeof setTrainerTeamStatus === 'undefined' ? undefined : setTrainerTeamStatus
           });`;
         (0, eval)(pageModule);
+
+        const requireSmartHundoCropContract = (name) => {
+          const value = globalThis[name];
+          if (typeof value !== 'function') fail(`missing Smart Hundo crop contract ${name}`);
+          return value;
+        };
+        const formCropCandidate = (cardId, bbox, screenshotIndex = 0, extras = {}) => ({
+          card_id: cardId,
+          screenshot_index: screenshotIndex,
+          base_species: '帝牙盧卡',
+          candidate_form_ids: ['dialga_standard', 'dialga_origin', 'uncertain'],
+          pokemon_bbox: bbox,
+          ...extras
+        });
+
+        test('fails closed unless crop candidates own an exact target-compatible bbox contract', () => {
+          const cropPokemon = requireSmartHundoCropContract('createSmartHundoPokemonCrop');
+          const source = { source: 'strict-crop-source', naturalWidth: 1000, naturalHeight: 1000 };
+          const validBbox = { x_min: 100, y_min: 100, x_max: 300, y_max: 300 };
+          const inheritedBbox = Object.create(validBbox);
+          const inheritedCandidate = Object.create(formCropCandidate('0:inherited:1:1', validBbox));
+          const invalidCandidates = [
+            formCropCandidate('0:fractional:1:1', { ...validBbox, x_min: 100.5 }),
+            formCropCandidate('0:inherited-bbox:1:1', inheritedBbox),
+            formCropCandidate('0:extra-bbox:1:1', { ...validBbox, unexpected: true }),
+            formCropCandidate('   ', validBbox),
+            inheritedCandidate,
+            formCropCandidate('0:empty-forms:1:1', validBbox, 0, { candidate_form_ids: [] }),
+            formCropCandidate('0:bad-forms:1:1', validBbox, 0, { candidate_form_ids: ['not-an-approved-form'] }),
+            formCropCandidate('0:wrong-species:1:1', validBbox, 0, { base_species: 'Palkia' })
+          ];
+          invalidCandidates.forEach(candidate => {
+            const result = cropPokemon(source, candidate);
+            equal(result.reason, 'form_crop_missing');
+            equal(Object.hasOwn(result, 'crop_canvas'), false);
+          });
+          const extraCandidate = formCropCandidate('0:extra-candidate:1:1', validBbox, 0, { cp: '9999', visible_label: 'must-not-render' });
+          equal(Object.hasOwn(cropPokemon(source, extraCandidate), 'crop_canvas'), true);
+        });
+
+        await asyncTest('loads the full original image at natural source dimensions', async () => {
+          const loadOriginal = requireSmartHundoCropContract('loadSmartHundoOriginalImage');
+          const original = 'data:image/png;base64,SYNTHETIC_1000_BY_2000';
+          imageDimensionsBySource.set(original, { width: 1000, height: 2000 });
+          const image = await loadOriginal(original);
+          equal(image.source, original);
+          equal(image.naturalWidth, 1000);
+          equal(image.naturalHeight, 2000);
+        });
+
+        test('maps normalized boxes to padded centered PNG crop tiles without text', () => {
+          const cropPokemon = requireSmartHundoCropContract('createSmartHundoPokemonCrop');
+          const canvasStart = canvasContexts.length;
+          const drawStart = canvasDrawRecords.length;
+          const textStart = canvasTextRecords.length;
+          const source = { source: 'synthetic-crop-source', naturalWidth: 1000, naturalHeight: 2000, width: 1, height: 1 };
+          const crop = cropPokemon(source, formCropCandidate('0:2:1:1', {
+            x_min: 100, y_min: 200, x_max: 300, y_max: 500
+          }));
+          deepEqual({ card_id: crop.card_id, crop_source_size: crop.crop_source_size }, {
+            card_id: '0:2:1:1', crop_source_size: { width: 344, height: 744 }
+          });
+          equal(crop.crop_canvas.width, 320);
+          equal(crop.crop_canvas.height, 320);
+          equal(crop.crop_data_url.startsWith('data:image/png'), true);
+          deepEqual(canvasDrawRecords[drawStart].drawArguments.slice(0, 4), [28, 328, 344, 744]);
+          const draw = canvasDrawRecords[drawStart].drawArguments;
+          const scale = 320 / 744;
+          equal(Math.abs(draw[4] - ((320 - 344 * scale) / 2)) < 0.000001, true);
+          equal(draw[5], 0);
+          equal(Math.abs(draw[6] - (344 * scale)) < 0.000001, true);
+          equal(draw[7], 320);
+          equal(canvasContexts[canvasStart].context.imageSmoothingEnabled, true);
+          equal(canvasContexts[canvasStart].context.imageSmoothingQuality, 'high');
+          deepEqual(canvasTextRecords.slice(textStart), []);
+        });
+
+        test('clamps crop rectangles and fails closed for malformed or undersized bodies', () => {
+          const cropPokemon = requireSmartHundoCropContract('createSmartHundoPokemonCrop');
+          const source = { source: 'synthetic-clamp-source', naturalWidth: 1000, naturalHeight: 1000 };
+          const drawStart = canvasDrawRecords.length;
+          const edgeCrop = cropPokemon(source, formCropCandidate('0:edge:1:1', {
+            x_min: 0, y_min: 0, x_max: 100, y_max: 100
+          }));
+          equal(edgeCrop.crop_source_size.width <= 1000, true);
+          equal(edgeCrop.crop_source_size.height <= 1000, true);
+          const sourceRectangle = canvasDrawRecords[drawStart].drawArguments;
+          equal(sourceRectangle[0] >= 0 && sourceRectangle[1] >= 0, true);
+          equal(sourceRectangle[0] + sourceRectangle[2] <= 1000, true);
+          equal(sourceRectangle[1] + sourceRectangle[3] <= 1000, true);
+          const pass = cropPokemon(source, formCropCandidate('0:64:1:1', { x_min: 0, y_min: 0, x_max: 64, y_max: 64 }));
+          equal(pass.crop_source_size.width > 0, true);
+          [
+            { bbox: { x_min: 0, y_min: 0, x_max: 63, y_max: 64 }, reason: 'form_crop_too_small' },
+            { bbox: { x_min: 0, y_min: 0, x_max: 64, y_max: 63 }, reason: 'form_crop_too_small' },
+            { bbox: null, reason: 'form_crop_missing' }
+          ].forEach(({ bbox, reason }, index) => {
+            const result = cropPokemon(source, formCropCandidate(`0:small:${index}:1`, bbox));
+            equal(result.reason, reason);
+            equal(Object.hasOwn(result, 'crop_canvas'), false);
+          });
+        });
+
+        await asyncTest('builds zero one six and seven candidate sheets with exact private layout contracts', async () => {
+          const buildSheets = requireSmartHundoCropContract('buildSmartHundoFormContactSheets');
+          const candidateFor = index => formCropCandidate(
+            `0:${index + 1}:1:1`,
+            { x_min: 100, y_min: 100, x_max: 400, y_max: 400 },
+            0,
+            { cp: '9999', visible_label: 'forbidden label' }
+          );
+          const zero = await buildSheets('data:image/png;base64,SYNTHETIC_CONTACT_ZERO', []);
+          deepEqual(zero, { contact_sheets: [], crop_failures: [] });
+          const verifyCount = async (count, expectedRows) => {
+            const original = `data:image/png;base64,SYNTHETIC_CONTACT_${count}`;
+            imageDimensionsBySource.set(original, { width: 1000, height: 1000 });
+            imageLoadCounts.set(original, 0);
+            const canvasStart = canvasContexts.length;
+            const recordStart = canvasRecords.length;
+            const textStart = canvasTextRecords.length;
+            const result = await buildSheets(original, Array.from({ length: count }, (_, index) => candidateFor(index)));
+            equal(result.contact_sheets.length, expectedRows.length);
+            equal(imageLoadCounts.get(original), 1, `${count} candidates load one original image`);
+            const sheetContexts = canvasContexts.slice(canvasStart).filter(({ canvas }) => canvas.width === 720);
+            equal(sheetContexts.length, expectedRows.length);
+            sheetContexts.forEach(({ canvas, drawCalls }, sheetIndex) => {
+              equal(canvas.height, expectedRows[sheetIndex] * 380);
+              equal(drawCalls.length <= 6, true);
+              drawCalls.forEach((draw, index) => {
+                const column = index % 2;
+                const row = Math.floor(index / 2);
+                deepEqual(draw.drawArguments, [column * 360 + 20, row * 380 + 40, 320, 320]);
+              });
+            });
+            const sheetEncodes = canvasRecords.slice(recordStart).filter(record => record.width === 720);
+            deepEqual(sheetEncodes.map(record => record.type), Array(expectedRows.length).fill('image/png'));
+            const labels = canvasTextRecords.slice(textStart).map(record => record.text);
+            equal(labels.length, count);
+            return {
+              result,
+              labels,
+              textRecords: canvasTextRecords.slice(textStart),
+              cropContexts: canvasContexts.slice(canvasStart).filter(({ canvas }) => canvas.width === 320 && canvas.height === 320)
+            };
+          };
+          const one = await verifyCount(1, [1]);
+          deepEqual(one.labels, ['T1']);
+          const six = await verifyCount(6, [3]);
+          deepEqual(six.labels, ['T1', 'T2', 'T3', 'T4', 'T5', 'T6']);
+          const seven = await verifyCount(7, [3, 1]);
+          deepEqual(seven.result.contact_sheets.map(sheet => sheet.verification_jobs.length), [6, 1]);
+          deepEqual(seven.result.contact_sheets[0].verification_jobs.map(job => job.tile_id), ['T1', 'T2', 'T3', 'T4', 'T5', 'T6']);
+          deepEqual(seven.result.contact_sheets[1].verification_jobs.map(job => job.tile_id), ['T1']);
+          deepEqual(seven.labels, ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T1']);
+          deepEqual(seven.textRecords.map(({ text, x, y }) => ({ text, x, y })), [
+            { text: 'T1', x: 20, y: 24 }, { text: 'T2', x: 380, y: 24 },
+            { text: 'T3', x: 20, y: 404 }, { text: 'T4', x: 380, y: 404 },
+            { text: 'T5', x: 20, y: 784 }, { text: 'T6', x: 380, y: 784 },
+            { text: 'T1', x: 20, y: 24 }
+          ]);
+          seven.result.contact_sheets.forEach(sheet => {
+            equal(sheet.contact_sheet_data_url.startsWith('data:image/png'), true);
+            sheet.verification_jobs.forEach(job => {
+              deepEqual(Object.keys(job), ['tile_id', 'card_id', 'screenshot_index', 'base_species', 'candidate_form_ids']);
+              equal(job.base_species, '帝牙盧卡');
+            });
+          });
+          const cropCanvasSet = new Set(seven.cropContexts.map(({ canvas }) => canvas));
+          deepEqual(canvasTextRecords.filter(record => cropCanvasSet.has(record.canvas)), []);
+          ['9999', 'forbidden label', '帝牙盧卡', 'dialga_standard'].forEach(forbidden => {
+            equal(seven.labels.includes(forbidden), false);
+          });
+          const safeContactOutput = {
+            contact_sheets: seven.result.contact_sheets.map(({ contact_sheet_data_url, ...sheet }) => sheet),
+            crop_failures: seven.result.crop_failures
+          };
+          const assertNoPrivateArtifact = value => {
+            if (typeof value === 'string') {
+              equal(value.startsWith('data:image/'), false, 'safe-shaped values exclude image data URLs');
+              return;
+            }
+            if (!value || typeof value !== 'object') return;
+            equal(typeof value.getContext === 'function', false, 'safe-shaped values exclude canvas objects');
+            equal(value instanceof Image, false, 'safe-shaped values exclude Image objects');
+            if (typeof File !== 'undefined') equal(value instanceof File, false, 'safe-shaped values exclude File objects');
+            Object.values(value).forEach(assertNoPrivateArtifact);
+          };
+          assertNoPrivateArtifact(safeContactOutput);
+          const serializedActualOutput = JSON.stringify(seven.result);
+          equal(serializedActualOutput.includes('SYNTHETIC_CONTACT_7'), false, 'actual request object excludes original data URL');
+          const original = 'data:image/png;base64,SYNTHETIC_CONTACT_FAILURE';
+          imageDimensionsBySource.set(original, { width: 1000, height: 1000 });
+          const safeFailure = await buildSheets(original, [formCropCandidate('0:bad:1:1', {
+            x_min: 0, y_min: 0, x_max: 63, y_max: 64
+          })]);
+          equal(safeFailure.contact_sheets.length, 0);
+          deepEqual(safeFailure.crop_failures, [{ card_id: '0:bad:1:1', reason: 'form_crop_too_small' }]);
+          assertNoPrivateArtifact({ contact_sheets: safeFailure.contact_sheets, crop_failures: safeFailure.crop_failures });
+        });
+
+        await asyncTest('rejects mixed screenshot contact-sheet candidates before loading or drawing', async () => {
+          const buildSheets = requireSmartHundoCropContract('buildSmartHundoFormContactSheets');
+          const original = 'data:image/png;base64,SYNTHETIC_MIXED_SCREENSHOTS';
+          imageDimensionsBySource.set(original, { width: 1000, height: 1000 });
+          imageLoadCounts.set(original, 0);
+          const canvasStart = canvasContexts.length;
+          const result = await buildSheets(original, [
+            formCropCandidate('0:mixed:1:1', { x_min: 100, y_min: 100, x_max: 300, y_max: 300 }, 0),
+            formCropCandidate('1:mixed:1:1', { x_min: 100, y_min: 100, x_max: 300, y_max: 300 }, 1)
+          ]);
+          deepEqual(result.contact_sheets, []);
+          deepEqual(result.crop_failures, [
+            { card_id: '0:mixed:1:1', reason: 'form_crop_missing' },
+            { card_id: '1:mixed:1:1', reason: 'form_crop_missing' }
+          ]);
+          equal(imageLoadCounts.get(original), 0);
+          equal(canvasContexts.length, canvasStart);
+        });
+
+        await asyncTest('contains source and canvas failures while retaining independent crops and sheets', async () => {
+          const buildSheets = requireSmartHundoCropContract('buildSmartHundoFormContactSheets');
+          const cropPokemon = requireSmartHundoCropContract('createSmartHundoPokemonCrop');
+          const source = { source: 'failure-crop-source', naturalWidth: 1000, naturalHeight: 1000 };
+          const candidate = formCropCandidate('0:failure:1:1', { x_min: 100, y_min: 100, x_max: 300, y_max: 300 });
+          const expectCropFailure = hook => {
+            canvasFailureHook = hook;
+            const result = cropPokemon(source, candidate);
+            canvasFailureHook = null;
+            deepEqual(result, { card_id: '0:failure:1:1', reason: 'form_crop_missing' });
+          };
+          expectCropFailure((operation, canvas) => operation === 'getContext' && canvas.width === 320 ? 'null' : null);
+          expectCropFailure((operation, canvas) => operation === 'drawImage' && canvas.width === 320 ? new Error('crop draw failed') : null);
+          expectCropFailure((operation, canvas) => operation === 'toDataURL' && canvas.width === 320 ? new Error('crop encode failed') : null);
+
+          const loadFailure = await buildSheets('data:image/png;base64,IMAGE_ERROR', [candidate]);
+          deepEqual(loadFailure, {
+            contact_sheets: [],
+            crop_failures: [{ card_id: '0:failure:1:1', reason: 'form_crop_missing' }]
+          });
+
+          const original = 'data:image/png;base64,SYNTHETIC_FAILURE_ISOLATION';
+          imageDimensionsBySource.set(original, { width: 1000, height: 1000 });
+          let cropDrawFailures = 0;
+          canvasFailureHook = (operation, canvas) => {
+            if (operation === 'drawImage' && canvas.width === 320 && cropDrawFailures++ === 0) return new Error('first crop draw failed');
+            return null;
+          };
+          const partialCrop = await buildSheets(original, [candidate, formCropCandidate('0:survives:1:2', { x_min: 100, y_min: 100, x_max: 300, y_max: 300 })]);
+          canvasFailureHook = null;
+          deepEqual(partialCrop.contact_sheets.map(sheet => sheet.verification_jobs.map(job => job.card_id)), [['0:survives:1:2']]);
+          deepEqual(partialCrop.crop_failures, [{ card_id: '0:failure:1:1', reason: 'form_crop_missing' }]);
+
+          const contactFailure = async (operation, failureMessage) => {
+            let sheetOperationCount = 0;
+            const failAfter = operation === 'toDataURL' ? 1 : 6;
+            canvasFailureHook = (actualOperation, canvas) => {
+              if (actualOperation === operation && canvas.width === 720 && sheetOperationCount++ === failAfter) return new Error(failureMessage);
+              return null;
+            };
+            const result = await buildSheets(original, Array.from({ length: 7 }, (_, index) => formCropCandidate(
+              `0:sheet:${index + 1}:1`, { x_min: 100, y_min: 100, x_max: 300, y_max: 300 }
+            )));
+            canvasFailureHook = null;
+            deepEqual(result.contact_sheets.map(sheet => sheet.verification_jobs.map(job => job.card_id)), [[
+              '0:sheet:1:1', '0:sheet:2:1', '0:sheet:3:1', '0:sheet:4:1', '0:sheet:5:1', '0:sheet:6:1'
+            ]]);
+            deepEqual(result.crop_failures, [{ card_id: '0:sheet:7:1', reason: 'form_crop_missing' }]);
+          };
+          await contactFailure('fillText', 'second sheet text failed');
+          await contactFailure('drawImage', 'second sheet draw failed');
+          await contactFailure('toDataURL', 'second sheet encode failed');
+        });
 
         test('renders each form review reason as a card-level status detail', () => {
           const status = formatSmartHundoStatus({
