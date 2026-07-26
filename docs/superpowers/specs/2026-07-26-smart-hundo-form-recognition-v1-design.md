@@ -327,6 +327,17 @@ unsupported_form: '此型態尚未納入支援範圍'
 百神掃描完成：總數8，辨識7張卡片；1張型態需人工確認
 ```
 
+拒絕路徑必須有可見的人工確認原因，不得只把 canonical name 清空：
+
+- raw `form_id='uncertain'`、`key_features_visible=false`、`recognition_basis='uncertain'` → `form_uncertain`
+- incompatible species/form 或 `label_relationship='conflicting'` → `form_species_mismatch`
+- cropped、not-visible、uncertain visibility，或 partially-occluded 未通過其附加規則 → `form_region_not_clear`
+- clear `<0.85` 或 partially-occluded `<0.93` → `form_confidence_low`
+- `recognition_basis='label_only'` → `form_label_only`
+- `visual_signature !== form_id` → `form_signature_mismatch`
+- `form_id='unsupported'` → `unsupported_form`
+- `species_confidence <0.80` → 既有 `species_uncertain` 加 `form_uncertain`
+
 ## canonical name、狀態與 display order
 
 處理順序固定為：
