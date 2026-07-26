@@ -2840,13 +2840,20 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                             index: result.imageIndex,
                             cards: result.card_result.cards
                         }));
+                    // TEMPORARY Phase 3 V2 compatibility for legacy cards without form fields.
+                    // Remove this bridge when Phase 5 makes form validation the production boundary.
+                    const legacyUnstructuredHundoCompatibility = {
+                        allowLegacyUnstructuredCards: true
+                    };
                     const overlapMerge = helpers.mergeSmartHundoScreenshots(
                         successfulCardScreenshots,
-                        normalizePokemonBaseName
+                        normalizePokemonBaseName,
+                        legacyUnstructuredHundoCompatibility
                     );
                     const conversion = helpers.smartHundoCardsToPokemonList(
                         overlapMerge.cards,
-                        normalizePokemonBaseName
+                        normalizePokemonBaseName,
+                        legacyUnstructuredHundoCompatibility
                     );
                     const allCardOperationsSucceeded = smartResults.every(result => result.card_operation_succeeded);
                     const hasCompleteConfidentEmptyCardExtraction = (
