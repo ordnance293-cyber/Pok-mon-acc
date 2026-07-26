@@ -2522,6 +2522,14 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 payload.temperature = 0.1;
             }
             const requestBody = JSON.stringify(payload);
+            const baseRequestMetadata = {
+                requested_model: String(requestModel),
+                returned_model: '',
+                reasoning_effort: requestModel === HUNDO_SMART_MODEL
+                    ? String(payload.reasoning_effort || '')
+                    : '',
+                finish_reason: ''
+            };
 
             const maxRetries = options.maxRetries ?? 3;
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -2546,20 +2554,31 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                         const requestError = new Error('OpenAI request failed');
                         requestError.httpStatus = resp.status;
                         requestError.reasonCode = 'openai_http_error';
+                        if (options.includeMetadata) {
+                            requestError.openAiMetadata = { ...baseRequestMetadata };
+                        }
                         throw requestError;
                     }
 
                     const data = await resp.json();
-                    const result = parseJsonText(parseOpenAIMessageContent(data));
+                    const responseMetadata = {
+                        ...baseRequestMetadata,
+                        returned_model: String(data?.model || ''),
+                        finish_reason: String(data?.choices?.[0]?.finish_reason || '')
+                    };
+                    let result;
+                    try {
+                        result = parseJsonText(parseOpenAIMessageContent(data));
+                    } catch (error) {
+                        if (options.includeMetadata && error && typeof error === 'object') {
+                            error.openAiMetadata = responseMetadata;
+                        }
+                        throw error;
+                    }
                     if (!options.includeMetadata) return result;
                     return {
                         result,
-                        requested_model: String(requestModel),
-                        returned_model: String(data?.model || ''),
-                        reasoning_effort: requestModel === HUNDO_SMART_MODEL
-                            ? String(payload.reasoning_effort || '')
-                            : '',
-                        finish_reason: String(data?.choices?.[0]?.finish_reason || '')
+                        ...responseMetadata
                     };
                 } catch (error) {
                     if (attempt === maxRetries) throw error;
@@ -2806,8 +2825,14 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             });
 
             const classificationMetadata = classification?.model_metadata || {};
-            const countMetadata = count?.model_metadata || {};
-            const cardMetadata = cardExtraction?.model_metadata || {};
+            const countFailureMetadata = countSettlement.status === 'rejected'
+                ? openAiRequestMetadata(countSettlement.reason?.openAiMetadata)
+                : {};
+            const cardFailureMetadata = cardSettlement.status === 'rejected'
+                ? openAiRequestMetadata(cardSettlement.reason?.openAiMetadata)
+                : {};
+            const countMetadata = count?.model_metadata || countFailureMetadata;
+            const cardMetadata = cardExtraction?.model_metadata || cardFailureMetadata;
 
             return {
                 imageIndex,

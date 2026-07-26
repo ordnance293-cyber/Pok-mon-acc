@@ -4602,6 +4602,8 @@
         let routedRequests = [];
         let requestStageEvents = [];
         let failedOperations = new Set();
+        let failedOperationHttpStatuses = new Map();
+        let malformedCardResponseIdentities = new Set();
         let failedOperationErrorNames = new Map();
         let failedClassificationIdentities = new Set();
         let trainerTeamResultByImage = new Map();
@@ -4672,6 +4674,29 @@
                 notifyDelayedCard?.();
               });
             }
+            const httpFailureStatus = failedOperationHttpStatuses.get(`cards:${identity}`);
+            if (httpFailureStatus) {
+              return {
+                ok: false,
+                status: httpFailureStatus,
+                headers: { get: () => null },
+                json: async () => ({
+                  error: 'CARD_HTTP_RESPONSE_SECRET test-key Authorization data:image/png;base64,PRIVATE'
+                })
+              };
+            }
+            if (malformedCardResponseIdentities.has(identity)) {
+              return {
+                ok: true,
+                json: async () => ({
+                  model: 'gpt-5-mini-parse-failure-fixture',
+                  choices: [{
+                    finish_reason: 'stop',
+                    message: { content: '{"detected_card_count":' }
+                  }]
+                })
+              };
+            }
             if (failedOperations.has(`cards:${identity}`)) {
               const error = new Error('CARD_FAIL_SECRET test-key data:image/png;base64,CARD_RESPONSE_BODY');
               error.name = failedOperationErrorNames.get(`cards:${identity}`) || 'Error';
@@ -4730,6 +4755,8 @@
           countResultByImage = new Map();
           cardResultByImage = new Map();
           failedOperations = new Set();
+          failedOperationHttpStatuses = new Map();
+          malformedCardResponseIdentities = new Set();
           failedOperationErrorNames = new Map();
           failedClassificationIdentities = new Set();
           trainerTeamResultByImage = new Map();
@@ -6109,6 +6136,103 @@
           });
         });
 
+        await asyncTest('keeps every unauthorized Smart Hundo HTTP attempt on gpt-5-mini without exposing response details', async () => {
+          resetScanScenario();
+          classificationByImage.CARD_HTTP_401 = classificationByImage.EXACT_A;
+          setScanFiles(['CARD_HTTP_401']);
+          countResultByImage.set('CARD_HTTP_401', validCount('(3)', '3'));
+          failedOperationHttpStatuses.set('cards:CARD_HTTP_401', 401);
+          document.getElementById('g_hundos').value = '未授權時保留手動清單';
+          document.getElementById('g_hundos').dispatchEvent(new Event('input'));
+          const errorLogStart = loggedValues.length;
+
+          await autoScan();
+
+          const cardRequests = routedRequests.filter(
+            request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2'
+          );
+          equal(cardRequests.length, 3, 'the existing request retry behavior remains capped at three attempts');
+          cardRequests.forEach(request => {
+            equal(request.payload.model, 'gpt-5-mini');
+            equal(request.payload.reasoning_effort, 'low');
+            equal(Object.hasOwn(request.payload, 'temperature'), false);
+            equal(request.detail, 'high');
+            equal(request.imageUrl, 'data:image/png;base64,ORIGINAL_CARD_HTTP_401');
+          });
+          equal(
+            cardRequests.some(request => request.payload.model === 'gpt-4.1-mini'),
+            false,
+            'an unauthorized card request never silently falls back to the ordinary model'
+          );
+          equal(document.getElementById('g_hundos').value, '未授權時保留手動清單');
+          equal(
+            document.getElementById('aiAutoStatus').textContent.includes(
+              HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_model_request_failed
+            ),
+            true
+          );
+          equal(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.includes(
+              'smart_hundo_model_request_failed'
+            ),
+            true
+          );
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots[0].models.smart_cards, {
+            requested_model: 'gpt-5-mini',
+            returned_model: '',
+            reasoning_effort: 'low'
+          });
+          const failureSummary = loggedValues
+            .slice(errorLogStart)
+            .flat(2)
+            .find(value => value && typeof value === 'object' && value.stage === 'hundo_cards');
+          deepEqual(failureSummary, {
+            stage: 'hundo_cards',
+            name: 'Error',
+            httpStatus: 401,
+            reasonCode: 'smart_hundo_model_request_failed'
+          });
+          const serializedFailureState = JSON.stringify({
+            diagnostics: window.lastSmartHundoDiagnostics,
+            logs: loggedValues.slice(errorLogStart)
+          });
+          [
+            'CARD_HTTP_RESPONSE_SECRET',
+            'test-key',
+            'Authorization',
+            'data:image/',
+            'PRIVATE'
+          ].forEach(secret => {
+            equal(serializedFailureState.includes(secret), false, `HTTP failure state excludes ${secret}`);
+          });
+        });
+
+        await asyncTest('retains the returned Smart Hundo model when a successful HTTP response cannot be parsed', async () => {
+          resetScanScenario();
+          classificationByImage.CARD_PARSE_FAIL = classificationByImage.EXACT_A;
+          setScanFiles(['CARD_PARSE_FAIL']);
+          countResultByImage.set('CARD_PARSE_FAIL', validCount('(3)', '3'));
+          malformedCardResponseIdentities.add('CARD_PARSE_FAIL');
+
+          await autoScan();
+
+          const cardRequests = routedRequests.filter(
+            request => request.schemaName === 'pokemon_go_hundo_smart_extractor_v2'
+          );
+          equal(cardRequests.length, 3, 'parse failures retain the existing three-attempt behavior');
+          deepEqual(window.lastSmartHundoDiagnostics.screenshots[0].models.smart_cards, {
+            requested_model: 'gpt-5-mini',
+            returned_model: 'gpt-5-mini-parse-failure-fixture',
+            reasoning_effort: 'low'
+          });
+          equal(
+            window.lastSmartHundoDiagnostics.manual_review_reasons.includes(
+              'smart_hundo_model_request_failed'
+            ),
+            true
+          );
+        });
+
         await asyncTest('preserves a manual hundo list when validated nonzero count contradicts a complete empty extraction', async () => {
           resetScanScenario();
           setScanFiles(['VALID_EMPTY']);
@@ -6308,8 +6432,8 @@
         safeErrorSummaries.forEach(summary => {
           deepEqual(Object.keys(summary), ['stage', 'name', 'httpStatus', 'reasonCode']);
           equal(['hundo_count', 'hundo_cards'].includes(summary.stage), true);
-          equal(['Error'].includes(summary.name), true);
-          equal([502, 503].includes(summary.httpStatus), true);
+          equal(['Error', 'SyntaxError'].includes(summary.name), true);
+          equal([0, 401, 502, 503].includes(summary.httpStatus), true);
           equal(
             summary.stage === 'hundo_cards'
               ? summary.reasonCode === 'smart_hundo_model_request_failed'
