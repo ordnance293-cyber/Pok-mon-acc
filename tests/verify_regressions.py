@@ -40,8 +40,8 @@ HUNDO_COUNT_PROMPT_HASH = "d93623450e28e7da3672ed22cd9b5c4b7a2f6d2cdb5609e58f463
 HUNDO_COUNT_PROMPT_LENGTH = 856
 TRAINER_TEAM_HELPERS_HASH = "bb34294f7f5359292add2cb930f73250b5eb91e5037f90e9fefd63e3c193aa18"
 TRAINER_TEAM_HELPERS_LENGTH = 12158
-SMART_HUNDO_SCHEMA_HASH = "35636fba67d8b7e27f26c6cec802ff9fa1645eed647a8487dbba8eee2954a203"
-SMART_HUNDO_SCHEMA_LENGTH = 12032
+SMART_HUNDO_SCHEMA_HASH = "986099dc9a5e099c6ba3a1169ee9c0f1577a3a728ad52703b1a225da33828c94"
+SMART_HUNDO_SCHEMA_LENGTH = 13797
 
 
 def normalized_source(path: Path) -> str:
@@ -231,6 +231,22 @@ def assert_hundo_form_schema(smart_schema: str) -> None:
         require_fragment(smart_schema, f"{field}:", "smart hundo form schema")
 
 
+def assert_hundo_bbox_schema(smart_schema: str) -> None:
+    for field in ("card_bbox", "pokemon_bbox"):
+        require_fragment(smart_schema, f"{field}: {{", "smart hundo bbox schema")
+    for fragment in (
+        "x_min: { type: 'integer', minimum: 0, maximum: 1000 }",
+        "y_min: { type: 'integer', minimum: 0, maximum: 1000 }",
+        "x_max: { type: 'integer', minimum: 0, maximum: 1000 }",
+        "y_max: { type: 'integer', minimum: 0, maximum: 1000 }",
+        "bbox_confidence: { type: 'number', minimum: 0, maximum: 1 }",
+        "bbox_visibility: { type: 'string', enum: ['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain'] }",
+    ):
+        require_fragment(smart_schema, fragment, "smart hundo bbox schema")
+    for field in ("card_bbox", "pokemon_bbox", "bbox_confidence", "bbox_visibility"):
+        require_fragment(smart_schema, f"'{field}'", "smart hundo bbox required fields")
+
+
 def assert_script_before_module(source: str, script_name: str) -> None:
     script_marker = f'<script src="{script_name}"></script>'
     script_index = source.find(script_marker)
@@ -392,6 +408,10 @@ def main() -> int:
     ))
 
     checks.extend([
+        ("smart hundo form verifier loads before the production module", lambda: assert_script_before_module(
+            source,
+            "smart-hundo-form-verifier.js",
+        )),
         ("trainer-team helper loads before the production module", lambda: assert_script_before_module(
             source,
             "trainer-team-helpers.js",
@@ -607,6 +627,7 @@ def main() -> int:
             require_fragment(smart_schema, "rocket_state:", "V2 rocket dimension"),
             require_fragment(smart_schema, "background_type:", "V2 background dimension"),
             assert_hundo_form_schema(smart_schema),
+            assert_hundo_bbox_schema(smart_schema),
             assert_forbidden_identifiers(
                 smart_schema,
                 ("hundo_leg", "shadow_state", "purified_state", "global"),

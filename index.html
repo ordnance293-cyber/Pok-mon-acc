@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script src="smart-hundo-helpers.js"></script>
+    <script src="smart-hundo-form-verifier.js"></script>
     <script src="trainer-team-helpers.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -1001,6 +1002,28 @@
                                     },
                                     required: ['region_visibility', 'recognition_basis', 'visual_signature', 'key_features_visible', 'label_relationship']
                                 },
+                                card_bbox: {
+                                    type: 'object', additionalProperties: false,
+                                    properties: {
+                                        x_min: { type: 'integer', minimum: 0, maximum: 1000 },
+                                        y_min: { type: 'integer', minimum: 0, maximum: 1000 },
+                                        x_max: { type: 'integer', minimum: 0, maximum: 1000 },
+                                        y_max: { type: 'integer', minimum: 0, maximum: 1000 }
+                                    },
+                                    required: ['x_min', 'y_min', 'x_max', 'y_max']
+                                },
+                                pokemon_bbox: {
+                                    type: 'object', additionalProperties: false,
+                                    properties: {
+                                        x_min: { type: 'integer', minimum: 0, maximum: 1000 },
+                                        y_min: { type: 'integer', minimum: 0, maximum: 1000 },
+                                        x_max: { type: 'integer', minimum: 0, maximum: 1000 },
+                                        y_max: { type: 'integer', minimum: 0, maximum: 1000 }
+                                    },
+                                    required: ['x_min', 'y_min', 'x_max', 'y_max']
+                                },
+                                bbox_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                bbox_visibility: { type: 'string', enum: ['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain'] },
                                 cp: { type: 'string' },
                                 shiny_state: { type: 'string', enum: ['yes', 'no', 'uncertain'] },
                                 shiny_confidence: { type: 'number', minimum: 0, maximum: 1 },
@@ -1068,7 +1091,8 @@
                             },
                             required: [
                                 'order', 'row', 'column', 'visible_label', 'official_name', 'recognition_status', 'species_confidence',
-                                'base_species', 'form_id', 'form_confidence', 'form_evidence', 'cp',
+                                'base_species', 'form_id', 'form_confidence', 'form_evidence',
+                                'card_bbox', 'pokemon_bbox', 'bbox_confidence', 'bbox_visibility', 'cp',
                                 'shiny_state', 'shiny_confidence', 'shiny_evidence',
                                 'lucky_state', 'lucky_confidence', 'lucky_evidence',
                                 'favorite_state', 'favorite_confidence', 'favorite_evidence',
@@ -1894,6 +1918,15 @@ ${outputTemplate}
 【A. 完整卡片列舉與位置】
 掃描全圖由上到下、每列由左到右；超過 10 張仍必須繼續掃描到底部邊緣。完整可見與部分可見（包括任一邊緣被裁切）的卡片，每一張都各自輸出。detected_card_count 必須等於所有完整與部分可見卡片的總數；只有確實掃描完整張圖片才可填 scan_complete=true，只有確實檢查圖片最底部邊緣才可填 bottom_edge_checked=true。
 order、row、column 都從 1 開始並且每張卡片的座標組合必須唯一。不得把相鄰卡片合併，不得把相鄰卡片的符號或狀態轉移給本卡，也不得發明隱藏、畫面外或不存在的卡片。相同物種、CP 或標籤可能合法重複；合法重複的寶可夢仍是不同卡片，必須依各自位置分別輸出。
+
+【卡片與寶可夢本體座標】
+每張卡片都必須回傳 card_bbox 與 pokemon_bbox。
+- 座標以完整原始圖片為準，使用 0–1000 的正規化整數；左上角為 (0,0)，右下角為 (1000,1000)。
+- card_bbox 必須包含同一張卡片的可見內容：CP、寶可夢本體、卡片圖示、名稱與 HP 線；但不得跨越相鄰卡片或包含相鄰卡片內容。
+- pokemon_bbox 只包含同一張卡片的寶可夢本體。不得包含 CP、名稱或暱稱、151515、96%、地名、自訂文字、星星、背卡與狀態圖示，以及相鄰的寶可夢。
+- 即使卡片在圖片頂端或底端被裁切，仍須標記實際可見區域；不得補畫或猜測不可見區域。
+- bbox_visibility 定義為：clear：卡片、本體與可判定型態的主要特徵均清楚可見；partially_visible：本體或主要特徵部分可見；cropped：卡片或本體被原圖邊界裁切；not_visible：本體完全不可見；uncertain：無法可靠判定本體或主要特徵的可見性。
+- bbox_confidence 只描述座標信心，不是型態信心；不得以卡片文字擴大 pokemon_bbox。
 
 【B. 物種】
 official_name 必須是可靠辨識後的官方繁體中文名稱；visible_label 只能作為次要證據，可能是暱稱、IV、151515、100、百分比、縮寫、招式、使用者符號或其他前後綴，絕對不得直接複製為 official_name。視覺與標籤衝突或證據不可靠時，official_name 留空、recognition_status 填 uncertain，不得猜測或發明；部分可見卡片仍必須留在 cards。

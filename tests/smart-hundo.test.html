@@ -5,6 +5,7 @@
   <title>Smart hundo helper tests</title>
   <script src="../trainer-team-helpers.js"></script>
   <script src="../smart-hundo-helpers.js"></script>
+  <script src="../smart-hundo-form-verifier.js"></script>
 </head>
 <body data-test-status="running">
   <pre id="results"></pre>
@@ -325,6 +326,10 @@
               key_features_visible: true,
               label_relationship: 'not_applicable'
             },
+            card_bbox: { x_min: 20, y_min: 40, x_max: 980, y_max: 960 },
+            pokemon_bbox: { x_min: 200, y_min: 180, x_max: 800, y_max: 820 },
+            bbox_confidence: 0.95,
+            bbox_visibility: 'clear',
             ...overrides
           });
           normalized.cp = String(normalized.cp ?? '');
@@ -340,15 +345,45 @@
           column: (index % 3) + 1,
           ...overrides
         }));
-        test('keeps API-shaped model fixtures on the current four-field form contract', () => {
+        test('keeps API-shaped model fixtures on the complete form and bbox contract', () => {
           const fixture = modelCard();
-          ['base_species', 'form_id', 'form_confidence', 'form_evidence'].forEach(field => {
+          [
+            'base_species', 'form_id', 'form_confidence', 'form_evidence',
+            'card_bbox', 'pokemon_bbox', 'bbox_confidence', 'bbox_visibility'
+          ].forEach(field => {
             equal(Object.hasOwn(fixture, field), true, field);
           });
           equal(typeof fixture.cp, 'string', 'default cp is schema-valid');
           equal(typeof modelCard({ cp: 42 }).cp, 'string', 'numeric override cp is schema-valid');
           equal(Object.hasOwn(fixture, 'purified_state'), false);
           equal(Object.hasOwn(fixture, 'shadow_state'), false);
+        });
+
+        test('preserves only a valid normalized bbox contract outside raw payloads', () => {
+          const result = normalizeSmartHundoCard(modelCard(), normalizeName, { screenshotIndex: 0 });
+          deepEqual(result.card_bbox, { x_min: 20, y_min: 40, x_max: 980, y_max: 960 });
+          deepEqual(result.pokemon_bbox, { x_min: 200, y_min: 180, x_max: 800, y_max: 820 });
+          equal(result.bbox_confidence, 0.95);
+          equal(result.bbox_visibility, 'clear');
+          equal(result.bbox_valid, true);
+          ['card_bbox', 'pokemon_bbox', 'bbox_confidence', 'bbox_visibility', 'image', 'dataUrl'].forEach(field => {
+            equal(Object.hasOwn(result.raw, field), false, `raw excludes ${field}`);
+          });
+        });
+
+        test('fails closed for malformed bbox contracts without retaining image-like values', () => {
+          const result = normalizeSmartHundoCard(modelCard({
+            card_bbox: { x_min: 0, y_min: 0, x_max: 1000, y_max: 1000 },
+            pokemon_bbox: { x_min: 250, y_min: 250, x_max: 750, y_max: 750, image: 'data:image/png;base64,private' },
+            bbox_confidence: '0.95',
+            bbox_visibility: 'clear'
+          }), normalizeName, { screenshotIndex: 0 });
+          equal(result.card_bbox, null);
+          equal(result.pokemon_bbox, null);
+          equal(result.bbox_confidence, 0);
+          equal(result.bbox_visibility, 'uncertain');
+          equal(result.bbox_valid, false);
+          equal(JSON.stringify(result.raw).includes('data:image'), false);
         });
 
         test('maps all 23 approved form IDs to exact canonical names', () => {
@@ -3362,6 +3397,29 @@
           equal(smartCardSchema.properties[field].minimum, 1, `${field} is 1-based`);
         });
         deepEqual(smartCardSchema.properties.cp, { type: 'string' });
+        const expectedBboxSchema = {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            x_min: { type: 'integer', minimum: 0, maximum: 1000 },
+            y_min: { type: 'integer', minimum: 0, maximum: 1000 },
+            x_max: { type: 'integer', minimum: 0, maximum: 1000 },
+            y_max: { type: 'integer', minimum: 0, maximum: 1000 }
+          },
+          required: ['x_min', 'y_min', 'x_max', 'y_max']
+        };
+        ['card_bbox', 'pokemon_bbox'].forEach(field => {
+          deepEqual(smartCardSchema.properties[field], expectedBboxSchema, `${field} has the exact strict 0-1000 integer schema`);
+          equal(smartCardSchema.required.includes(field), true, `${field} is required`);
+        });
+        deepEqual(smartCardSchema.properties.bbox_confidence, { type: 'number', minimum: 0, maximum: 1 });
+        deepEqual(smartCardSchema.properties.bbox_visibility, {
+          type: 'string',
+          enum: ['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain']
+        });
+        ['bbox_confidence', 'bbox_visibility'].forEach(field => {
+          equal(smartCardSchema.required.includes(field), true, `${field} is required`);
+        });
         ['hundo_leg', 'shadow_state', 'purified_state'].forEach(field => {
           equal(Object.hasOwn(smartCardSchema.properties, field), false, field);
         });
@@ -3470,6 +3528,18 @@
         test('stages the complete V2 enumeration, species, and five-evidence prompt', () => {
           const smartPrompt = buildSmartHundoPrompt();
           [
+            '【卡片與寶可夢本體座標】',
+            '每張卡片都必須回傳 card_bbox 與 pokemon_bbox',
+            '完整原始圖片', '0–1000', '左上角為 (0,0)', '右下角為 (1000,1000)',
+            'CP、寶可夢本體、卡片圖示、名稱與 HP 線', '不得跨越相鄰卡片或包含相鄰卡片內容',
+            '只包含同一張卡片的寶可夢本體',
+            'CP、名稱或暱稱、151515、96%、地名、自訂文字、星星、背卡與狀態圖示',
+            '相鄰的寶可夢', '圖片頂端或底端被裁切', '實際可見區域',
+            'clear：卡片、本體與可判定型態的主要特徵均清楚可見',
+            'partially_visible：本體或主要特徵部分可見',
+            'cropped：卡片或本體被原圖邊界裁切', 'not_visible：本體完全不可見',
+            'uncertain：無法可靠判定本體或主要特徵的可見性',
+            '座標信心', '不是型態信心', '不得以卡片文字擴大 pokemon_bbox',
             '全圖由上到下、每列由左到右', '超過 10 張仍必須繼續掃描到底部邊緣',
             '完整可見與部分可見', '每一張都各自輸出', '不得把相鄰卡片的符號或狀態轉移',
             '合法重複的寶可夢仍是不同卡片', '不得發明',

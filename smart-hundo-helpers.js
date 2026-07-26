@@ -482,6 +482,15 @@
     };
 
     const normalizeSmartHundoCard = (card = {}, normalizeOfficialName, options = {}) => {
+        const bboxContract = global.SmartHundoFormVerifier
+            ? global.SmartHundoFormVerifier.normalizeHundoBboxContract(card)
+            : {
+                card_bbox: null,
+                pokemon_bbox: null,
+                bbox_confidence: 0,
+                bbox_visibility: 'uncertain',
+                bbox_valid: false
+            };
         const screenshotIndex = normalizeCoordinate(options?.screenshotIndex);
         const formContractPresent = ['base_species', 'form_id', 'form_confidence', 'form_evidence']
             .some(field => Object.hasOwn(card || {}, field));
@@ -535,6 +544,11 @@
             form_id: formId,
             form_confidence: clampStrictConfidence(rawForm.form_confidence),
             form_evidence: rawForm.form_evidence,
+            card_bbox: bboxContract.card_bbox,
+            pokemon_bbox: bboxContract.pokemon_bbox,
+            bbox_confidence: bboxContract.bbox_confidence,
+            bbox_visibility: bboxContract.bbox_visibility,
+            bbox_valid: bboxContract.bbox_valid,
             cp: stringValue(card?.cp),
             shiny_state: normalizeIndependentState(rawStates.shiny),
             shiny_confidence: clampConfidence(rawConfidences.shiny),
