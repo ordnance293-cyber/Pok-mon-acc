@@ -20,6 +20,7 @@ SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
 TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
 MANUAL_V2_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
 MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
+FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-crop-form-verifier-v2.md"
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
 EXTRACTION_PROMPT_HASH = "1b061471ee97eeb1f6e0e9061acc8d6150b386fe6b46e4350b23b658a708b669"
@@ -199,6 +200,61 @@ def assert_manual_v2_acceptance_doc() -> None:
         "固拉多,色違固拉多,特別背卡固拉多",
     ):
         require_fragment(document, fragment, "manual acceptance document")
+
+
+def assert_form_verifier_manual_acceptance_doc() -> None:
+    if not FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC.is_file():
+        raise AssertionError(f"form verifier manual acceptance document does not exist: {FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC}")
+    document = normalized_source(FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC)
+    for fragment in (
+        "CP is an anonymized card-position locator only and must not be used as a recognition feature.",
+        "CP 4634", "CP 2914", "CP 2624", "necrozma_dawn_wings", "necrozma_dusk_mane", "necrozma_base",
+        "CP 2882", "CP 2311", "CP 2823", "dialga_origin", "dialga_standard",
+        "CP 2223", "CP 2225", "CP 2255", "palkia_origin", "palkia_standard",
+        "upright crystal vs lion vs wide moon wings",
+        "stocky vs elongated equine",
+        "upright biped with arms vs centaur quadruped",
+        "full commit SHA", "anonymized image ID", "CP locator", "base species", "primary form",
+        "primary confidence", "bbox", "bbox confidence", "tile ID", "verified form",
+        "verification confidence", "body plan", "limb layout", "fusion host", "decisive feature",
+        "final effective form", "canonical name", "pass/fail", "failure summary", "NOT RUN",
+    ):
+        require_fragment(document, fragment, "form verifier manual acceptance document")
+    if "data:image/" in document or "base64," in document:
+        raise AssertionError("form verifier manual acceptance document must not contain image data")
+
+
+def assert_task7_safe_diagnostics_and_status(source: str, helpers_source: str) -> None:
+    diagnostics = source_span(
+        helpers_source,
+        "    const diagnosticCard =",
+        "\n\n    const validateSmartHundoStructure =",
+        "smart diagnostics shaper and card allowlist",
+        include_end=False,
+    )
+    for fragment in (
+        "primary_form_id", "primary_effective_form_id", "primary_form_confidence",
+        "card_bbox", "pokemon_bbox", "bbox_confidence", "bbox_visibility", "crop_source_size",
+        "contact_sheet_id", "tile_id", "verified_form_id", "verification_confidence",
+        "verification_evidence", "target_candidate_count", "target_verified_count",
+        "target_review_card_count", "contact_sheet_count", "verifier_request_count",
+        "verifier_structural_retry_count", "form_verify_model",
+    ):
+        require_fragment(diagnostics, fragment, "Task 7 safe diagnostics")
+    assert_forbidden_identifiers(diagnostics, ("apiKey", "dataUrl", "request", "response", "payload", "headers", "File"), "Task 7 diagnostics")
+    for fragment in (
+        "form_crop_missing", "form_crop_not_clear", "form_crop_too_small",
+        "form_verifier_uncertain", "form_verifier_low_confidence", "form_verifier_species_mismatch",
+        "form_verifier_evidence_mismatch", "form_verifier_invalid_result",
+        "form_verifier_structural_incomplete", "form_verification_request_failed",
+    ):
+        require_fragment(helpers_source, fragment, "Task 7 review-reason contract")
+    for fragment in (
+        "百神掃描完成：辨識${recognizedCount}張卡片；型態複核${targetVerifiedCount}張",
+        "百神掃描完成：辨識${recognizedCount}張卡片；${targetReviewCardCount}張型態需人工確認",
+        "百神清單已完成部分辨識；特殊型態複核失敗，請人工確認",
+    ):
+        require_fragment(source, fragment, "Task 7 status contract")
 
 
 def assert_hundo_form_schema(smart_schema: str) -> None:
@@ -691,6 +747,8 @@ def main() -> int:
         ]),
         ("manual V2 acceptance document preserves pipeline cases", assert_manual_v2_acceptance_doc),
         ("manual V1 form acceptance document has pending real-image cases", assert_manual_v1_form_acceptance_doc),
+        ("Task 7 safe diagnostics and status remain allowlisted", lambda: assert_task7_safe_diagnostics_and_status(source, helpers_source)),
+        ("form verifier manual acceptance document is private and pending", assert_form_verifier_manual_acceptance_doc),
     ])
 
     failures: list[str] = []

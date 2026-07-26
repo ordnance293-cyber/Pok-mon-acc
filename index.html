@@ -3178,12 +3178,18 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
             countMerge,
             conversion,
             detectedCardCount,
-            reviewSummary
+            reviewSummary,
+            formVerificationMetrics = {}
         }) => {
             const hasCount = String(countMerge?.hundo_leg || '') !== '';
             const recognizedCount = Number(conversion?.recognized_count || 0);
             const reasonCounts = reviewSummary?.review_reason_counts || {};
             const reasonMessages = globalThis.SmartHundoHelpers.HUNDO_REVIEW_REASON_MESSAGES;
+            const targetCandidateCount = Number(formVerificationMetrics?.target_candidate_count || 0);
+            const targetVerifiedCount = Number(formVerificationMetrics?.target_verified_count || 0);
+            const targetReviewCardCount = Number(formVerificationMetrics?.target_review_card_count || 0);
+            const hasFormVerificationRequestFailure = Number(reasonCounts.form_verification_request_failed || 0) > 0;
+            const hasFormVerificationActivity = targetCandidateCount > 0 || targetVerifiedCount > 0 || targetReviewCardCount > 0 || hasFormVerificationRequestFailure;
             const cardReasonCodes = [
                 'species_uncertain',
                 'shiny_uncertain',
@@ -3226,25 +3232,32 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                 }
             });
 
-            if (!hasCount && recognizedCount > 0) {
-                const base = `百神清單辨識完成：辨識${recognizedCount}張卡片`;
-                const countNotice = reasonMessages.hundo_count_uncertain;
-                return `${base}；${[countNotice, ...detailMessages].filter((value, index, values) => values.indexOf(value) === index).join('；')}`;
-            }
-            if (hasCount && recognizedCount > 0) {
-                const needsDetectedCount = detailMessages.some(message => /^\d+張/.test(message));
-                const base = needsDetectedCount
-                    ? `百神掃描完成：總數${countMerge.hundo_leg}，偵測${detectedCardCount}張卡片，辨識${recognizedCount}張`
-                    : `百神掃描完成：總數${countMerge.hundo_leg}，辨識${recognizedCount}張卡片`;
-                return detailMessages.length > 0 ? `${base}；${detailMessages.join('；')}` : base;
-            }
-            if (hasCount) {
-                const base = `百神總數辨識完成：總數${countMerge.hundo_leg}`;
-                return detailMessages.length > 0 ? `${base}；${detailMessages.join('；')}` : base;
-            }
-            return detailMessages.length > 0
-                ? `百神掃描未完成：${detailMessages.join('；')}`
-                : `百神掃描未完成：${reasonMessages.hundo_count_uncertain}`;
+            const statusBase = (() => {
+                if (!hasCount && recognizedCount > 0) {
+                    const base = `百神清單辨識完成：辨識${recognizedCount}張卡片`;
+                    const countNotice = reasonMessages.hundo_count_uncertain;
+                    return `${base}；${[countNotice, ...detailMessages].filter((value, index, values) => values.indexOf(value) === index).join('；')}`;
+                }
+                if (hasCount && recognizedCount > 0) {
+                    const needsDetectedCount = detailMessages.some(message => /^\d+張/.test(message));
+                    const base = needsDetectedCount
+                        ? `百神掃描完成：總數${countMerge.hundo_leg}，偵測${detectedCardCount}張卡片，辨識${recognizedCount}張`
+                        : `百神掃描完成：總數${countMerge.hundo_leg}，辨識${recognizedCount}張卡片`;
+                    return detailMessages.length > 0 ? `${base}；${detailMessages.join('；')}` : base;
+                }
+                if (hasCount) {
+                    const base = `百神總數辨識完成：總數${countMerge.hundo_leg}`;
+                    return detailMessages.length > 0 ? `${base}；${detailMessages.join('；')}` : base;
+                }
+                return detailMessages.length > 0
+                    ? `百神掃描未完成：${detailMessages.join('；')}`
+                    : `百神掃描未完成：${reasonMessages.hundo_count_uncertain}`;
+            })();
+            if (!hasFormVerificationActivity) return statusBase;
+            if (hasFormVerificationRequestFailure) return '百神清單已完成部分辨識；特殊型態複核失敗，請人工確認';
+            if (targetReviewCardCount > 0) return `百神掃描完成：辨識${recognizedCount}張卡片；${targetReviewCardCount}張型態需人工確認`;
+            if (targetVerifiedCount > 0) return `百神掃描完成：辨識${recognizedCount}張卡片；型態複核${targetVerifiedCount}張`;
+            return statusBase;
         };
 
         const requestSingleImageClassification = async (apiKey, dataUrl, statusUpdater) => {
@@ -3750,6 +3763,24 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                         coverageResult,
                         classifiedJobs.map(job => job.classification)
                     );
+                    const formVerificationMetrics = smartResults.reduce((metrics, result) => {
+                        [
+                            'target_candidate_count', 'target_verified_count', 'target_review_card_count',
+                            'contact_sheet_count', 'verifier_request_count', 'verifier_structural_retry_count'
+                        ].forEach(field => {
+                            const value = Number(result?.[field]);
+                            metrics[field] += Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
+                        });
+                        return metrics;
+                    }, {
+                        target_candidate_count: 0,
+                        target_verified_count: 0,
+                        target_review_card_count: 0,
+                        contact_sheet_count: 0,
+                        verifier_request_count: 0,
+                        verifier_structural_retry_count: 0,
+                        form_verify_model: HUNDO_FORM_VERIFY_MODEL
+                    });
                     const diagnostics = helpers.shapeSmartHundoDiagnostics({
                         scan_session_id: String(smartSessionId),
                         screenshots: smartResults.map(result => ({
@@ -3767,7 +3798,14 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                             finish_reason: result.finish_reason,
                             structural_retry_used: result.structural_retry_used,
                             structural_retry_reason: result.structural_retry_reason,
-                            cards: result.card_result.cards
+                            cards: result.card_result.cards,
+                            target_candidate_count: result.target_candidate_count,
+                            target_verified_count: result.target_verified_count,
+                            target_review_card_count: result.target_review_card_count,
+                            contact_sheet_count: result.contact_sheet_count,
+                            verifier_request_count: result.verifier_request_count,
+                            verifier_structural_retry_count: result.verifier_structural_retry_count,
+                            form_verify_model: result.form_verify_model
                         })),
                         count_candidates: countMerge.candidates,
                         count_conflict: countMerge.conflict,
@@ -3777,7 +3815,8 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                                 { length: Number(count) || 0 },
                                 () => reason
                             )),
-                        pokemon_list: conversion.pokemon_list
+                        pokemon_list: conversion.pokemon_list,
+                        ...formVerificationMetrics
                     });
                     if (!isCurrentSmartRun()) return;
                     publishSmartHundoDiagnostics(smartSessionId, diagnostics);
@@ -3797,7 +3836,8 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                         countMerge,
                         conversion,
                         detectedCardCount,
-                        reviewSummary
+                        reviewSummary,
+                        formVerificationMetrics
                     }));
                 }
 

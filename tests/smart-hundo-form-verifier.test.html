@@ -634,6 +634,48 @@
         equal(helpers.buildHundoDisplayName(shown('palkia_origin', { effective_rocket_state: 'purified' })), names.palkia_origin);
       });
 
+      test('shapes target verifier diagnostics through a strict privacy allowlist', () => {
+        const helpers = globalThis.SmartHundoHelpers;
+        const card = targetCard({
+          primary_form_id: 'dialga_standard',
+          primary_effective_form_id: 'dialga_standard',
+          primary_form_confidence: 1.7,
+          verification_status: 'verified',
+          verified_form_id: 'dialga_origin',
+          verification_confidence: -4,
+          verification_evidence: {
+            crop_visibility: 'clear', body_plan: 'dialga_elongated_equine_quadruped',
+            limb_layout: 'four_long_legs', fusion_host: 'not_applicable',
+            decisive_feature: 'dialga_origin_elongated_neck_chest', key_features_visible: true,
+            apiKey: 'PRIVATE_KEY'
+          },
+          card_bbox: { x_min: 1, y_min: 2, x_max: 3, y_max: 4 },
+          pokemon_bbox: { x_min: 5, y_min: 6, x_max: 7, y_max: 8 },
+          bbox_confidence: 1.2,
+          bbox_visibility: 'clear', crop_source_size: { width: 1600, height: 900 },
+          contact_sheet_id: 'sheet-1', tile_id: 'T1',
+          raw: { request: { Authorization: 'Bearer PRIVATE_KEY', payload: { image: 'data:image/png;base64,ORIGINAL_PRIVATE' } } },
+          originalDataUrl: 'data:image/png;base64,ORIGINAL_PRIVATE',
+          cropDataUrl: 'data:image/png;base64,CROP_PRIVATE',
+          contactSheetDataUrl: 'data:image/png;base64,SHEET_PRIVATE',
+          response: { choices: ['PRIVATE_RESPONSE'] }, File: { private: true }
+        });
+        const diagnostics = helpers.shapeSmartHundoDiagnostics({
+          screenshots: [{ index: 0, cards: [card], target_candidate_count: 1, target_verified_count: 1, target_review_card_count: 0, contact_sheet_count: 1, verifier_request_count: 1, verifier_structural_retry_count: 0, form_verify_model: 'gpt-4.1-mini' }],
+          target_candidate_count: 1, target_verified_count: 1, target_review_card_count: 0,
+          contact_sheet_count: 1, verifier_request_count: 1, verifier_structural_retry_count: 0,
+          form_verify_model: 'gpt-4.1-mini'
+        });
+        const safeCard = diagnostics.screenshots[0].cards[0];
+        deepEqual(Object.keys(safeCard).filter(key => ['primary_form_id', 'primary_effective_form_id', 'primary_form_confidence', 'card_bbox', 'pokemon_bbox', 'bbox_confidence', 'bbox_visibility', 'crop_source_size', 'contact_sheet_id', 'tile_id', 'verified_form_id', 'verification_confidence', 'verification_evidence'].includes(key)).sort(), ['bbox_confidence', 'bbox_visibility', 'card_bbox', 'contact_sheet_id', 'crop_source_size', 'pokemon_bbox', 'primary_effective_form_id', 'primary_form_confidence', 'primary_form_id', 'tile_id', 'verification_confidence', 'verification_evidence', 'verified_form_id']);
+        deepEqual(safeCard.card_bbox, { x_min: 1, y_min: 2, x_max: 3, y_max: 4 });
+        deepEqual(safeCard.crop_source_size, { width: 1600, height: 900 });
+        equal(safeCard.primary_form_confidence, 1);
+        equal(safeCard.verification_confidence, 0);
+        const serialized = JSON.stringify(diagnostics);
+        ['PRIVATE_KEY', 'Authorization', 'Bearer', 'data:image/', 'ORIGINAL_PRIVATE', 'CROP_PRIVATE', 'SHEET_PRIVATE', 'PRIVATE_RESPONSE'].forEach(value => equal(serialized.includes(value), false, `diagnostics omit ${value}`));
+      });
+
       executionStatus = 'pass';
       render();
     })();

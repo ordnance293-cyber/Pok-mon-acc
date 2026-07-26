@@ -16,6 +16,12 @@
       const results = [];
       const loggedValues = [];
       const unexpectedDiagnostics = [];
+      const nativeBrowserFetch = globalThis.fetch;
+      let nativeFetchAttemptCount = 0;
+      globalThis.fetch = (...args) => {
+        nativeFetchAttemptCount += 1;
+        return nativeBrowserFetch(...args);
+      };
       const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
       let executionStatus = 'running';
       const serializeHarnessValue = (value, seen = new WeakSet()) => {
@@ -1682,8 +1688,24 @@
             form_confidence_low: '型態辨識信心不足',
             form_label_only: '型態只有文字證據，需人工確認',
             form_signature_mismatch: '型態與視覺證據不一致',
-            unsupported_form: '此型態尚未納入支援範圍'
+            unsupported_form: '此型態尚未納入支援範圍',
+            form_crop_missing: '找不到可用的寶可夢本體裁切區域',
+            form_crop_not_clear: '寶可夢本體裁切不完整，型態需人工確認',
+            form_crop_too_small: '寶可夢本體像素太小，型態需人工確認',
+            form_verifier_uncertain: '放大型態複核仍無法確定',
+            form_verifier_low_confidence: '放大型態複核信心不足',
+            form_verifier_species_mismatch: '型態複核物種與原卡片不一致',
+            form_verifier_evidence_mismatch: '型態複核結果與身體結構證據不一致',
+            form_verifier_invalid_result: '型態複核回傳格式或卡片對應錯誤',
+            form_verifier_structural_incomplete: '型態複核未回傳全部候選卡片',
+            form_verification_request_failed: '型態複核請求失敗'
           });
+          const verifierReasonMessages = globalThis.SmartHundoFormVerifier.HUNDO_FORM_VERIFIER_REVIEW_REASON_MESSAGES;
+          deepEqual(
+            verifierReasonMessages,
+            Object.fromEntries(Object.keys(verifierReasonMessages).map(reason => [reason, HUNDO_REVIEW_REASON_MESSAGES[reason]])),
+            'form verifier reason labels remain byte-for-byte aligned with the published review summary'
+          );
         });
 
         test('keeps hidden states internal and groups by display name', () => {
@@ -2464,7 +2486,14 @@
             'count_conflict',
             'overlap_decisions',
             'manual_review_reasons',
-            'pokemon_list'
+            'pokemon_list',
+            'target_candidate_count',
+            'target_verified_count',
+            'target_review_card_count',
+            'contact_sheet_count',
+            'verifier_request_count',
+            'verifier_structural_retry_count',
+            'form_verify_model'
           ]);
           deepEqual(diagnostics.screenshots[0].classification, {
             image_type: 'HUNDO_LEGENDARY_SCREEN',
@@ -2565,7 +2594,7 @@
           const serialized = JSON.stringify(diagnostics);
           [
             'Authorization', 'Bearer', 'data:image/', 'raw-form-secret', 'RAW_FORM_BODY',
-            'request', 'body'
+            '"body":"data:image/'
           ].forEach(sentinel => equal(serialized.includes(sentinel), false, `form diagnostics exclude ${sentinel}`));
         });
 
@@ -3413,6 +3442,86 @@
           });
           equal(status.includes(HUNDO_REVIEW_REASON_MESSAGES.form_uncertain), true);
           equal(status.includes(HUNDO_REVIEW_REASON_MESSAGES.species_uncertain), false);
+        });
+
+        test('publishes only allowlisted target form diagnostics and aggregates verifier metrics', () => {
+          const privateCard = validatedCard({
+            card_id: '0:9:1:1', base_species: '帝牙盧卡',
+            primary_form_id: 'dialga_standard', primary_effective_form_id: 'dialga_standard', primary_form_confidence: 0.91,
+            card_bbox: { x_min: 10, y_min: 20, x_max: 30, y_max: 40 },
+            pokemon_bbox: { x_min: 11, y_min: 21, x_max: 29, y_max: 39 }, bbox_confidence: 0.94, bbox_visibility: 'clear',
+            crop_source_size: { width: 640, height: 480 }, contact_sheet_id: '0:form:1', tile_id: 'T1',
+            verified_form_id: 'dialga_origin', verification_confidence: 0.97,
+            verification_evidence: { crop_visibility: 'clear', body_plan: 'dialga_elongated_equine_quadruped', limb_layout: 'four_long_legs', fusion_host: 'not_applicable', decisive_feature: 'dialga_origin_elongated_neck_chest', key_features_visible: true },
+            raw: { response: { Authorization: 'Bearer PRIVATE_KEY', payload: { original: 'data:image/png;base64,PRIVATE_ORIGINAL' } } },
+            request: { crop: 'data:image/png;base64,PRIVATE_CROP' }, response: { contact: 'data:image/png;base64,PRIVATE_SHEET' },
+            apiKey: 'PRIVATE_KEY', File: { private: true }
+          });
+          const diagnostics = shapeSmartHundoDiagnostics({
+            screenshots: [{ index: 0, cards: [privateCard], target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1, contact_sheet_count: 1, verifier_request_count: 1, verifier_structural_retry_count: 0, form_verify_model: 'gpt-4.1-mini' }],
+            target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1,
+            contact_sheet_count: 1, verifier_request_count: 1, verifier_structural_retry_count: 0, form_verify_model: 'gpt-4.1-mini'
+          });
+          const metrics = ['target_candidate_count', 'target_verified_count', 'target_review_card_count', 'contact_sheet_count', 'verifier_request_count', 'verifier_structural_retry_count', 'form_verify_model'];
+          deepEqual(Object.fromEntries(metrics.map(key => [key, diagnostics[key]])), {
+            target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1,
+            contact_sheet_count: 1, verifier_request_count: 1, verifier_structural_retry_count: 0, form_verify_model: 'gpt-4.1-mini'
+          });
+          deepEqual(Object.fromEntries(metrics.map(key => [key, diagnostics.screenshots[0][key]])), {
+            target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1,
+            contact_sheet_count: 1, verifier_request_count: 1, verifier_structural_retry_count: 0, form_verify_model: 'gpt-4.1-mini'
+          });
+          const shaped = diagnostics.screenshots[0].cards[0];
+          deepEqual(shaped.verification_evidence, { crop_visibility: 'clear', body_plan: 'dialga_elongated_equine_quadruped', limb_layout: 'four_long_legs', fusion_host: 'not_applicable', decisive_feature: 'dialga_origin_elongated_neck_chest', key_features_visible: true });
+          deepEqual(shaped.crop_source_size, { width: 640, height: 480 });
+          ['PRIVATE_KEY', 'Authorization', 'Bearer', 'data:image/', 'PRIVATE_ORIGINAL', 'PRIVATE_CROP', 'PRIVATE_SHEET'].forEach(value => equal(JSON.stringify(diagnostics).includes(value), false, `diagnostics omit ${value}`));
+          equal(nativeFetchAttemptCount, 0, 'diagnostic shaping performs no native/live OpenAI request');
+        });
+
+        test('formats the locked target verifier status outcomes without stale Stage 1 form details', () => {
+          const base = { countMerge: { hundo_leg: '3' }, conversion: { recognized_count: 7 }, detectedCardCount: 7 };
+          equal(formatSmartHundoStatus({
+            ...base,
+            reviewSummary: { review_card_count: 0, review_reason_counts: {} },
+            formVerificationMetrics: { target_candidate_count: 3, target_verified_count: 3, target_review_card_count: 0 }
+          }), '百神掃描完成：辨識7張卡片；型態複核3張');
+          equal(formatSmartHundoStatus({
+            ...base,
+            reviewSummary: { review_card_count: 1, review_reason_counts: { form_verification_request_failed: 1 } },
+            formVerificationMetrics: { target_candidate_count: 1, target_verified_count: 0, target_review_card_count: 1 }
+          }), '百神清單已完成部分辨識；特殊型態複核失敗，請人工確認');
+          equal(formatSmartHundoStatus({
+            ...base,
+            conversion: { recognized_count: 6 },
+            reviewSummary: { review_card_count: 1, review_reason_counts: { form_verifier_low_confidence: 1 } },
+            formVerificationMetrics: { target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1 }
+          }), '百神掃描完成：辨識6張卡片；1張型態需人工確認');
+        });
+
+        test('preserves the no-target Stage 1 form status byte-for-byte', () => {
+          equal(formatSmartHundoStatus({
+            countMerge: { hundo_leg: '1' }, conversion: { recognized_count: 1 }, detectedCardCount: 1,
+            reviewSummary: { review_card_count: 1, review_reason_counts: { form_uncertain: 1, form_confidence_low: 1 } },
+            formVerificationMetrics: { target_candidate_count: 0, target_verified_count: 0, target_review_card_count: 0 }
+          }), '百神掃描完成：總數1，偵測1張卡片，辨識1張；共1張卡片需人工確認；1張型態需人工確認；1張型態辨識信心不足');
+        });
+
+        test('counts multiple target verifier reasons on one card exactly once', () => {
+          const summary = summarizeHundoManualReview([validatedCard({
+            card_id: '0:10:1:1',
+            manual_review_reasons: ['form_crop_missing', 'form_verifier_low_confidence', 'form_verification_request_failed', 'form_verifier_low_confidence']
+          })]);
+          equal(summary.review_card_count, 1);
+          deepEqual(summary.review_reason_counts, {
+            form_crop_missing: 1,
+            form_verifier_low_confidence: 1,
+            form_verification_request_failed: 1
+          });
+          deepEqual(summary.manual_review_reasons, [
+            HUNDO_REVIEW_REASON_MESSAGES.form_crop_missing,
+            HUNDO_REVIEW_REASON_MESSAGES.form_verifier_low_confidence,
+            HUNDO_REVIEW_REASON_MESSAGES.form_verification_request_failed
+          ]);
         });
 
         const requiredTrainerProductionContracts = [
@@ -5365,7 +5474,7 @@
           equal(diagnostics.manual_review_reasons.filter(reason => reason === 'form_region_not_clear').length, 1);
           equal(diagnostics.manual_review_reasons.filter(reason => reason === 'unsupported_form').length, 0);
           equal(diagnostics.manual_review_reasons.filter(reason => reason === 'species_uncertain').length, 0);
-          equal(document.getElementById('aiAutoStatus').textContent.includes('共4張卡片需人工確認'), true);
+          equal(document.getElementById('aiAutoStatus').textContent.includes('1張型態需人工確認'), true);
         });
 
         await asyncTest('sanitizes model-polluted species names before production list and diagnostics', async () => {
