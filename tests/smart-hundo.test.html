@@ -2970,6 +2970,17 @@
         equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_count_extractor');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
         equal(lastPayload.messages[0].content[1].image_url.url.startsWith('data:image/png'), true);
+        deepEqual({
+          schema: lastPayload.response_format.json_schema,
+          prompt: lastPayload.messages[0].content[0].text,
+          imageUrl: lastPayload.messages[0].content[1].image_url.url,
+          detail: lastPayload.messages[0].content[1].image_url.detail
+        }, {
+          schema: HUNDO_COUNT_SCHEMA,
+          prompt: countPrompt,
+          imageUrl: croppedCountRegion,
+          detail: 'high'
+        }, 'hundo-count request payload remains the origin/main fixture');
         installStrictOpenAiFetchMock(async () => ({
           ok: true,
           json: async () => ({
@@ -3018,6 +3029,88 @@
         ['hundo_leg', 'shadow_state', 'purified_state'].forEach(field => {
           equal(Object.hasOwn(smartCardSchema.properties, field), false, field);
         });
+        ['base_species', 'form_id', 'form_confidence', 'form_evidence'].forEach(field => {
+          equal(Object.hasOwn(smartCardSchema.properties, field), true, `${field} exists`);
+          equal(smartCardSchema.required.includes(field), true, `${field} is required`);
+        });
+        deepEqual(smartCardSchema.properties.form_id.enum, [
+          'not_applicable',
+          'uncertain',
+          'unsupported',
+          'articuno_standard',
+          'articuno_galarian',
+          'zapdos_standard',
+          'zapdos_galarian',
+          'moltres_standard',
+          'moltres_galarian',
+          'zacian_standard',
+          'zacian_crowned',
+          'zamazenta_standard',
+          'zamazenta_crowned',
+          'dialga_standard',
+          'dialga_origin',
+          'palkia_standard',
+          'palkia_origin',
+          'zygarde_10',
+          'zygarde_50',
+          'zygarde_complete',
+          'necrozma_base',
+          'necrozma_dusk_mane',
+          'necrozma_dawn_wings',
+          'kyurem_base',
+          'kyurem_white',
+          'kyurem_black'
+        ]);
+        deepEqual(smartCardSchema.properties.form_evidence, {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            region_visibility: {
+              type: 'string',
+              enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain']
+            },
+            recognition_basis: {
+              type: 'string',
+              enum: ['direct_visual_match', 'visual_and_label', 'label_only', 'uncertain']
+            },
+            visual_signature: {
+              type: 'string',
+              enum: [
+                'articuno_standard', 'articuno_galarian', 'zapdos_standard', 'zapdos_galarian',
+                'moltres_standard', 'moltres_galarian', 'zacian_standard', 'zacian_crowned',
+                'zamazenta_standard', 'zamazenta_crowned', 'dialga_standard', 'dialga_origin',
+                'palkia_standard', 'palkia_origin', 'zygarde_10', 'zygarde_50', 'zygarde_complete',
+                'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'kyurem_base',
+                'kyurem_white', 'kyurem_black', 'not_applicable', 'other', 'uncertain'
+              ]
+            },
+            key_features_visible: { type: 'boolean' },
+            label_relationship: {
+              type: 'string',
+              enum: ['exact_form', 'base_species_only', 'custom_nickname', 'conflicting', 'unreadable', 'not_applicable', 'uncertain']
+            }
+          },
+          required: [
+            'region_visibility', 'recognition_basis', 'visual_signature',
+            'key_features_visible', 'label_relationship'
+          ]
+        });
+        const assertStrictObjectSchemas = (schema, path = 'root') => {
+          if (schema.type === 'object') {
+            equal(schema.additionalProperties, false, `${path} rejects extra properties`);
+            deepEqual(
+              [...schema.required].sort(),
+              Object.keys(schema.properties).sort(),
+              `${path} requires every declared property`
+            );
+            Object.entries(schema.properties).forEach(([name, child]) => {
+              assertStrictObjectSchemas(child, `${path}.${name}`);
+            });
+          }
+          if (schema.type === 'array') assertStrictObjectSchemas(schema.items, `${path}[]`);
+        };
+        assertStrictObjectSchemas(HUNDO_SMART_SCHEMA.schema);
+        equal(Object.hasOwn(HUNDO_SMART_SCHEMA.schema.properties.cards, 'maxItems'), false);
         equal(JSON.stringify(HUNDO_SMART_SCHEMA).includes('global'), false);
         ['shiny_evidence', 'lucky_evidence', 'favorite_evidence', 'rocket_evidence', 'background_evidence'].forEach(field => {
           const evidenceSchema = smartCardSchema.properties[field];
@@ -3058,6 +3151,34 @@
             'region_visibility', 'clear', 'partially_occluded', 'cropped',
             '顏色或身體顏色本身永遠不足'
           ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `V2 smart prompt protects ${fragment}`));
+          [
+            '【B2. 基礎物種與型態辨識】', '【B3. form_evidence】',
+            '急凍鳥', '閃電鳥', '火焰鳥', '蒼響', '藏瑪然特', '帝牙盧卡', '帕路奇亞', '基格爾德', '奈克洛茲瑪', '酋雷姆',
+            'articuno_standard', 'articuno_galarian', 'zapdos_standard', 'zapdos_galarian',
+            'moltres_standard', 'moltres_galarian', 'zacian_standard', 'zacian_crowned',
+            'zamazenta_standard', 'zamazenta_crowned', 'dialga_standard', 'dialga_origin',
+            'palkia_standard', 'palkia_origin', 'zygarde_10', 'zygarde_50', 'zygarde_complete',
+            'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'kyurem_base',
+            'kyurem_white', 'kyurem_black',
+            'base_species = "火焰鳥"', 'form_id = "moltres_galarian"',
+            'recognition_basis = "label_only"', 'form_id = "uncertain"',
+            '不得自動退回 standard', 'Ultra Necrozma', 'form_id = "unsupported"',
+            '完整身體結構', '頭部', '翅膀', '尾巴', '四肢', '武器', '裝甲', '姿勢', '比例', '型態專屬部件', '顏色分布', '標籤只能作為次要證據'
+          ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `form prompt protects ${fragment}`));
+          [
+            '淡藍色大型鳥身、長尾羽、頭部冠羽', '白灰鳥身、黑色眼罩般臉部與較長細腿',
+            '尖銳黃羽、短粗鳥腿', '橙黑配色、長而粗壯的奔跑腿，翅膀相對短小',
+            '橘紅火焰翅膀與長火焰尾羽', '黑紅鳥身、火焰般紅色頭冠與流線長尾',
+            '口銜寶劍', '前胸大型盾牌與濃密鬃毛',
+            '四足藍色恐龍般身軀、背部金屬突起與側面菱形', '蛇形、四肢融合的起源身軀',
+            '四足粉白珍珠裝甲與雙肩圓盤', '蛇形、四肢融合的起源珍珠身軀',
+            '犬科、四足、細長身體', '蛇形長軀幹與六角斑點', '巨大人形、雙足與翼狀鰭',
+            '黑色稜柱、細長四肢，無融合宿主', '獅子身軀與日輪特徵', '蝙蝠翼與月輪特徵',
+            '灰藍殘缺龍、冰刺與空缺的能量尾部', '白色龍形、雷希拉姆特徵與渦輪火焰尾部', '深色龍形、捷克羅姆特徵與渦輪電力尾部',
+            '先在完整原始圖片中逐卡判定 base_species，再判定 form_id',
+            '單一顏色永遠不足以判定型態', 'visual_signature 必須與 form_id 完全相同',
+            'key_features_visible 必須為 true', '不得輸出推理過程'
+          ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `controlled form visual guidance protects ${fragment}`));
         });
         const v2Result = (count, officialName, overrides = {}) => ({
           detected_card_count: count,
