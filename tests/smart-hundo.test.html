@@ -263,6 +263,8 @@
           HUNDO_REVIEW_REASON_MESSAGES,
           HUNDO_COUNT_CONFIDENCE_THRESHOLD,
           SPECIES_CONFIDENCE_THRESHOLD,
+          FORM_CONFIDENCE_THRESHOLD,
+          FORM_PARTIAL_VISIBILITY_THRESHOLD,
           STATE_YES_CONFIDENCE_THRESHOLD,
           STATE_NEGATIVE_CONFIDENCE_THRESHOLD,
           ENUMERATION_CONFIDENCE_THRESHOLD,
@@ -272,6 +274,8 @@
           deriveRocketStateFromEvidence,
           deriveBackgroundTypeFromEvidence,
           validateHundoCardStates,
+          validateHundoPokemonForm,
+          buildHundoCanonicalOfficialName,
           normalizeHundoCountResult,
           validateHundoCountEvidence,
           mergeHundoCountResults,
@@ -284,6 +288,10 @@
           card(overrides),
           normalizeName,
           { screenshotIndex: 0 }
+        );
+        const validatedFormCard = (overrides = {}) => validateHundoPokemonForm(
+          normalizeSmartHundoCard(formCard(overrides), normalizeName, { screenshotIndex: 0 }),
+          normalizeName
         );
         const makeCards = (count, overrides = {}) => Array.from({ length: count }, (_, index) => card({
           order: index + 1,
@@ -410,6 +418,137 @@
           }), {
             region_visibility: 'uncertain', recognition_basis: 'uncertain', visual_signature: 'uncertain',
             key_features_visible: true, label_relationship: 'uncertain'
+          });
+        });
+
+        test('accepts clear direct visual form evidence', () => {
+          const result = validatedFormCard();
+          equal(result.effective_form_id, 'moltres_galarian');
+          equal(result.canonical_official_name, '伽勒爾火焰鳥');
+          deepEqual(result.manual_review_reasons, []);
+          equal(buildHundoCanonicalOfficialName(result, normalizeName), '伽勒爾火焰鳥');
+        });
+
+        test('accepts strong visuals with a generic base-species label', () => {
+          const result = validatedFormCard({
+            visible_label: '火焰鳥',
+            form_evidence: formEvidence({
+              recognition_basis: 'visual_and_label',
+              label_relationship: 'base_species_only'
+            })
+          });
+          equal(result.canonical_official_name, '伽勒爾火焰鳥');
+        });
+
+        test('accepts a custom nickname when direct visual evidence is strong', () => {
+          const result = validatedFormCard({
+            visible_label: '151515',
+            form_evidence: formEvidence({ label_relationship: 'custom_nickname' })
+          });
+          equal(result.effective_form_id, 'moltres_galarian');
+        });
+
+        test('rejects label-only whitelist form evidence', () => {
+          const result = validatedFormCard({
+            form_evidence: formEvidence({ recognition_basis: 'label_only' })
+          });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_label_only'), true);
+        });
+
+        test('rejects cropped form evidence', () => {
+          const result = validatedFormCard({
+            form_evidence: formEvidence({ region_visibility: 'cropped' })
+          });
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+        });
+
+        test('accepts partially occluded direct evidence at 0.93', () => {
+          const result = validatedFormCard({
+            form_confidence: 0.93,
+            form_evidence: formEvidence({
+              region_visibility: 'partially_occluded',
+              recognition_basis: 'direct_visual_match'
+            })
+          });
+          equal(result.effective_form_id, 'moltres_galarian');
+        });
+
+        test('rejects partially occluded evidence below 0.93', () => {
+          const result = validatedFormCard({
+            form_confidence: 0.92,
+            form_evidence: formEvidence({
+              region_visibility: 'partially_occluded',
+              recognition_basis: 'direct_visual_match'
+            })
+          });
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_confidence_low'), true);
+          equal(result.manual_review_reasons.includes('form_region_not_clear'), true);
+        });
+
+        test('accepts clear form confidence at 0.85 and rejects 0.849', () => {
+          equal(validatedFormCard({ form_confidence: 0.85 }).effective_form_id, 'moltres_galarian');
+          const belowThreshold = validatedFormCard({ form_confidence: 0.849 });
+          equal(belowThreshold.effective_form_id, 'uncertain');
+          equal(belowThreshold.manual_review_reasons.includes('form_confidence_low'), true);
+        });
+
+        test('rejects mismatched visual signature', () => {
+          const result = validatedFormCard({ form_evidence: formEvidence({ visual_signature: 'moltres_standard' }) });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.manual_review_reasons.includes('form_signature_mismatch'), true);
+        });
+
+        test('rejects an incompatible species-form combination', () => {
+          const result = validatedFormCard({ form_id: 'dialga_origin' });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.manual_review_reasons.includes('form_species_mismatch'), true);
+        });
+
+        test('rejects uncertain form IDs without outputting a base species name', () => {
+          const result = validatedFormCard({ form_id: 'uncertain' });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.canonical_official_name, '');
+          equal(result.manual_review_reasons.includes('form_uncertain'), true);
+        });
+
+        test('rejects unsupported form IDs', () => {
+          const result = validatedFormCard({
+            form_id: 'unsupported',
+            form_evidence: formEvidence({ visual_signature: 'other' })
+          });
+          equal(result.effective_form_id, 'uncertain');
+          equal(result.manual_review_reasons.includes('unsupported_form'), true);
+        });
+
+        test('rejects missing key features and uncertain recognition basis', () => {
+          const noFeatures = validatedFormCard({ form_evidence: formEvidence({ key_features_visible: false }) });
+          const uncertainBasis = validatedFormCard({ form_evidence: formEvidence({ recognition_basis: 'uncertain' }) });
+          equal(noFeatures.effective_form_id, 'uncertain');
+          equal(noFeatures.manual_review_reasons.includes('form_uncertain'), true);
+          equal(uncertainBasis.effective_form_id, 'uncertain');
+          equal(uncertainBasis.manual_review_reasons.includes('form_uncertain'), true);
+        });
+
+        test('rejects conflicting labels and low species confidence', () => {
+          const conflicting = validatedFormCard({ form_evidence: formEvidence({ label_relationship: 'conflicting' }) });
+          const lowSpecies = validatedFormCard({ species_confidence: 0.799 });
+          equal(conflicting.effective_form_id, 'uncertain');
+          equal(conflicting.manual_review_reasons.includes('form_species_mismatch'), true);
+          equal(lowSpecies.effective_form_id, 'uncertain');
+          equal(lowSpecies.manual_review_reasons.includes('species_uncertain'), true);
+          equal(lowSpecies.manual_review_reasons.includes('form_uncertain'), true);
+        });
+
+        test('keeps non-whitelist species canonical names without form reasons', () => {
+          ['夢幻', '超夢', '鳳王', '炎帝', '固拉多'].forEach(officialName => {
+            const result = validateHundoPokemonForm(normalizedCard({ official_name: officialName }), normalizeName);
+            equal(result.effective_form_id, 'not_applicable', officialName);
+            equal(result.canonical_official_name, officialName, officialName);
+            equal(result.manual_review_reasons.some(reason => reason.startsWith('form_') || reason === 'unsupported_form'), false, officialName);
           });
         });
 

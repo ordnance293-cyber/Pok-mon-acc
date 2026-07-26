@@ -8,6 +8,8 @@
     const ENUMERATION_CONFIDENCE_THRESHOLD = 0.85;
     // Species and state gates are consumed by card validation and list conversion.
     const SPECIES_CONFIDENCE_THRESHOLD = 0.80;
+    const FORM_CONFIDENCE_THRESHOLD = 0.85;
+    const FORM_PARTIAL_VISIBILITY_THRESHOLD = 0.93;
     const STATE_YES_CONFIDENCE_THRESHOLD = 0.85;
     const STATE_NEGATIVE_CONFIDENCE_THRESHOLD = 0.75;
     const INDEPENDENT_STATE_VALUES = new Set(['yes', 'no', 'uncertain']);
@@ -1155,6 +1157,98 @@
         };
     };
 
+    const FORM_VALIDATION_REASON_CODES = new Set([
+        'form_uncertain',
+        'form_species_mismatch',
+        'form_region_not_clear',
+        'form_confidence_low',
+        'form_label_only',
+        'form_signature_mismatch',
+        'unsupported_form'
+    ]);
+
+    const buildHundoCanonicalOfficialName = (card = {}, normalizeOfficialName) => {
+        if (HUNDO_SUPPORTED_FORM_IDS.has(card?.effective_form_id)) {
+            return HUNDO_FORM_CANONICAL_NAMES[card.effective_form_id];
+        }
+        if (card?.effective_form_id === 'not_applicable') {
+            return normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
+        }
+        return '';
+    };
+
+    const validateHundoPokemonForm = (card = {}, normalizeOfficialName) => {
+        const existingReasons = Array.isArray(card?.manual_review_reasons)
+            ? card.manual_review_reasons.filter(reason => !FORM_VALIDATION_REASON_CODES.has(reason))
+            : [];
+        const manualReviewReasons = [...new Set(existingReasons)];
+        const reject = (...reasons) => {
+            reasons.forEach(reason => {
+                if (!manualReviewReasons.includes(reason)) manualReviewReasons.push(reason);
+            });
+            return {
+                ...card,
+                effective_form_id: 'uncertain',
+                canonical_official_name: '',
+                manual_review_reasons: manualReviewReasons
+            };
+        };
+        const baseSpecies = card?.base_species;
+        const formId = card?.form_id;
+        const formEvidence = card?.form_evidence || {};
+
+        if (!Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, baseSpecies)) {
+            const result = {
+                ...card,
+                effective_form_id: 'not_applicable',
+                manual_review_reasons: manualReviewReasons
+            };
+            return {
+                ...result,
+                canonical_official_name: buildHundoCanonicalOfficialName(result, normalizeOfficialName)
+            };
+        }
+        if (formId === 'unsupported') return reject('unsupported_form');
+        if (formId === 'uncertain' || !HUNDO_SUPPORTED_FORM_IDS.has(formId)) return reject('form_uncertain');
+        if (!HUNDO_FORMS_BY_BASE_SPECIES[baseSpecies].includes(formId)) return reject('form_species_mismatch');
+        if (formEvidence.visual_signature !== formId) return reject('form_signature_mismatch');
+        if (formEvidence.label_relationship === 'conflicting') return reject('form_species_mismatch');
+        if (formEvidence.recognition_basis === 'label_only') return reject('form_label_only');
+        if (['cropped', 'not_visible', 'uncertain'].includes(formEvidence.region_visibility)) {
+            return reject('form_region_not_clear');
+        }
+        if (Number(card?.species_confidence) < SPECIES_CONFIDENCE_THRESHOLD) {
+            return reject('species_uncertain', 'form_uncertain');
+        }
+        const isPartiallyOccluded = formEvidence.region_visibility === 'partially_occluded';
+        const minimumFormConfidence = isPartiallyOccluded
+            ? FORM_PARTIAL_VISIBILITY_THRESHOLD
+            : FORM_CONFIDENCE_THRESHOLD;
+        if (Number(card?.form_confidence) < minimumFormConfidence) {
+            return reject(...(isPartiallyOccluded
+                ? ['form_region_not_clear', 'form_confidence_low']
+                : ['form_confidence_low']));
+        }
+        if (formEvidence.recognition_basis === 'uncertain' || formEvidence.key_features_visible !== true) {
+            return reject(...(isPartiallyOccluded
+                ? ['form_region_not_clear', 'form_uncertain']
+                : ['form_uncertain']));
+        }
+        if (isPartiallyOccluded && formEvidence.recognition_basis !== 'direct_visual_match') {
+            return reject('form_region_not_clear');
+        }
+
+        const result = {
+            ...card,
+            effective_form_id: formId,
+            manual_review_reasons: manualReviewReasons
+        };
+        return {
+            ...result,
+            canonical_official_name: buildHundoCanonicalOfficialName(result, normalizeOfficialName)
+        };
+    };
+
     const reviewReasonCodes = (card = {}) => {
         const reasons = Array.isArray(card?.manual_review_reasons)
             ? card.manual_review_reasons.filter(isHundoReviewReason)
@@ -1261,6 +1355,8 @@
         mergeHundoCountResults,
         HUNDO_COUNT_CONFIDENCE_THRESHOLD,
         SPECIES_CONFIDENCE_THRESHOLD,
+        FORM_CONFIDENCE_THRESHOLD,
+        FORM_PARTIAL_VISIBILITY_THRESHOLD,
         STATE_YES_CONFIDENCE_THRESHOLD,
         STATE_NEGATIVE_CONFIDENCE_THRESHOLD,
         ENUMERATION_CONFIDENCE_THRESHOLD,
@@ -1270,6 +1366,8 @@
         deriveRocketStateFromEvidence,
         deriveBackgroundTypeFromEvidence,
         validateHundoCardStates,
+        validateHundoPokemonForm,
+        buildHundoCanonicalOfficialName,
         HUNDO_REVIEW_REASON_MESSAGES,
         buildHundoDisplayName,
         smartHundoCardsToPokemonList,
