@@ -6,7 +6,7 @@
 - 不得提交使用者的私人截圖；只記錄匿名圖片 ID、受控欄位與最終文字結果。
 - mocked tests do not prove visual accuracy。
 - 自動化 mocked fixtures 只證明請求路由、schema、正規化、決定論驗證、顯示與診斷流程；不能證明模型能從真實圖片正確看出型態。
-- 下列「完整 commit SHA」是目前待驗收的 production implementation commit：`ad1abde47b8333ba576f36c6d8756d5ad33c3746`。若後續 production code 改動，實際人工執行時必須改填當次完整 SHA。
+- 下列「完整 commit SHA」是目前待驗收的 production implementation commit：`138cc3646226735653a5517c822bbc883b849fb8`。若後續 production code 改動，實際人工執行時必須改填當次完整 SHA。
 
 ## 固定模型預期
 
@@ -36,7 +36,7 @@
 
 | 欄位 | 待驗收紀錄 |
 |---|---|
-| 完整 commit SHA | `ad1abde47b8333ba576f36c6d8756d5ad33c3746` |
+| 完整 commit SHA | `138cc3646226735653a5517c822bbc883b849fb8` |
 | 匿名圖片 ID | `private-oracle-01` |
 | requested_model | `gpt-5-mini` |
 | returned_model | `待人工執行時由安全 metadata 填入` |
@@ -81,7 +81,7 @@
 
 | 欄位 | 待驗收紀錄 |
 |---|---|
-| 完整 commit SHA | `ad1abde47b8333ba576f36c6d8756d5ad33c3746` |
+| 完整 commit SHA | `138cc3646226735653a5517c822bbc883b849fb8` |
 | 匿名圖片 ID | `private-oracle-02` |
 | requested_model | `gpt-5-mini` |
 | returned_model | `待人工執行時由安全 metadata 填入` |
@@ -120,7 +120,7 @@
 
 | 欄位 | 待驗收紀錄 |
 |---|---|
-| 完整 commit SHA | `ad1abde47b8333ba576f36c6d8756d5ad33c3746` |
+| 完整 commit SHA | `138cc3646226735653a5517c822bbc883b849fb8` |
 | 匿名圖片 ID | `private-oracle-03` |
 | requested_model | `gpt-5-mini` |
 | returned_model | `待人工執行時由安全 metadata 填入` |
@@ -158,7 +158,7 @@
 
 | 欄位 | 待驗收紀錄 |
 |---|---|
-| 完整 commit SHA | `ad1abde47b8333ba576f36c6d8756d5ad33c3746` |
+| 完整 commit SHA | `138cc3646226735653a5517c822bbc883b849fb8` |
 | 匿名圖片 ID | `private-oracle-04` |
 | requested_model | `gpt-5-mini` |
 | returned_model | `待人工執行時由安全 metadata 填入` |
