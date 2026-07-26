@@ -578,6 +578,20 @@ def main() -> int:
                 "ordinary JPEG conversion",
             ),
         ]),
+        ("limited-candidate form verifier request remains isolated and strict", lambda: [
+            require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-4.1-mini';", "verifier model"),
+            require_fragment(source, "const HUNDO_FORM_VERIFIER_SCHEMA = {", "verifier schema"),
+            require_fragment(
+                source,
+                "name: 'pokemon_go_smart_hundo_form_verifier_v2'",
+                "verifier schema name",
+            ),
+            require_fragment(source, "const buildSmartHundoFormVerifierPrompt =", "verifier prompt"),
+            require_fragment(source, "const requestSmartHundoFormVerification = async", "verifier request"),
+            require_fragment(source, "model: options.model || OPENAI_MODEL", "optional request model"),
+            require_fragment(source, "retryParseErrors === false", "parse retry option"),
+            require_fragment(source, "openai_json_parse_error", "parse retry reason code"),
+        ]),
         ("API-key settings keep their current and legacy storage keys", lambda: [
             require_fragment(source, "elementId: 'openaiApiKey', storageKey: 'OPENAI_API_KEY'", "API-key setting"),
             require_fragment(source, "legacyStorageKeys: ['geminiApiKey']", "legacy API-key setting"),

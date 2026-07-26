@@ -2846,6 +2846,7 @@
           'pokemon_go_forced_field_extractor',
           'pokemon_go_hundo_count_extractor',
           'pokemon_go_hundo_smart_extractor_v2',
+          'pokemon_go_smart_hundo_form_verifier_v2',
           'pokemon_go_trainer_team_fixed_ui_extractor'
         ]);
         const assertJsonSchemaValue = (value, schema, path = 'result') => {
@@ -3064,9 +3065,12 @@
           + `\nObject.assign(globalThis, {
             OPENAI_CHAT_COMPLETIONS_URL,
             HUNDO_SMART_IMAGE_DETAIL,
+            HUNDO_FORM_VERIFY_MODEL: typeof HUNDO_FORM_VERIFY_MODEL === 'undefined' ? undefined : HUNDO_FORM_VERIFY_MODEL,
             HUNDO_SMART_SCHEMA,
+            HUNDO_FORM_VERIFIER_SCHEMA: typeof HUNDO_FORM_VERIFIER_SCHEMA === 'undefined' ? undefined : HUNDO_FORM_VERIFIER_SCHEMA,
             HUNDO_COUNT_SCHEMA,
             buildSmartHundoPrompt,
+            buildSmartHundoFormVerifierPrompt: typeof buildSmartHundoFormVerifierPrompt === 'undefined' ? undefined : buildSmartHundoFormVerifierPrompt,
             buildHundoCountPrompt,
             fileToOriginalDataUrl,
             fileToResizedDataUrl,
@@ -3076,6 +3080,7 @@
             buildSmartHundoFormContactSheets: typeof buildSmartHundoFormContactSheets === 'undefined' ? undefined : buildSmartHundoFormContactSheets,
             buildAiRequestContent,
             requestOpenAiJsonSchema,
+            requestSmartHundoFormVerification: typeof requestSmartHundoFormVerification === 'undefined' ? undefined : requestSmartHundoFormVerification,
             requestHundoCountExtraction,
             requestSmartHundoExtractionV2,
             requestSmartHundoWithStructuralRetry,
@@ -5896,6 +5901,290 @@
           equal(window.lastSmartHundoScanResult, sentinel);
           equal(alertMessages.join('\n').includes('百神清單'), false, 'ordinary coverage contract does not add smart-list alerts');
         });
+
+        const formVerifierJobs = () => [
+          { tile_id: 'T1', card_id: '0:2:1:1', screenshot_index: 0, base_species: '帝牙盧卡', candidate_form_ids: ['dialga_standard', 'dialga_origin', 'uncertain'] },
+          { tile_id: 'T2', card_id: '0:2:1:2', screenshot_index: 0, base_species: '奈克洛茲瑪', candidate_form_ids: ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'uncertain'] }
+        ];
+        const requestFormVerifier = (overrides = {}) => requestSmartHundoFormVerification({
+          apiKey: 'test-key',
+          contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY',
+          verificationJobs: formVerifierJobs(),
+          requestOptions: { maxRetries: 1 },
+          ...overrides
+        });
+
+        await asyncTest('defines the strict limited-candidate verifier schema', async () => {
+          const fields = ['tile_id', 'card_id', 'base_species', 'verified_form_id', 'verification_confidence', 'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible'];
+          equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-4.1-mini');
+          equal(HUNDO_FORM_VERIFIER_SCHEMA.name, 'pokemon_go_smart_hundo_form_verifier_v2');
+          equal(HUNDO_FORM_VERIFIER_SCHEMA.strict, true);
+          deepEqual(HUNDO_FORM_VERIFIER_SCHEMA.schema.required, ['cards']);
+          const card = HUNDO_FORM_VERIFIER_SCHEMA.schema.properties.cards.items;
+          equal(card.additionalProperties, false);
+          deepEqual(Object.keys(card.properties), fields);
+          deepEqual(card.required, fields);
+          deepEqual(card.properties.verification_confidence, { type: 'number', minimum: 0, maximum: 1 });
+          deepEqual(card.properties.key_features_visible, { type: 'boolean' });
+        });
+
+        await asyncTest('builds the complete body-evidence verifier prompt', async () => {
+          const prompt = buildSmartHundoFormVerifierPrompt(formVerifierJobs());
+          [
+            '短而緊湊的軀幹，不是高而窄的馬型身體', '寬闊白色肩部／背部結構與正常頸胸比例',
+            '高而窄的馬型坐騎四足身體，長而細的肢體', '拉長的頸部、喉部與胸部，不是粗壯緊湊身體',
+            '兩隻明顯正常手臂與兩隻腿，高度大於寬度，不是四足半人馬',
+            '四隻明顯腿、水平身體配置，沒有兩隻一般形態手臂，軀幹與四肢明顯不同',
+            '狹窄黑色結晶宿主與直立結晶肢體，不是獅子，沒有巨大的側向月翼',
+            '低而寬的四足獅子、四隻腿、黑色奈克洛茲瑪結晶裝甲，不是直立，沒有巨大翅膀',
+            '巨大的側向蝙蝠／月翼主導寬度、露奈雅拉宿主、小型中央身體與黑色結晶結構，不是獅子也不是直立',
+            '帝牙盧卡與帕路奇亞的顏色或異色絕不可作為形態捷徑',
+            'body_plan=dialga_stocky_wide_quadruped | limb_layout=four_standard_legs | fusion_host=not_applicable | decisive_feature=dialga_standard_stocky_neck_chest',
+            'body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings',
+            'T1 | card_id=0:2:1:1 | base_species=帝牙盧卡 | candidates=dialga_standard,dialga_origin,uncertain'
+          ].forEach(fragment => equal(prompt.includes(fragment), true, `prompt includes ${fragment}`));
+        });
+
+        await asyncTest('rejects malformed verifier jobs and contact-sheet URLs before fetch', async () => {
+          const previousFetch = globalThis.fetch;
+          let fetchCount = 0;
+          globalThis.fetch = async () => { fetchCount += 1; throw new Error('network must not run'); };
+          try {
+            const valid = formVerifierJobs();
+            const inherited = Object.create(valid[0]);
+            const symbolJob = { ...valid[0] }; symbolJob[Symbol('extra')] = 'x';
+            const hiddenJob = { ...valid[0] }; Object.defineProperty(hiddenJob, 'hidden', { value: 'x' });
+            const candidateExtra = { ...valid[0], candidate_form_ids: [...valid[0].candidate_form_ids] };
+            Object.defineProperty(candidateExtra.candidate_form_ids, 'hidden', { value: 'x' });
+            const sparseCandidate = { ...valid[0], candidate_form_ids: ['dialga_standard', , 'uncertain'] };
+            sparseCandidate.candidate_form_ids.padding = 'x';
+            const sparseJobs = [valid[0]]; sparseJobs.length = 2;
+            const jobsExtra = [valid[0]]; jobsExtra.padding = 'x';
+            const jobsSymbol = [valid[0]]; jobsSymbol[Symbol('extra')] = 'x';
+            const candidateSymbol = { ...valid[0], candidate_form_ids: [...valid[0].candidate_form_ids] };
+            candidateSymbol.candidate_form_ids[Symbol('extra')] = 'x';
+            const cases = [
+              [inherited],
+              [{ ...valid[0], screenshot_index: Number.MAX_SAFE_INTEGER + 1 }],
+              [{ ...valid[0], tile_id: 'T3' }],
+              [valid[1], valid[0]],
+              [{ ...valid[0], card_id: '0:1\u2028inject' }],
+              [{ ...valid[0], extra: 'x' }],
+              [symbolJob],
+              [hiddenJob],
+              [candidateExtra],
+              [sparseCandidate],
+              sparseJobs,
+              jobsExtra,
+              jobsSymbol,
+              [candidateSymbol],
+              [{ ...valid[0], candidate_form_ids: ['dialga_origin', 'dialga_standard', 'uncertain'] }]
+            ];
+            for (const verificationJobs of cases) await assertRejects(requestFormVerifier({ verificationJobs }), 'invalid form verification jobs');
+            for (const contactSheetDataUrl of ['data:image/png-evil;base64,x', 'data:image/png;foo,base64,x', 'data:image/png;base64evil,x']) {
+              await assertRejects(requestFormVerifier({ contactSheetDataUrl }), 'invalid form verification contact sheet');
+            }
+            equal(fetchCount, 0);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('sends one high-detail limited-candidate verifier request', async () => {
+          const previousFetch = globalThis.fetch;
+          try {
+            installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
+              equal(schemaName, 'pokemon_go_smart_hundo_form_verifier_v2');
+              equal(payload.model, 'gpt-4.1-mini');
+              equal(payload.temperature, 0.1);
+              equal(payload.messages[0].content[1].image_url.detail, 'high');
+              equal(payload.messages[0].content[1].image_url.url, 'data:image/png;base64,CONTACT_SHEET_ONLY');
+              equal(Object.hasOwn(payload, 'reasoning_effort'), false);
+              equal(JSON.stringify(payload).includes('ORIGINAL_SCREENSHOT_SENTINEL'), false);
+              return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"cards":[]}' } }] }) };
+            });
+            deepEqual(await requestFormVerifier(), { result: { cards: [] }, finish_reason: 'stop' });
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('surfaces response transport JSON failures without retry when disabled', async () => {
+          const previousFetch = globalThis.fetch;
+          let fetchCount = 0;
+          try {
+            installStrictOpenAiFetchMock(async () => {
+              fetchCount += 1;
+              return { ok: true, json: async () => { throw new Error('transport json failure'); } };
+            });
+            try { await requestFormVerifier({ requestOptions: { maxRetries: 2 } }); fail('transport JSON failure must reject'); }
+            catch (error) { equal(error.reasonCode, 'openai_json_parse_error'); }
+            equal(fetchCount, 1);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        await asyncTest('surfaces malformed response content JSON without retry when disabled', async () => {
+          const previousFetch = globalThis.fetch;
+          let fetchCount = 0;
+          try {
+            installStrictOpenAiFetchMock(async () => {
+              fetchCount += 1;
+              return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '{bad json}' } }] }) };
+            });
+            try { await requestFormVerifier({ requestOptions: { maxRetries: 2 } }); fail('content JSON failure must reject'); }
+            catch (error) { equal(error.reasonCode, 'openai_json_parse_error'); }
+            equal(fetchCount, 1);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
+        /* Retired in favor of independently reported verifier request contracts below.
+        await asyncTest('uses the strict limited-candidate form verifier schema prompt and contact-sheet request only', async () => {
+          const expectedFields = [
+            'tile_id', 'card_id', 'base_species', 'verified_form_id', 'verification_confidence',
+            'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible'
+          ];
+          const expectedEnums = {
+            verified_form_id: ['uncertain', 'dialga_standard', 'dialga_origin', 'palkia_standard', 'palkia_origin', 'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'],
+            crop_visibility: ['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain'],
+            body_plan: ['uncertain', 'dialga_stocky_wide_quadruped', 'dialga_elongated_equine_quadruped', 'palkia_upright_biped_with_arms', 'palkia_centaur_quadruped', 'necrozma_upright_crystalline', 'necrozma_quadruped_lion', 'necrozma_wide_moon_wings'],
+            limb_layout: ['uncertain', 'four_standard_legs', 'four_long_legs', 'two_arms_two_legs', 'four_legs_no_standard_arms', 'upright_crystalline_limbs', 'quadruped_lion', 'giant_wings_no_lion_body'],
+            fusion_host: ['not_applicable', 'none', 'solgaleo', 'lunala', 'uncertain'],
+            decisive_feature: ['uncertain', 'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest', 'palkia_standard_visible_arms', 'palkia_origin_centaur_body', 'necrozma_base_crystal_body', 'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings']
+          };
+          const schema = HUNDO_FORM_VERIFIER_SCHEMA;
+          equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-4.1-mini');
+          equal(schema.name, 'pokemon_go_smart_hundo_form_verifier_v2');
+          equal(schema.strict, true);
+          equal(schema.schema.type, 'object');
+          equal(schema.schema.additionalProperties, false);
+          deepEqual(schema.schema.required, ['cards']);
+          const cards = schema.schema.properties.cards;
+          equal(cards.type, 'array');
+          equal(Number.isFinite(cards.maxItems) && cards.maxItems < 6, false, 'cards schema permits six tiles');
+          const card = cards.items;
+          equal(card.type, 'object');
+          equal(card.additionalProperties, false);
+          deepEqual(Object.keys(card.properties), expectedFields);
+          deepEqual(card.required, expectedFields);
+          expectedFields.forEach(field => equal(Object.hasOwn(card.properties, field), true, `${field} is defined`));
+          Object.entries(expectedEnums).forEach(([field, values]) => deepEqual(card.properties[field].enum, values, `${field} enum`));
+          deepEqual(card.properties.tile_id, { type: 'string' });
+          deepEqual(card.properties.card_id, { type: 'string' });
+          deepEqual(card.properties.base_species, { type: 'string' });
+          deepEqual(card.properties.verification_confidence, { type: 'number', minimum: 0, maximum: 1 });
+          deepEqual(card.properties.key_features_visible, { type: 'boolean' });
+
+          const jobs = [
+            { tile_id: 'T1', card_id: '0:2:1:1', screenshot_index: 0, base_species: '帝牙盧卡', candidate_form_ids: ['dialga_standard', 'dialga_origin', 'uncertain'] },
+            { tile_id: 'T2', card_id: '0:2:1:2', screenshot_index: 0, base_species: '奈克洛茲瑪', candidate_form_ids: ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'uncertain'] }
+          ];
+          const prompt = buildSmartHundoFormVerifierPrompt(jobs);
+          [
+            '只從放大的寶可夢本體裁切圖辨識形態', '不得辨識 CP、名稱、異色、幸運、最愛、火箭隊狀態、背景或卡片數量',
+            '忽略殘留的 CP、地點、151515、96% 與暱稱文字', '形態判定權威是本體結構、姿勢、四肢、手臂、比例、頸胸',
+            '顏色只能作為輔助，絕不可作為決定性依據', '不清楚、太小或被裁切的決定性區域必須回傳 uncertain',
+            '絕不可因已知 base species 就預設為 standard 或 base',
+            'dialga_standard', 'dialga_origin', 'palkia_standard', 'palkia_origin', 'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings',
+            '帝牙盧卡一般形態：粗壯、寬闊的四足身體，標準四腿，判斷頸部與胸部的厚實結構',
+            '短而緊湊的軀幹，不是高而窄的馬型身體', '寬闊白色肩部／背部結構與正常頸胸比例',
+            '帝牙盧卡起源形態：修長的馬型四足身體，四條長腿，判斷拉長的頸部與胸部結構',
+            '高而窄的馬型坐騎四足身體，長而細的肢體', '拉長的頸部、喉部與胸部，不是粗壯緊湊身體',
+            '帕路奇亞一般形態：直立雙足且有可見手臂，判斷兩手臂與兩腿',
+            '兩隻明顯正常手臂與兩隻腿，高度大於寬度，不是四足半人馬',
+            '帕路奇亞起源形態：半人馬式四足身體，四腿且沒有一般形態的手臂',
+            '四隻明顯腿、水平身體配置，沒有兩隻一般形態手臂，軀幹與四肢明顯不同',
+            '奈克洛茲瑪一般形態：直立的結晶身體與直立結晶肢體',
+            '狹窄黑色結晶宿主與直立結晶肢體，不是獅子，沒有巨大的側向月翼',
+            '奈克洛茲瑪黃昏之鬃：四足獅子身體、獅子結晶裝甲，融合宿主是索爾迦雷歐',
+            '低而寬的四足獅子、四隻腿、黑色奈克洛茲瑪結晶裝甲，不是直立，沒有巨大翅膀',
+            '奈克洛茲瑪拂曉之翼：寬大的月翼、沒有獅子身體，融合宿主是露奈雅拉',
+            '巨大的側向蝙蝠／月翼主導寬度、露奈雅拉宿主、小型中央身體與黑色結晶結構，不是獅子也不是直立',
+            '帝牙盧卡與帕路奇亞的顏色或異色絕不可作為形態捷徑',
+            'body_plan=dialga_stocky_wide_quadruped | limb_layout=four_standard_legs | fusion_host=not_applicable | decisive_feature=dialga_standard_stocky_neck_chest',
+            'body_plan=dialga_elongated_equine_quadruped | limb_layout=four_long_legs | fusion_host=not_applicable | decisive_feature=dialga_origin_elongated_neck_chest',
+            'body_plan=palkia_upright_biped_with_arms | limb_layout=two_arms_two_legs | fusion_host=not_applicable | decisive_feature=palkia_standard_visible_arms',
+            'body_plan=palkia_centaur_quadruped | limb_layout=four_legs_no_standard_arms | fusion_host=not_applicable | decisive_feature=palkia_origin_centaur_body',
+            'body_plan=necrozma_upright_crystalline | limb_layout=upright_crystalline_limbs | fusion_host=none | decisive_feature=necrozma_base_crystal_body',
+            'body_plan=necrozma_quadruped_lion | limb_layout=quadruped_lion | fusion_host=solgaleo | decisive_feature=necrozma_dusk_mane_lion_crystal_armor',
+            'body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings',
+            'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest', 'palkia_standard_visible_arms', 'palkia_origin_centaur_body',
+            'necrozma_base_crystal_body', 'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings',
+            'T1 | card_id=0:2:1:1 | base_species=帝牙盧卡 | candidates=dialga_standard,dialga_origin,uncertain',
+            'T2 | card_id=0:2:1:2 | base_species=奈克洛茲瑪 | candidates=necrozma_base,necrozma_dusk_mane,necrozma_dawn_wings,uncertain'
+          ].forEach(fragment => equal(prompt.includes(fragment), true, `verifier prompt includes ${fragment}`));
+          ['CP', '暱稱', 'visible label', '異色', 'color shortcut'].forEach(shortcut => {
+            equal(prompt.includes(`不得使用 ${shortcut}`), true, `prompt forbids ${shortcut} shortcut`);
+          });
+          const promptMappings = prompt.slice(prompt.indexOf('T1 | card_id='));
+          equal(promptMappings.includes('visible_label'), false, 'prompt mapping excludes visible labels');
+
+          const previousFetch = globalThis.fetch;
+          let requestCount = 0;
+          try {
+            installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
+              requestCount += 1;
+              equal(schemaName, 'pokemon_go_smart_hundo_form_verifier_v2');
+              equal(payload.model, 'gpt-4.1-mini');
+              equal(payload.temperature, 0.1);
+              equal(payload.messages[0].content[1].image_url.detail, 'high');
+              equal(payload.messages[0].content[1].image_url.url, 'data:image/png;base64,CONTACT_SHEET_ONLY');
+              deepEqual(payload.response_format.json_schema, HUNDO_FORM_VERIFIER_SCHEMA);
+              equal(Object.hasOwn(payload, 'reasoning_effort'), false);
+              const serializedPayload = JSON.stringify(payload);
+              equal(serializedPayload.includes('ORIGINAL_SCREENSHOT_SENTINEL'), false);
+              equal(serializedPayload.includes('INDIVIDUAL_CROP_SENTINEL'), false);
+              return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"cards":[]}' } }] }) };
+            });
+            const response = await requestSmartHundoFormVerification({
+              apiKey: 'test-key',
+              contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY',
+              verificationJobs: jobs,
+              requestOptions: { maxRetries: 1 }
+            });
+            deepEqual(response, { result: { cards: [] }, finish_reason: 'stop' });
+            equal(requestCount, 1);
+            const malformedJobSets = [
+              [{ ...jobs[0], screenshot_index: undefined }],
+              [{ ...jobs[0], screenshot_index: 0.5 }],
+              [{ ...jobs[0], tile_id: 'T0' }],
+              [{ ...jobs[0], card_id: '   ' }],
+              [{ ...jobs[0], base_species: '帕路奇亞' }],
+              [{ ...jobs[0], candidate_form_ids: ['dialga_origin', 'dialga_standard', 'uncertain'] }],
+              [{ ...jobs[0], candidate_form_ids: ['dialga_origin', 'uncertain'] }],
+              [jobs[0], { ...jobs[1], tile_id: 'T1' }],
+              Array.from({ length: 7 }, (_value, index) => ({ ...jobs[0], tile_id: `T${index + 1}`, card_id: `0:${index + 1}:1:1` }))
+            ];
+            for (const malformedJobs of malformedJobSets) {
+              await assertRejects(
+                requestSmartHundoFormVerification({
+                  apiKey: 'test-key',
+                  contactSheetDataUrl: 'data:image/png;base64,CONTACT_SHEET_ONLY',
+                  verificationJobs: malformedJobs,
+                  requestOptions: { maxRetries: 1 }
+                }),
+                'invalid form verification jobs'
+              );
+            }
+            equal(requestCount, 1, 'malformed jobs fail before a network request');
+
+            installStrictOpenAiFetchMock(async () => {
+              requestCount += 1;
+              return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '{not json}' } }] }) };
+            });
+            try {
+              await requestOpenAiJsonSchema('test-key', 'parse error contract', 'data:image/png;base64,CONTACT_SHEET_ONLY', HUNDO_FORM_VERIFIER_SCHEMA, null, {
+                model: HUNDO_FORM_VERIFY_MODEL,
+                imageDetail: 'high',
+                maxRetries: 2,
+                retryParseErrors: false
+              });
+              fail('parse errors with retryParseErrors=false must reject');
+            } catch (error) {
+              equal(error.reasonCode, 'openai_json_parse_error');
+            }
+            equal(requestCount, 2, 'retryParseErrors=false prevents a second malformed-response request');
+          } finally {
+            globalThis.fetch = previousFetch;
+          }
+        });
+
+        */
 
         const serializedLogs = JSON.stringify(loggedValues);
         equal(serializedLogs.includes('test-key'), false, 'logs omit the API key');

@@ -635,6 +635,7 @@
         };
 
         const OPENAI_MODEL = 'gpt-4.1-mini';
+        const HUNDO_FORM_VERIFY_MODEL = 'gpt-4.1-mini';
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
@@ -2206,7 +2207,83 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
 
 只輸出符合 JSON Schema 的 JSON，不得輸出 Markdown、說明或額外欄位。`;
 
-        const fileToOriginalDataUrl = (file) => new Promise((resolve, reject) => {
+        const fileToOriginalDataUrl = (file) => fileToOriginalDataUrlImplementation(file);
+
+        const isDenseExactArray = value => {
+            if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || Object.getOwnPropertySymbols(value).length !== 0) return false;
+            const propertyNames = Object.getOwnPropertyNames(value);
+            if (propertyNames.length !== value.length + 1 || !Object.hasOwn(value, 'length')) return false;
+            for (let index = 0; index < value.length; index++) {
+                if (!Object.hasOwn(value, String(index))) return false;
+            }
+            return true;
+        };
+
+        const isValidSmartHundoFormVerificationJobs = verificationJobs => {
+            const verifier = globalThis.SmartHundoFormVerifier;
+            const candidateMap = verifier?.VERIFIED_FORM_IDS_BY_BASE_SPECIES;
+            if (!isDenseExactArray(verificationJobs) || verificationJobs.length < 1 || verificationJobs.length > 6 || !candidateMap) return false;
+            const cardIds = new Set();
+            let screenshotIndex = null;
+            const jobKeys = ['tile_id', 'card_id', 'screenshot_index', 'base_species', 'candidate_form_ids'];
+            return verificationJobs.every((job, index) => {
+                if (!job || typeof job !== 'object' || Array.isArray(job) || Object.getPrototypeOf(job) !== Object.prototype) return false;
+                if (Object.getOwnPropertySymbols(job).length !== 0 || Object.getOwnPropertyNames(job).length !== jobKeys.length) return false;
+                if (!jobKeys.every(key => Object.hasOwn(job, key))) return false;
+                if (job.tile_id !== `T${index + 1}`) return false;
+                if (typeof job.card_id !== 'string' || !/^[A-Za-z0-9:_-]+$/.test(job.card_id) || cardIds.has(job.card_id)) return false;
+                if (!Number.isSafeInteger(job.screenshot_index) || job.screenshot_index < 0) return false;
+                if (screenshotIndex === null) screenshotIndex = job.screenshot_index;
+                if (job.screenshot_index !== screenshotIndex) return false;
+                const expectedCandidates = candidateMap[job.base_species];
+                if (!Array.isArray(expectedCandidates) || !isDenseExactArray(job.candidate_form_ids) || job.candidate_form_ids.length !== expectedCandidates.length) return false;
+                if (!job.candidate_form_ids.every((candidate, index) => candidate === expectedCandidates[index])) return false;
+                cardIds.add(job.card_id);
+                return true;
+            });
+        };
+
+        const buildSmartHundoFormVerifierPrompt = (verificationJobs, options = {}) => {
+            if (!isValidSmartHundoFormVerificationJobs(verificationJobs)) {
+                throw new Error('invalid form verification jobs');
+            }
+            const mappingLines = verificationJobs.map(job => (
+                `${job.tile_id} | card_id=${job.card_id} | base_species=${job.base_species} | candidates=${job.candidate_form_ids.join(',')}`
+            )).join('\n');
+            return `你是寶可夢 GO 指定形態的嚴格視覺驗證器。
+
+【通則】
+只從放大的寶可夢本體裁切圖辨識形態；每個 tile 都只有一個已知 base species。不得辨識 CP、名稱、異色、幸運、最愛、火箭隊狀態、背景或卡片數量。忽略殘留的 CP、地點、151515、96% 與暱稱文字。
+形態判定權威是本體結構、姿勢、四肢、手臂、比例、頸胸、獅子／月翼／結晶宿主、融合宿主及形態特有部位。顏色只能作為輔助，絕不可作為決定性依據。不清楚、太小或被裁切的決定性區域必須回傳 uncertain；絕不可因已知 base species 就預設為 standard 或 base。
+不得使用 CP、不得使用 暱稱、不得使用 visible label、不得使用 異色、不得使用 color shortcut。帝牙盧卡與帕路奇亞的顏色或異色絕不可作為形態捷徑；它們的顏色只能是輔助，絕不覆蓋本體結構證據。
+
+【帝牙盧卡】
+帝牙盧卡一般形態：粗壯、寬闊的四足身體，標準四腿，判斷頸部與胸部的厚實結構。短而緊湊的軀幹，不是高而窄的馬型身體；確認寬闊白色肩部／背部結構與正常頸胸比例。
+dialga_standard | body_plan=dialga_stocky_wide_quadruped | limb_layout=four_standard_legs | fusion_host=not_applicable | decisive_feature=dialga_standard_stocky_neck_chest
+帝牙盧卡起源形態：修長的馬型四足身體，四條長腿，判斷拉長的頸部與胸部結構。高而窄的馬型坐騎四足身體，長而細的肢體；確認拉長的頸部、喉部與胸部，不是粗壯緊湊身體。
+dialga_origin | body_plan=dialga_elongated_equine_quadruped | limb_layout=four_long_legs | fusion_host=not_applicable | decisive_feature=dialga_origin_elongated_neck_chest
+
+【帕路奇亞】
+帕路奇亞一般形態：直立雙足且有可見手臂，判斷兩手臂與兩腿。確認兩隻明顯正常手臂與兩隻腿，高度大於寬度，不是四足半人馬。
+palkia_standard | body_plan=palkia_upright_biped_with_arms | limb_layout=two_arms_two_legs | fusion_host=not_applicable | decisive_feature=palkia_standard_visible_arms
+帕路奇亞起源形態：半人馬式四足身體，四腿且沒有一般形態的手臂。確認四隻明顯腿、水平身體配置，沒有兩隻一般形態手臂，軀幹與四肢明顯不同。
+palkia_origin | body_plan=palkia_centaur_quadruped | limb_layout=four_legs_no_standard_arms | fusion_host=not_applicable | decisive_feature=palkia_origin_centaur_body
+
+【奈克洛茲瑪】
+奈克洛茲瑪一般形態：直立的結晶身體與直立結晶肢體。確認狹窄黑色結晶宿主與直立結晶肢體，不是獅子，沒有巨大的側向月翼。
+necrozma_base | body_plan=necrozma_upright_crystalline | limb_layout=upright_crystalline_limbs | fusion_host=none | decisive_feature=necrozma_base_crystal_body
+奈克洛茲瑪黃昏之鬃：四足獅子身體、獅子結晶裝甲，融合宿主是索爾迦雷歐。確認低而寬的四足獅子、四隻腿、黑色奈克洛茲瑪結晶裝甲，不是直立，沒有巨大翅膀。
+necrozma_dusk_mane | body_plan=necrozma_quadruped_lion | limb_layout=quadruped_lion | fusion_host=solgaleo | decisive_feature=necrozma_dusk_mane_lion_crystal_armor
+奈克洛茲瑪拂曉之翼：寬大的月翼、沒有獅子身體，融合宿主是露奈雅拉。確認巨大的側向蝙蝠／月翼主導寬度、露奈雅拉宿主、小型中央身體與黑色結晶結構，不是獅子也不是直立。
+necrozma_dawn_wings | body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings
+
+只輸出符合 schema 的 cards。每張卡必須回傳 tile_id、card_id、base_species 與所有證據欄位；只能從該 tile 的 candidates 選擇 verified_form_id 或 uncertain。
+
+【本次 tile 對應】
+${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查所有 tile，但仍只依本體證據輸出完整 cards。' : ''}`;
+        };
+
+        const fileToOriginalDataUrlImplementation = (file) => new Promise((resolve, reject) => {
             const supportedTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
             if (!supportedTypes.has(String(file?.type || '').toLowerCase())) {
                 reject(new Error('不支援的圖片格式，請選擇 PNG、JPEG、GIF 或 WebP 圖片。'));
@@ -2244,6 +2321,54 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 && bbox.y_max <= 1000
                 && bbox.x_min < bbox.x_max
                 && bbox.y_min < bbox.y_max;
+        };
+
+        const HUNDO_FORM_VERIFIER_SCHEMA = {
+            name: 'pokemon_go_smart_hundo_form_verifier_v2',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    cards: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            properties: {
+                                tile_id: { type: 'string' },
+                                card_id: { type: 'string' },
+                                base_species: { type: 'string' },
+                                verified_form_id: {
+                                    type: 'string',
+                                    enum: ['uncertain', 'dialga_standard', 'dialga_origin', 'palkia_standard', 'palkia_origin', 'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings']
+                                },
+                                verification_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                crop_visibility: { type: 'string', enum: ['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain'] },
+                                body_plan: {
+                                    type: 'string',
+                                    enum: ['uncertain', 'dialga_stocky_wide_quadruped', 'dialga_elongated_equine_quadruped', 'palkia_upright_biped_with_arms', 'palkia_centaur_quadruped', 'necrozma_upright_crystalline', 'necrozma_quadruped_lion', 'necrozma_wide_moon_wings']
+                                },
+                                limb_layout: {
+                                    type: 'string',
+                                    enum: ['uncertain', 'four_standard_legs', 'four_long_legs', 'two_arms_two_legs', 'four_legs_no_standard_arms', 'upright_crystalline_limbs', 'quadruped_lion', 'giant_wings_no_lion_body']
+                                },
+                                fusion_host: { type: 'string', enum: ['not_applicable', 'none', 'solgaleo', 'lunala', 'uncertain'] },
+                                decisive_feature: {
+                                    type: 'string',
+                                    enum: ['uncertain', 'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest', 'palkia_standard_visible_arms', 'palkia_origin_centaur_body', 'necrozma_base_crystal_body', 'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings']
+                                },
+                                key_features_visible: { type: 'boolean' }
+                            },
+                            required: [
+                                'tile_id', 'card_id', 'base_species', 'verified_form_id', 'verification_confidence',
+                                'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible'
+                            ]
+                        }
+                    }
+                },
+                required: ['cards']
+            }
         };
         const isSmartHundoCropCandidate = candidate => (
             !!candidate
@@ -2511,7 +2636,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
 
         const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater, options = {}) => {
             const payload = JSON.stringify({
-                model: OPENAI_MODEL,
+                model: options.model || OPENAI_MODEL,
                 temperature: 0.1,
                 messages: [{
                     role: 'user',
@@ -2549,19 +2674,55 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                         throw requestError;
                     }
 
-                    const data = await resp.json();
-                    const result = parseJsonText(parseOpenAIMessageContent(data));
+                    let data;
+                    let result;
+                    try {
+                        data = await resp.json();
+                        result = parseJsonText(parseOpenAIMessageContent(data));
+                    } catch (_parseFailure) {
+                        const parseError = new Error('OpenAI response JSON could not be parsed');
+                        parseError.reasonCode = 'openai_json_parse_error';
+                        throw parseError;
+                    }
                     if (!options.includeMetadata) return result;
                     return {
                         result,
                         finish_reason: String(data?.choices?.[0]?.finish_reason || '')
                     };
                 } catch (error) {
+                    if (error?.reasonCode === 'openai_json_parse_error' && options.retryParseErrors === false) throw error;
                     if (attempt === maxRetries) throw error;
                 }
             }
 
             return {};
+        };
+
+        const requestSmartHundoFormVerification = async ({
+            apiKey,
+            contactSheetDataUrl,
+            verificationJobs,
+            statusUpdater,
+            requestOptions = {}
+        } = {}) => {
+            if (typeof contactSheetDataUrl !== 'string' || !/^data:image\/png;base64,/.test(contactSheetDataUrl)) {
+                throw new Error('invalid form verification contact sheet');
+            }
+            const prompt = buildSmartHundoFormVerifierPrompt(verificationJobs);
+            return requestOpenAiJsonSchema(
+                apiKey,
+                prompt,
+                contactSheetDataUrl,
+                HUNDO_FORM_VERIFIER_SCHEMA,
+                statusUpdater,
+                {
+                    ...requestOptions,
+                    model: HUNDO_FORM_VERIFY_MODEL,
+                    imageDetail: 'high',
+                    includeMetadata: true,
+                    retryParseErrors: false
+                }
+            );
         };
 
         const safeTrainerTeamErrorSummary = (operationFailure, stage = 'trainer_team', reasonCode = 'trainer_team_request_failed') => {
