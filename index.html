@@ -634,6 +634,8 @@
         };
 
         const OPENAI_MODEL = 'gpt-4.1-mini';
+        const HUNDO_SMART_MODEL = 'gpt-5.4-mini';
+        const HUNDO_SMART_REASONING_EFFORT = 'medium';
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
@@ -1891,6 +1893,47 @@ ${outputTemplate}
 
 這張圖片已確認為 HUNDO_LEGENDARY_SCREEN，搜尋條件已確認為「${HUNDO_LEGENDARY_FILTER}」。禁止重新分類或更改搜尋條件。一次處理整張原始圖片，不得拆成每隻寶可夢的個別操作。
 
+【直接視覺辨識原則】
+
+你是 Pokémon GO 百神清單專用圖片辨識模型。請直接觀看完整原始圖片，辨識每一張卡片實際顯示的是哪一隻寶可夢，以及它的精確型態。
+
+主要答案必須來自你對圖片中 Pokémon GO 3D 寶可夢本體的直接視覺辨識。不要只抄寫 visible_label，也不要因為文字只顯示基礎物種名稱，就自動選擇普通型態。
+
+visible_label、CP、自訂暱稱、151515、100、96%、地名、縮寫與其他文字只能當作次要輔助證據。
+
+請直接辨識基礎物種、地區型態、起源型態、劍盾王之型態、奈克洛茲瑪合體型態、基格爾德百分比型態與酋雷姆融合型態。
+
+外觀描述只負責提醒容易混淆之處。外觀描述不是機械式分類規則，也不是 JavaScript 判斷公式。最終 form_id 必須來自你對實際圖片中寶可夢本體的整體辨識。
+
+若無法可靠確認型態：
+
+form_id = "uncertain"
+
+不得因為 visible_label 只顯示基礎物種，就退回 standard 或 base。
+
+【直接辨識失敗案例】
+
+【藏瑪然特】
+沒有巨大盾牌式頭頸鬃甲：form_id = zamazenta_standard
+具有巨大盾牌式頭頸和胸前裝甲：form_id = zamazenta_crowned
+不得只因紅、藍、金色就判成 Crowned。
+
+【帝牙盧卡】
+文字即使只寫「帝牙盧卡」，圖片若為起源型態：form_id = dialga_origin
+不得被 visible_label 帶回 dialga_standard。
+
+【帕路奇亞】
+文字即使只寫「帕路奇亞」，仍須直接辨識 palkia_standard 或 palkia_origin。
+
+【奈克洛茲瑪】
+文字可能全部只寫「奈克洛茲瑪」。普通：form_id = necrozma_base；四足獅型索爾迦雷歐合體：form_id = necrozma_dusk_mane；巨大月翼／露奈雅拉合體：form_id = necrozma_dawn_wings。
+
+【酋雷姆】
+文字可能只寫「酋雷姆」。普通：kyurem_base；萊希拉姆融合：kyurem_white；捷克羅姆融合：kyurem_black。看到黑色大型手臂、捷克羅姆式裝甲與發電機融合構造時，應辨識為 kyurem_black。
+
+【伽勒爾三神鳥】
+即使文字只顯示基礎名稱，仍須從圖片辨識普通或伽勒爾型態。
+
 【A. 完整卡片列舉與位置】
 掃描全圖由上到下、每列由左到右；超過 10 張仍必須繼續掃描到底部邊緣。完整可見與部分可見（包括任一邊緣被裁切）的卡片，每一張都各自輸出。detected_card_count 必須等於所有完整與部分可見卡片的總數；只有確實掃描完整張圖片才可填 scan_complete=true，只有確實檢查圖片最底部邊緣才可填 bottom_edge_checked=true。
 order、row、column 都從 1 開始並且每張卡片的座標組合必須唯一。不得把相鄰卡片合併，不得把相鄰卡片的符號或狀態轉移給本卡，也不得發明隱藏、畫面外或不存在的卡片。相同物種、CP 或標籤可能合法重複；合法重複的寶可夢仍是不同卡片，必須依各自位置分別輸出。
@@ -2282,9 +2325,9 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
         ]);
 
         const requestOpenAiJsonSchema = async (apiKey, prompt, dataUrl, jsonSchema, statusUpdater, options = {}) => {
-            const payload = JSON.stringify({
-                model: OPENAI_MODEL,
-                temperature: 0.1,
+            const requestModel = options.model || OPENAI_MODEL;
+            const requestPayload = {
+                model: requestModel,
                 messages: [{
                     role: 'user',
                     content: buildAiRequestContent(prompt, dataUrl, options.imageDetail || AI_IMAGE_DETAIL)
@@ -2293,7 +2336,13 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                     type: 'json_schema',
                     json_schema: jsonSchema
                 }
-            });
+            };
+            if (requestModel === HUNDO_SMART_MODEL) {
+                requestPayload.reasoning_effort = options.reasoningEffort || HUNDO_SMART_REASONING_EFFORT;
+            } else {
+                requestPayload.temperature = 0.1;
+            }
+            const payload = JSON.stringify(requestPayload);
 
             const maxRetries = options.maxRetries ?? 3;
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -2326,7 +2375,8 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                     if (!options.includeMetadata) return result;
                     return {
                         result,
-                        finish_reason: String(data?.choices?.[0]?.finish_reason || '')
+                        finish_reason: String(data?.choices?.[0]?.finish_reason || ''),
+                        returned_model: String(data?.model || '')
                     };
                 } catch (error) {
                     if (attempt === maxRetries) throw error;
@@ -2414,7 +2464,12 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             originalDataUrl,
             HUNDO_SMART_SCHEMA,
             statusUpdater,
-            { imageDetail: HUNDO_SMART_IMAGE_DETAIL, includeMetadata: true }
+            {
+                model: HUNDO_SMART_MODEL,
+                reasoningEffort: HUNDO_SMART_REASONING_EFFORT,
+                imageDetail: HUNDO_SMART_IMAGE_DETAIL,
+                includeMetadata: true
+            }
         );
 
         const requestSmartHundoWithStructuralRetry = async ({
@@ -2442,6 +2497,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 return {
                     result,
                     finish_reason: finishReason,
+                    returned_model: String(response?.returned_model || ''),
                     structure: helpers.validateSmartHundoStructure(result, finishReason)
                 };
             };
@@ -2513,7 +2569,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 const summary = safeSmartHundoErrorSummary(
                     cardSettlement.reason,
                     'hundo_cards',
-                    'smart_hundo_request_failed'
+                    'smart_hundo_model_request_failed'
                 );
                 requestFailures.push(summary);
                 if (isCurrentRun()) console.warn('Smart hundo operation failed', summary);
@@ -2552,7 +2608,11 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             ) {
                 manualReviewReasons.push('incomplete_card_enumeration');
             }
-            if (requestFailures.length > 0) manualReviewReasons.push('smart_hundo_request_failed');
+            if (cardSettlement.status === 'rejected') {
+                manualReviewReasons.push('smart_hundo_model_request_failed');
+            } else if (requestFailures.length > 0) {
+                manualReviewReasons.push('smart_hundo_request_failed');
+            }
 
             return {
                 imageIndex,
@@ -2565,6 +2625,11 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                     cards: validatedCards
                 },
                 finish_reason: cardExtraction?.finish_reason || '',
+                classification_model: OPENAI_MODEL,
+                hundo_count_model: OPENAI_MODEL,
+                smart_hundo_requested_model: HUNDO_SMART_MODEL,
+                smart_hundo_returned_model: cardExtraction?.returned_model || '',
+                smart_hundo_reasoning_effort: HUNDO_SMART_REASONING_EFFORT,
                 structure: cardExtraction?.structure || helpers.validateSmartHundoStructure(cardResult, ''),
                 structural_retry_used: cardExtraction?.structural_retry_used === true,
                 structural_retry_reason: cardExtraction?.structural_retry_reason || [],
@@ -3164,6 +3229,11 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                             scan_complete: result.card_result.scan_complete,
                             bottom_edge_checked: result.card_result.bottom_edge_checked,
                             finish_reason: result.finish_reason,
+                            classification_model: result.classification_model,
+                            hundo_count_model: result.hundo_count_model,
+                            smart_hundo_requested_model: result.smart_hundo_requested_model,
+                            smart_hundo_returned_model: result.smart_hundo_returned_model,
+                            smart_hundo_reasoning_effort: result.smart_hundo_reasoning_effort,
                             structural_retry_used: result.structural_retry_used,
                             structural_retry_reason: result.structural_retry_reason,
                             cards: result.card_result.cards

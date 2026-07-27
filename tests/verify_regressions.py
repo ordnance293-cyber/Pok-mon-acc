@@ -364,6 +364,16 @@ def main() -> int:
         "hundo-count prompt",
         include_end=False,
     )
+    openai_request = ordinary_function_span(
+        source,
+        "        const requestOpenAiJsonSchema =",
+        "model-aware OpenAI request wrapper",
+    )
+    smart_hundo_request = ordinary_function_span(
+        source,
+        "        const requestSmartHundoExtractionV2 =",
+        "Smart Hundo request wrapper",
+    )
     safe_error_summary = source_span(
         source,
         "        const safeSmartHundoErrorSummary =",
@@ -549,6 +559,8 @@ def main() -> int:
                 "OpenAI endpoint",
             ),
             require_fragment(source, "const OPENAI_MODEL = 'gpt-4.1-mini';", "OpenAI model"),
+            require_fragment(source, "const HUNDO_SMART_MODEL = 'gpt-5.4-mini';", "Smart Hundo model"),
+            require_fragment(source, "const HUNDO_SMART_REASONING_EFFORT = 'medium';", "Smart Hundo reasoning"),
             require_fragment(source, "const AI_MAX_IMAGE_SIZE = 1000;", "maximum image size"),
             require_fragment(source, "const AI_JPEG_QUALITY = 0.7;", "JPEG quality"),
             require_fragment(source, "const AI_IMAGE_DETAIL = 'auto';", "normal image detail"),
@@ -557,6 +569,20 @@ def main() -> int:
                 "canvas.toDataURL('image/jpeg', AI_JPEG_QUALITY)",
                 "ordinary JPEG conversion",
             ),
+        ]),
+        ("OpenAI wrapper routes Smart Hundo without an ordinary-model fallback", lambda: [
+            require_fragment(openai_request, "const requestModel = options.model || OPENAI_MODEL;", "request model override"),
+            require_fragment(openai_request, "requestPayload.reasoning_effort", "Smart Hundo reasoning payload"),
+            require_fragment(openai_request, "requestPayload.temperature = 0.1;", "ordinary temperature payload"),
+            require_fragment(smart_hundo_request, "model: HUNDO_SMART_MODEL", "Smart Hundo model route"),
+            require_fragment(smart_hundo_request, "reasoningEffort: HUNDO_SMART_REASONING_EFFORT", "Smart Hundo reasoning route"),
+            assert_forbidden(smart_hundo_request, ("OPENAI_MODEL",), "Smart Hundo wrapper fallback"),
+        ]),
+        ("Smart Hundo prompt makes direct full-image recognition primary", lambda: [
+            require_fragment(source, "【直接視覺辨識原則】", "direct recognition prompt"),
+            require_fragment(source, "文字只能當作次要輔助證據", "secondary label guidance"),
+            require_fragment(source, "不得因為 visible_label 只顯示基礎物種，就退回 standard 或 base", "no generic-label fallback"),
+            require_fragment(source, "不得被 visible_label 帶回 dialga_standard", "Dialga direct-recognition example"),
         ]),
         ("API-key settings keep their current and legacy storage keys", lambda: [
             require_fragment(source, "elementId: 'openaiApiKey', storageKey: 'OPENAI_API_KEY'", "API-key setting"),
