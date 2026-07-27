@@ -3258,6 +3258,9 @@
         const ordinaryResult = await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA, null);
         equal(ordinaryResult.detected_card_count, 0);
         equal(Object.hasOwn(ordinaryResult, 'result'), false, 'ordinary callers retain parsed-object return');
+        equal(lastPayload.model, 'gpt-4.1-mini', 'ordinary extraction uses the ordinary model');
+        equal(lastPayload.temperature, 0.1, 'ordinary extraction keeps temperature');
+        equal(Object.hasOwn(lastPayload, 'reasoning_effort'), false, 'ordinary extraction excludes reasoning effort');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'auto');
         equal(JSON.stringify(lastPayload).includes('test-key'), false);
         equal(HUNDO_SMART_IMAGE_DETAIL, 'high');
@@ -3301,6 +3304,9 @@
         equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_count_extractor');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
         equal(lastPayload.messages[0].content[1].image_url.url.startsWith('data:image/png'), true);
+        equal(lastPayload.model, 'gpt-4.1-mini', 'Hundo count uses the ordinary model');
+        equal(lastPayload.temperature, 0.1, 'Hundo count keeps ordinary temperature');
+        equal(Object.hasOwn(lastPayload, 'reasoning_effort'), false, 'Hundo count excludes reasoning effort');
         deepEqual({
           schema: lastPayload.response_format.json_schema,
           prompt: lastPayload.messages[0].content[0].text,
@@ -3485,7 +3491,13 @@
             'color=light_blue／light_cyan', 'shape=purple_flame／purple_smoke／shadow_aura',
             'badge_type=commemorative_location_badge', 'badge_type=special_background_badge',
             'region_visibility', 'clear', 'partially_occluded', 'cropped',
-            '顏色或身體顏色本身永遠不足'
+            '顏色或身體顏色本身永遠不足',
+            '【直接視覺辨識原則】', '主要答案必須來自你對圖片中 Pokémon GO 3D 寶可夢本體的直接視覺辨識',
+            '文字只能當作次要輔助證據', '外觀描述不是機械式分類規則，也不是 JavaScript 判斷公式',
+            '不得因為 visible_label 只顯示基礎物種，就退回 standard 或 base',
+            '【藏瑪然特】', '不得只因紅、藍、金色就判成 Crowned',
+            '【帝牙盧卡】', '不得被 visible_label 帶回 dialga_standard',
+            '【帕路奇亞】', '【奈克洛茲瑪】', '【酋雷姆】', '【伽勒爾三神鳥】'
           ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `V2 smart prompt protects ${fragment}`));
           const b2 = smartPrompt.slice(
             smartPrompt.indexOf('【B2. 基礎物種與型態辨識】'),
@@ -3610,6 +3622,9 @@
           equal(attempts.length, 2, 'one logical retry makes exactly two extraction calls');
           attempts.forEach(({ payload, schemaName }) => {
             equal(schemaName, 'pokemon_go_hundo_smart_extractor_v2');
+            equal(payload.model, 'gpt-5.4-mini', 'both complete-image attempts use the Smart Hundo model');
+            equal(payload.reasoning_effort, 'medium', 'both complete-image attempts use medium reasoning');
+            equal(Object.hasOwn(payload, 'temperature'), false, 'Smart Hundo never sends temperature');
             equal(payload.messages[0].content[1].image_url.url, originalDataUrl);
             equal(payload.messages[0].content[1].image_url.detail, 'high');
           });
@@ -4815,6 +4830,11 @@
             'HUNDO_LEGENDARY_SCREEN'
           ], 'raw OTHER exact query is canonicalized before partition');
           equal(window.lastSmartHundoDiagnostics.screenshots[1].cards[0].effective_states.rocket, 'purified');
+          const routedSmartScreenshot = window.lastSmartHundoDiagnostics.screenshots[0];
+          equal(routedSmartScreenshot.classification_model, 'gpt-4.1-mini');
+          equal(routedSmartScreenshot.hundo_count_model, 'gpt-4.1-mini');
+          equal(routedSmartScreenshot.smart_hundo_requested_model, 'gpt-5.4-mini');
+          equal(routedSmartScreenshot.smart_hundo_reasoning_effort, 'medium');
           equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
           equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
           equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
@@ -5325,8 +5345,8 @@
 
           equal(document.getElementById('st_hundo_leg').value, '3', 'validated count replaces independently');
           equal(document.getElementById('g_hundos').value, '手動保留清單', 'failed card scan never promotes an old or partial AI list');
-          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_request_failed), true);
-          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_request_failed'), true);
+          equal(document.getElementById('aiAutoStatus').textContent.includes(HUNDO_REVIEW_REASON_MESSAGES.smart_hundo_model_request_failed), true);
+          equal(window.lastSmartHundoDiagnostics.manual_review_reasons.includes('smart_hundo_model_request_failed'), true);
           equal(window.lastSmartHundoDiagnostics, window.lastSmartHundoScanResult);
           const serializedFailureLogs = JSON.stringify(loggedValues.slice(errorLogStart));
           equal(serializedFailureLogs.includes('SECRET_ERROR_NAME'), false, 'secret-shaped error names never reach logs');
