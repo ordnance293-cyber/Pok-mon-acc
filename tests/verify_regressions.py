@@ -20,7 +20,6 @@ SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
 TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
 MANUAL_V2_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
 MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
-FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-crop-form-verifier-v2.md"
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
 EXTRACTION_PROMPT_HASH = "1b061471ee97eeb1f6e0e9061acc8d6150b386fe6b46e4350b23b658a708b669"
@@ -41,8 +40,8 @@ HUNDO_COUNT_PROMPT_HASH = "d93623450e28e7da3672ed22cd9b5c4b7a2f6d2cdb5609e58f463
 HUNDO_COUNT_PROMPT_LENGTH = 856
 TRAINER_TEAM_HELPERS_HASH = "bb34294f7f5359292add2cb930f73250b5eb91e5037f90e9fefd63e3c193aa18"
 TRAINER_TEAM_HELPERS_LENGTH = 12158
-SMART_HUNDO_SCHEMA_HASH = "986099dc9a5e099c6ba3a1169ee9c0f1577a3a728ad52703b1a225da33828c94"
-SMART_HUNDO_SCHEMA_LENGTH = 13797
+SMART_HUNDO_SCHEMA_HASH = "35636fba67d8b7e27f26c6cec802ff9fa1645eed647a8487dbba8eee2954a203"
+SMART_HUNDO_SCHEMA_LENGTH = 12032
 
 
 def normalized_source(path: Path) -> str:
@@ -202,61 +201,6 @@ def assert_manual_v2_acceptance_doc() -> None:
         require_fragment(document, fragment, "manual acceptance document")
 
 
-def assert_form_verifier_manual_acceptance_doc() -> None:
-    if not FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC.is_file():
-        raise AssertionError(f"form verifier manual acceptance document does not exist: {FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC}")
-    document = normalized_source(FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC)
-    for fragment in (
-        "CP is an anonymized card-position locator only and must not be used as a recognition feature.",
-        "CP 4634", "CP 2914", "CP 2624", "necrozma_dawn_wings", "necrozma_dusk_mane", "necrozma_base",
-        "CP 2882", "CP 2311", "CP 2823", "dialga_origin", "dialga_standard",
-        "CP 2223", "CP 2225", "CP 2255", "palkia_origin", "palkia_standard",
-        "upright crystal vs lion vs wide moon wings",
-        "stocky vs elongated equine",
-        "upright biped with arms vs centaur quadruped",
-        "full commit SHA", "anonymized image ID", "CP locator", "base species", "primary form",
-        "primary confidence", "bbox", "bbox confidence", "tile ID", "verified form",
-        "verification confidence", "body plan", "limb layout", "fusion host", "decisive feature",
-        "final effective form", "canonical name", "pass/fail", "failure summary", "NOT RUN",
-    ):
-        require_fragment(document, fragment, "form verifier manual acceptance document")
-    if "data:image/" in document or "base64," in document:
-        raise AssertionError("form verifier manual acceptance document must not contain image data")
-
-
-def assert_task7_safe_diagnostics_and_status(source: str, helpers_source: str) -> None:
-    diagnostics = source_span(
-        helpers_source,
-        "    const diagnosticCard =",
-        "\n\n    const validateSmartHundoStructure =",
-        "smart diagnostics shaper and card allowlist",
-        include_end=False,
-    )
-    for fragment in (
-        "primary_form_id", "primary_effective_form_id", "primary_form_confidence",
-        "card_bbox", "pokemon_bbox", "bbox_confidence", "bbox_visibility", "crop_source_size",
-        "contact_sheet_id", "tile_id", "verified_form_id", "verification_confidence",
-        "verification_evidence", "target_candidate_count", "target_verified_count",
-        "target_review_card_count", "contact_sheet_count", "verifier_request_count",
-        "verifier_structural_retry_count", "form_verify_model",
-    ):
-        require_fragment(diagnostics, fragment, "Task 7 safe diagnostics")
-    assert_forbidden_identifiers(diagnostics, ("apiKey", "dataUrl", "request", "response", "payload", "headers", "File"), "Task 7 diagnostics")
-    for fragment in (
-        "form_crop_missing", "form_crop_not_clear", "form_crop_too_small",
-        "form_verifier_uncertain", "form_verifier_low_confidence", "form_verifier_species_mismatch",
-        "form_verifier_evidence_mismatch", "form_verifier_invalid_result",
-        "form_verifier_structural_incomplete", "form_verification_request_failed",
-    ):
-        require_fragment(helpers_source, fragment, "Task 7 review-reason contract")
-    for fragment in (
-        "百神掃描完成：辨識${recognizedCount}張卡片；型態複核${targetVerifiedCount}張",
-        "百神掃描完成：辨識${recognizedCount}張卡片；${targetReviewCardCount}張型態需人工確認",
-        "百神清單已完成部分辨識；特殊型態複核失敗，請人工確認",
-    ):
-        require_fragment(source, fragment, "Task 7 status contract")
-
-
 def assert_hundo_form_schema(smart_schema: str) -> None:
     expected_form_ids = [
         "not_applicable", "uncertain", "unsupported",
@@ -285,22 +229,6 @@ def assert_hundo_form_schema(smart_schema: str) -> None:
         raise AssertionError("smart hundo cards must not impose maxItems")
     for field in ("base_species", "form_id", "form_confidence", "form_evidence"):
         require_fragment(smart_schema, f"{field}:", "smart hundo form schema")
-
-
-def assert_hundo_bbox_schema(smart_schema: str) -> None:
-    for field in ("card_bbox", "pokemon_bbox"):
-        require_fragment(smart_schema, f"{field}: {{", "smart hundo bbox schema")
-    for fragment in (
-        "x_min: { type: 'integer', minimum: 0, maximum: 1000 }",
-        "y_min: { type: 'integer', minimum: 0, maximum: 1000 }",
-        "x_max: { type: 'integer', minimum: 0, maximum: 1000 }",
-        "y_max: { type: 'integer', minimum: 0, maximum: 1000 }",
-        "bbox_confidence: { type: 'number', minimum: 0, maximum: 1 }",
-        "bbox_visibility: { type: 'string', enum: ['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain'] }",
-    ):
-        require_fragment(smart_schema, fragment, "smart hundo bbox schema")
-    for field in ("card_bbox", "pokemon_bbox", "bbox_confidence", "bbox_visibility"):
-        require_fragment(smart_schema, f"'{field}'", "smart hundo bbox required fields")
 
 
 def assert_script_before_module(source: str, script_name: str) -> None:
@@ -464,10 +392,6 @@ def main() -> int:
     ))
 
     checks.extend([
-        ("smart hundo form verifier loads before the production module", lambda: assert_script_before_module(
-            source,
-            "smart-hundo-form-verifier.js",
-        )),
         ("trainer-team helper loads before the production module", lambda: assert_script_before_module(
             source,
             "trainer-team-helpers.js",
@@ -634,20 +558,6 @@ def main() -> int:
                 "ordinary JPEG conversion",
             ),
         ]),
-        ("limited-candidate form verifier request remains isolated and strict", lambda: [
-            require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-4.1-mini';", "verifier model"),
-            require_fragment(source, "const HUNDO_FORM_VERIFIER_SCHEMA = {", "verifier schema"),
-            require_fragment(
-                source,
-                "name: 'pokemon_go_smart_hundo_form_verifier_v2'",
-                "verifier schema name",
-            ),
-            require_fragment(source, "const buildSmartHundoFormVerifierPrompt =", "verifier prompt"),
-            require_fragment(source, "const requestSmartHundoFormVerification = async", "verifier request"),
-            require_fragment(source, "model: options.model || OPENAI_MODEL", "optional request model"),
-            require_fragment(source, "retryParseErrors === false", "parse retry option"),
-            require_fragment(source, "openai_json_parse_error", "parse retry reason code"),
-        ]),
         ("API-key settings keep their current and legacy storage keys", lambda: [
             require_fragment(source, "elementId: 'openaiApiKey', storageKey: 'OPENAI_API_KEY'", "API-key setting"),
             require_fragment(source, "legacyStorageKeys: ['geminiApiKey']", "legacy API-key setting"),
@@ -697,7 +607,6 @@ def main() -> int:
             require_fragment(smart_schema, "rocket_state:", "V2 rocket dimension"),
             require_fragment(smart_schema, "background_type:", "V2 background dimension"),
             assert_hundo_form_schema(smart_schema),
-            assert_hundo_bbox_schema(smart_schema),
             assert_forbidden_identifiers(
                 smart_schema,
                 ("hundo_leg", "shadow_state", "purified_state", "global"),
@@ -747,8 +656,6 @@ def main() -> int:
         ]),
         ("manual V2 acceptance document preserves pipeline cases", assert_manual_v2_acceptance_doc),
         ("manual V1 form acceptance document has pending real-image cases", assert_manual_v1_form_acceptance_doc),
-        ("Task 7 safe diagnostics and status remain allowlisted", lambda: assert_task7_safe_diagnostics_and_status(source, helpers_source)),
-        ("form verifier manual acceptance document is private and pending", assert_form_verifier_manual_acceptance_doc),
     ])
 
     failures: list[str] = []
