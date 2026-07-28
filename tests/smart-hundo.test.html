@@ -916,25 +916,25 @@
         test('preserves dedicated evidence, CP text, and review fields on normalized cards', () => {
           const normalized = normalizeSmartHundoCard(card({
             cp: 3104,
-            shiny_evidence: sparkleEvidence({ position: 'around_pokemon', color: 'blue_black', shape: 'other' }),
+            shiny_evidence: sparkleEvidence({ position: 'lower_left', color: 'blue_black', shape: 'other' }),
             lucky_evidence: luckyEvidence({ present: true, position: 'behind_pokemon', appearance: 'large_gold_shimmering_background' }),
             favorite_evidence: appearanceEvidence({ present: true, position: 'upper_right', appearance: 'other' }),
-            rocket_evidence: rocketEvidence({ present: true, position: 'lower_side', color: 'light_blue', shape: 'purification_starburst' }),
+            rocket_evidence: rocketEvidence({ present: true, position: 'lower_left', color: 'light_blue', shape: 'purification_starburst' }),
             background_evidence: backgroundEvidence({
               present: true,
-              position: 'near_pokemon_or_card_background',
+              position: 'lower_right',
               badge_type: 'special_background_badge',
               appearance: 'event_special_background'
             })
           }), normalizeName, { screenshotIndex: 2 });
           equal(normalized.cp, '3104');
-          deepEqual(normalized.shiny_evidence, sparkleEvidence({ position: 'around_pokemon', color: 'blue_black', shape: 'other' }));
+          deepEqual(normalized.shiny_evidence, sparkleEvidence({ position: 'lower_left', color: 'blue_black', shape: 'other' }));
           deepEqual(normalized.lucky_evidence, luckyEvidence({ present: true, position: 'behind_pokemon', appearance: 'large_gold_shimmering_background' }));
           deepEqual(normalized.favorite_evidence, appearanceEvidence({ present: true, position: 'upper_right', appearance: 'other' }));
-          deepEqual(normalized.rocket_evidence, rocketEvidence({ present: true, position: 'lower_side', color: 'light_blue', shape: 'purification_starburst' }));
+          deepEqual(normalized.rocket_evidence, rocketEvidence({ present: true, position: 'lower_left', color: 'light_blue', shape: 'purification_starburst' }));
           deepEqual(normalized.background_evidence, backgroundEvidence({
             present: true,
-            position: 'near_pokemon_or_card_background',
+            position: 'lower_right',
             badge_type: 'special_background_badge',
             appearance: 'event_special_background'
           }));
@@ -978,7 +978,7 @@
           equal(isValidShinyEvidence(cyanPurificationEvidence()), false, 'purification sparkle is not shiny');
           equal(isValidShinyEvidence(sparkleEvidence({
             present: true,
-            position: 'around_pokemon',
+            position: 'lower_left',
             color: 'dark_blue',
             shape: 'multiple_four_point_sparkles'
           })), false, 'sparkles outside the CP area are not shiny evidence');
@@ -1008,13 +1008,13 @@
           equal(deriveRocketStateFromEvidence(cyanPurificationEvidence()), 'purified');
           equal(deriveRocketStateFromEvidence(rocketEvidence({
             present: true,
-            position: 'lower_side',
+            position: 'lower_left',
             color: 'light_blue',
             shape: 'purification_starburst'
           })), 'purified');
           equal(deriveRocketStateFromEvidence(rocketEvidence({
             present: true,
-            position: 'around_pokemon',
+            position: 'lower_left',
             color: 'purple',
             shape: 'shadow_aura'
           })), 'shadow');
@@ -1026,7 +1026,7 @@
           })), 'shadow');
           equal(deriveRocketStateFromEvidence(rocketEvidence({
             present: true,
-            position: 'lower_side',
+            position: 'lower_left',
             color: 'purple',
             shape: 'shadow_aura'
           })), 'uncertain', 'lower-side shadow evidence is not an approved pattern');
@@ -1034,19 +1034,19 @@
 
           equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
             present: true,
-            position: 'near_pokemon_or_card_background',
+            position: 'lower_right',
             badge_type: 'commemorative_location_badge',
             appearance: 'location_style_background'
           })), 'commemorative');
           equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
             present: true,
-            position: 'near_pokemon_or_card_background',
+            position: 'lower_right',
             badge_type: 'special_background_badge',
             appearance: 'event_special_background'
           })), 'special');
           equal(deriveBackgroundTypeFromEvidence(backgroundEvidence({
             present: true,
-            position: 'near_pokemon_or_card_background',
+            position: 'lower_right',
             badge_type: 'commemorative_location_badge',
             appearance: 'event_special_background'
           })), 'uncertain', 'mixed background evidence cannot infer a type');
@@ -1100,7 +1100,7 @@
               evidenceKey: 'rocket_evidence',
               evidence: rocketEvidence({
                 present: true,
-                position: 'around_pokemon',
+                position: 'lower_left',
                 color: 'purple',
                 shape: 'purple_smoke'
               })
@@ -1113,7 +1113,7 @@
               evidenceKey: 'background_evidence',
               evidence: backgroundEvidence({
                 present: true,
-                position: 'near_pokemon_or_card_background',
+                position: 'lower_right',
                 badge_type: 'special_background_badge',
                 appearance: 'event_special_background'
               })
@@ -1183,7 +1183,7 @@
             rocket_confidence: 0.98,
             rocket_evidence: rocketEvidence({
               present: true,
-              position: 'around_pokemon',
+              position: 'lower_left',
               color: 'purple',
               shape: 'purple_flame'
             })
@@ -1228,7 +1228,7 @@
               background_type: 'commemorative',
               background_evidence: backgroundEvidence({
                 present: true,
-                position: 'near_pokemon_or_card_background',
+                position: 'lower_right',
                 badge_type: 'special_background_badge',
                 appearance: 'event_special_background'
               })
@@ -1331,7 +1331,7 @@
             background_confidence: 0.99,
             background_evidence: backgroundEvidence({
               present: true,
-              position: 'near_pokemon_or_card_background',
+              position: 'lower_right',
               badge_type: 'commemorative_location_badge',
               appearance: 'location_style_background'
             })
@@ -1353,7 +1353,7 @@
           ));
           const belowConversion = effectiveSmartHundoCardsToPokemonList([belowThreshold]);
           const atConversion = effectiveSmartHundoCardsToPokemonList([atThreshold]);
-          equal(belowConversion.pokemon_list, '');
+          equal(belowConversion.pokemon_list, '待確認（CP1234）');
           equal(belowConversion.review_reason_counts.species_uncertain, 1);
           equal(atConversion.pokemon_list, HUNDO_FORM_CANONICAL_NAMES.moltres_galarian);
         });
@@ -1717,7 +1717,7 @@
           const conversion = effectiveSmartHundoCardsToPokemonList([unresolved]);
           const summary = summarizeHundoManualReview([unresolved]);
           equal(buildHundoDisplayName(unresolved), '');
-          equal(conversion.pokemon_list, '');
+          equal(conversion.pokemon_list, '待確認（CP1234）');
           deepEqual(summary.review_reason_counts, { form_uncertain: 1 });
           equal(summary.review_card_count, 1);
           equal(summary.review_reason_counts.species_uncertain, undefined);
@@ -1736,7 +1736,7 @@
           const conversion = effectiveSmartHundoCardsToPokemonList([
             validatedCard({ official_name: '固拉多', effective_shiny_state: 'uncertain' })
           ]);
-          equal(conversion.pokemon_list, '固拉多');
+          equal(conversion.pokemon_list, '待確認（CP1234）');
           equal(conversion.pokemon_list.includes('色違固拉多'), false);
           equal(conversion.review_reason_counts.shiny_uncertain, 1);
         });
@@ -2360,7 +2360,7 @@
                 rocket: cyanPurificationEvidence(),
                 background: backgroundEvidence({
                   present: true,
-                  position: 'near_pokemon_or_card_background',
+                  position: 'lower_right',
                   badge_type: 'special_background_badge',
                   appearance: 'event_special_background'
                 })
@@ -3460,17 +3460,17 @@
           equal(evidenceSchema.required.includes('region_visibility'), true, `${field} requires visibility`);
           deepEqual(evidenceSchema.required, Object.keys(evidenceSchema.properties), `${field} requires every property`);
         });
-        deepEqual(smartCardSchema.properties.shiny_evidence.properties.position.enum, ['none', 'cp_area', 'lower_left', 'upper_right', 'around_pokemon', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.shiny_evidence.properties.position.enum, ['none', 'cp_area', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.shiny_evidence.properties.color.enum, ['none', 'dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal', 'light_cyan', 'yellow', 'purple', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.shiny_evidence.properties.shape.enum, ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'five_point_star', 'flame_or_smoke', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.lucky_evidence.properties.position.enum, ['none', 'behind_pokemon', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.lucky_evidence.properties.appearance.enum, ['none', 'large_gold_shimmering_background', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.favorite_evidence.properties.position.enum, ['none', 'upper_right', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.favorite_evidence.properties.appearance.enum, ['none', 'filled_yellow_five_point_star', 'other', 'uncertain']);
-        deepEqual(smartCardSchema.properties.rocket_evidence.properties.position.enum, ['none', 'lower_left', 'lower_side', 'around_pokemon', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.rocket_evidence.properties.position.enum, ['none', 'lower_left', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.rocket_evidence.properties.color.enum, ['none', 'light_blue', 'light_cyan', 'purple', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.rocket_evidence.properties.shape.enum, ['none', 'single_radial_sparkle', 'purification_starburst', 'flower_like_symbol', 'purple_flame', 'purple_smoke', 'shadow_aura', 'other', 'uncertain']);
-        deepEqual(smartCardSchema.properties.background_evidence.properties.position.enum, ['none', 'near_pokemon_or_card_background', 'other', 'uncertain']);
+        deepEqual(smartCardSchema.properties.background_evidence.properties.position.enum, ['none', 'lower_right', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.background_evidence.properties.badge_type.enum, ['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain']);
         deepEqual(smartCardSchema.properties.background_evidence.properties.appearance.enum, ['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
         test('stages the complete V2 enumeration, species, and five-evidence prompt', () => {

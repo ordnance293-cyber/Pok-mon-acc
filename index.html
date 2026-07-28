@@ -1011,7 +1011,7 @@
                                     properties: {
                                         present: { type: 'boolean' },
                                         region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
-                                        position: { type: 'string', enum: ['none', 'cp_area', 'lower_left', 'upper_right', 'around_pokemon', 'other', 'uncertain'] },
+                                        position: { type: 'string', enum: ['none', 'cp_area', 'other', 'uncertain'] },
                                         color: { type: 'string', enum: ['none', 'dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal', 'light_cyan', 'yellow', 'purple', 'other', 'uncertain'] },
                                         shape: { type: 'string', enum: ['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'five_point_star', 'flame_or_smoke', 'other', 'uncertain'] }
                                     },
@@ -1048,7 +1048,7 @@
                                     properties: {
                                         present: { type: 'boolean' },
                                         region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
-                                        position: { type: 'string', enum: ['none', 'lower_left', 'lower_side', 'around_pokemon', 'other', 'uncertain'] },
+                                        position: { type: 'string', enum: ['none', 'lower_left', 'other', 'uncertain'] },
                                         color: { type: 'string', enum: ['none', 'light_blue', 'light_cyan', 'purple', 'other', 'uncertain'] },
                                         shape: { type: 'string', enum: ['none', 'single_radial_sparkle', 'purification_starburst', 'flower_like_symbol', 'purple_flame', 'purple_smoke', 'shadow_aura', 'other', 'uncertain'] }
                                     },
@@ -1061,7 +1061,7 @@
                                     properties: {
                                         present: { type: 'boolean' },
                                         region_visibility: { type: 'string', enum: ['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain'] },
-                                        position: { type: 'string', enum: ['none', 'near_pokemon_or_card_background', 'other', 'uncertain'] },
+                                        position: { type: 'string', enum: ['none', 'lower_right', 'other', 'uncertain'] },
                                         badge_type: { type: 'string', enum: ['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain'] },
                                         appearance: { type: 'string', enum: ['none', 'location_style_background', 'event_special_background', 'other', 'uncertain'] }
                                     },
@@ -2144,23 +2144,35 @@ visual_signature = "uncertain"
 
 只輸出 strict JSON，不要輸出推理過程或額外說明。
 
-【C. 五維狀態 evidence 共通規則】
-shiny、lucky、favorite、rocket、background 五個狀態必須逐卡獨立判斷，證據只能歸屬同一張卡。每一個 evidence object 都必須明確填 region_visibility：區域完整可判讀填 clear，被遮擋填 partially_occluded，位於裁切邊緣填 cropped，不可見填 not_visible，仍無法判斷填 uncertain。只有 region_visibility=clear 且沒有相符正向證據時，才可輸出 no、normal 或 none；partially_occluded、cropped、not_visible 或 uncertain 不得建立負向狀態。顏色或身體顏色本身永遠不足。
+【狀態辨識順序】
 
-【D. shiny_evidence】
-色違 yes 需要同卡 CP area 的 dark-blue／teal 的 multiple_four_point_sparkles，也就是 position=cp_area、color=dark_blue／blue_black／teal_blue／dark_blue_teal、shape=multiple_four_point_sparkles；只靠寶可夢身體顏色不足。light-cyan 單一 radial sparkle 是淨化線索，不是色違；相鄰卡片、背景或最愛星號不得轉移。
+每張卡片必須依序：
 
-【E. lucky_evidence】
-亮晶晶 yes 需要同卡寶可夢後方的大面積 large_gold_shimmering_background，也就是 position=behind_pokemon、appearance=large_gold_shimmering_background。單一黃色星星、一般黃色或身體顏色都不是亮晶晶證據。
+1. 確認卡片範圍。
+2. 確認圖示屬於該卡片。
+3. 確認圖示在卡片中的相對位置。
+4. 由位置決定狀態候選類別。
+5. 最後才用顏色、圖形、徽章或背景外觀確認細項。
 
-【F. favorite_evidence】
-我的最愛 yes 需要同卡 upper-right 的 filled_yellow_five_point_star，也就是 position=upper_right、appearance=filled_yellow_five_point_star。深藍四角閃光、其他徽章或相鄰卡片星號都不是最愛證據。
+固定位置：
 
-【G. rocket_evidence】
-淨化 purified 需要同卡 lower-side／lower-left 的 light-cyan 的 radial／starburst 淨化證據：position=lower_left／lower_side、color=light_blue／light_cyan、shape=single_radial_sparkle／purification_starburst／flower_like_symbol。暗影 shadow 需要同卡 lower-left 或身體周圍的 purple flame／smoke／aura：color=purple、shape=purple_flame／purple_smoke／shadow_aura。紫色身體、藍色身體或相鄰卡片效果本身不足。raw 狀態與 evidence 衝突時填 uncertain，不得在兩者之間猜測。
+CP附近＝色違
+右上角＝我的最愛
+左下角＝暗影或淨化
+右下角＝紀念背卡或特別背卡
 
-【H. background_evidence】
-紀念背卡 commemorative 需要實際 commemorative／location badge 與相符 location background，即 badge_type=commemorative_location_badge、appearance=location_style_background。特殊背卡 special 需要實際 event-special badge／background，即 badge_type=special_background_badge、appearance=event_special_background。只有顏色、一般背景或相鄰卡片裝飾不足；證據不可靠時填 uncertain。
+圖示不在正確位置時，即使顏色或形狀相似，也不得判成該狀態。不得在相鄰卡片之間轉移任何證據；每張卡片的每個狀態區域都必須獨立檢查。
+
+五個狀態 evidence 必須逐卡獨立判斷。每一個 evidence object 都必須填 region_visibility。只有指定區域 clear、present=false、position=none，且該狀態所有視覺欄位均為 none 時才可輸出 no、normal 或 none；partially_occluded、cropped、not_visible 或 uncertain 一律輸出 uncertain。
+
+- CP-area dark-blue／teal multiple_four_point_sparkles 是色違候選；確認 position=cp_area 後才可用顏色及形狀判斷。寶可夢身體顏色、白色夥伴氣泡或其他位置圖示都不是色違證據。
+- upper-right filled_yellow_five_point_star 只代表我的最愛，不代表任何其他狀態或型態。
+- lower-left light-cyan flower／radial symbol 是淨化候選，絕對不是背卡或色違。
+- lower-left purple flame／smoke／aura 是暗影候選，絕對不是背卡；氣場即使延伸到身體周圍，也必須有同卡 lower_left 錨點，around_pokemon 本身不足。
+- lower-right badge 是背卡候選，先確認 position=lower_right，再以 badge_type 分類紀念或特別背卡。commemorative_location_badge 可直接支持 commemorative；special_background_badge 可直接支持 special，完整背景外觀只是次要支持，不是必要條件。紀念徽章配 event_special_background 或特別徽章配 location_style_background 時必須輸出 uncertain。
+- lucky 仍只以同卡 behind_pokemon 的 large_gold_shimmering_background 判斷。
+
+raw 狀態與位置優先 evidence 不一致時必須輸出 uncertain，不得猜測。黃色最愛星、左下淨化／暗影、右下背卡及 CP 色違候選彼此不可互換。
 
 【I. JSON 一致性】
 只輸出符合提供 JSON Schema 的 JSON，不得輸出 Markdown、說明文字或額外欄位。cards 不得截短、串接推測或去除合法重複卡片。enumeration_confidence 只表示完整列舉信心，不得用它刪除已看見的完整或部分卡片。${structuralRetry ? `
