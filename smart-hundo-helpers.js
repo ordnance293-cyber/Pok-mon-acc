@@ -1384,11 +1384,31 @@
         if (!canonicalOfficialName) return '';
         const prefix = [
             card?.effective_shiny_state === 'yes' ? '色違' : '',
-            card?.effective_rocket_state === 'shadow' ? '暗影' : '',
+            deriveRocketDisplayClass(card) === 'shadow' ? '暗影' : '',
             card?.effective_background_type === 'commemorative' ? '紀念背卡' : '',
             card?.effective_background_type === 'special' ? '特別背卡' : ''
         ].join('');
         return `${prefix}${canonicalOfficialName}`;
+    };
+
+    const deriveRocketDisplayClass = (card = {}) => {
+        const effectiveState = card?.effective_rocket_state;
+        if (effectiveState === 'shadow') return 'shadow';
+        if (effectiveState === 'normal' || effectiveState === 'purified') return 'ordinary';
+
+        const rawState = card?.rocket_state;
+        const evidence = card?.rocket_evidence || {};
+        const shadowLikeEvidence = (
+            evidence.color === 'purple'
+            || ['purple_flame', 'purple_smoke', 'shadow_aura'].includes(evidence.shape)
+            || deriveRocketStateFromEvidence(evidence) === 'shadow'
+        );
+        if (
+            ['normal', 'purified'].includes(rawState)
+            && evidence.region_visibility === 'clear'
+            && !shadowLikeEvidence
+        ) return 'ordinary';
+        return 'uncertain';
     };
 
     const hasDisplayAffectingUncertainty = (card = {}) => (
@@ -1396,7 +1416,7 @@
         || !stringValue(card?.canonical_official_name)
         || card?.effective_form_id === 'uncertain'
         || card?.effective_shiny_state === 'uncertain'
-        || card?.effective_rocket_state === 'uncertain'
+        || deriveRocketDisplayClass(card) === 'uncertain'
         || card?.effective_background_type === 'uncertain'
     );
 
@@ -1505,6 +1525,7 @@
         validateHundoPokemonForm,
         buildHundoCanonicalOfficialName,
         HUNDO_REVIEW_REASON_MESSAGES,
+        deriveRocketDisplayClass,
         buildHundoDisplayName,
         hasDisplayAffectingUncertainty,
         buildHundoListEntry,

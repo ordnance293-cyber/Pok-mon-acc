@@ -24,13 +24,41 @@ test('shiny threshold and position',()=>{ assert.equal(validated({shiny_state:'y
 test('obscured shiny negative uncertain',()=>assert.equal(validated({shiny_evidence:{...clearNone({color:'none',shape:'none'}),region_visibility:'cropped'}}).effective_shiny_state,'uncertain'));
 test('rocket position first',()=>{assert.equal(validated({rocket_state:'purified',rocket_evidence:purified}).effective_rocket_state,'purified');assert.equal(validated({rocket_state:'shadow',rocket_evidence:shadow}).effective_rocket_state,'shadow');for(const position of ['lower_right','around_pokemon']) assert.equal(validated({rocket_state:'shadow',rocket_evidence:{...shadow,position}}).effective_rocket_state,'uncertain');});
 test('rocket conflicts and occlusion',()=>{assert.equal(validated({rocket_state:'shadow',rocket_evidence:purified}).effective_rocket_state,'uncertain');assert.equal(validated({rocket_evidence:{...clearNone({color:'none',shape:'none'}),region_visibility:'not_visible'}}).effective_rocket_state,'uncertain');});
+test('rocket display classes preserve only display-equivalent uncertainty',()=>{
+  const lowConfidencePurified=validated({rocket_state:'purified',rocket_confidence:.84,rocket_evidence:purified});
+  const imperfectPurified=validated({rocket_state:'purified',rocket_evidence:{...purified,color:'other',shape:'other'}});
+  assert.equal(lowConfidencePurified.effective_rocket_state,'uncertain');
+  assert.equal(imperfectPurified.effective_rocket_state,'uncertain');
+  for(const card of [validated({rocket_state:'purified',rocket_evidence:purified}),lowConfidencePurified,imperfectPurified]){
+    assert.equal(h.deriveRocketDisplayClass(card),'ordinary');
+    assert.equal(h.smartHundoCardsToPokemonList([card]).pokemon_list,'固拉多');
+  }
+  assert.equal(h.smartHundoCardsToPokemonList([validated(),validated({rocket_state:'purified',rocket_evidence:purified})]).pokemon_list,'固拉多*2');
+  const validShadow=validated({rocket_state:'shadow',rocket_evidence:shadow});
+  assert.equal(h.deriveRocketDisplayClass(validShadow),'shadow');
+  assert.equal(h.smartHundoCardsToPokemonList([validShadow]).pokemon_list,'暗影固拉多');
+});
+test('rocket display class retains shadow and visibility safeguards',()=>{
+  const unresolved=[
+    {rocket_state:'shadow',rocket_evidence:purified},
+    {rocket_state:'normal',rocket_evidence:shadow},
+    {rocket_state:'purified',rocket_evidence:shadow},
+    {rocket_state:'uncertain',rocket_evidence:purified},
+    {rocket_state:'normal',rocket_evidence:{...clearNone({color:'none',shape:'none'}),region_visibility:'cropped'}},
+    {rocket_state:'purified',rocket_evidence:{...purified,region_visibility:'not_visible'}}
+  ].map(validated);
+  unresolved.forEach(card=>{
+    assert.equal(h.deriveRocketDisplayClass(card),'uncertain');
+    assert.equal(h.smartHundoCardsToPokemonList([card]).pokemon_list,'待確認（CP1234）');
+  });
+});
 test('background badges and conflicts',()=>{assert.equal(validated({background_type:'commemorative',background_evidence:bg('commemorative_location_badge')}).effective_background_type,'commemorative');assert.equal(validated({background_type:'special',background_evidence:bg('special_background_badge')}).effective_background_type,'special');assert.equal(validated({background_type:'commemorative',background_evidence:bg('commemorative_location_badge','event_special_background')}).effective_background_type,'uncertain');assert.equal(validated({background_type:'special',background_evidence:bg('special_background_badge','location_style_background')}).effective_background_type,'uncertain');});
 test('background wrong/obscured region',()=>{assert.equal(validated({background_type:'commemorative',background_evidence:bg('commemorative_location_badge','none','lower_left')}).effective_background_type,'uncertain');assert.equal(validated({background_evidence:{...clearNone({badge_type:'none',appearance:'none'}),region_visibility:'partially_occluded'}}).effective_background_type,'uncertain');});
 test('favorite hidden',()=>{const c=validated({favorite_state:'yes',favorite_confidence:.85,favorite_evidence:{present:true,region_visibility:'clear',position:'upper_right',appearance:'filled_yellow_five_point_star'}});assert.equal(c.effective_favorite_state,'yes');assert.equal(h.buildHundoDisplayName(c),'固拉多');assert.equal(validated({favorite_state:'yes',favorite_evidence:{present:true,region_visibility:'clear',position:'other',appearance:'filled_yellow_five_point_star'}}).effective_favorite_state,'uncertain');});
 test('all 23 canonical names closed',()=>{const expected={articuno_standard:'急凍鳥',articuno_galarian:'伽勒爾急凍鳥',zapdos_standard:'閃電鳥',zapdos_galarian:'伽勒爾閃電鳥',moltres_standard:'火焰鳥',moltres_galarian:'伽勒爾火焰鳥',zacian_standard:'蒼響',zacian_crowned:'蒼響劍盾型態',zamazenta_standard:'藏瑪然特',zamazenta_crowned:'藏瑪然特劍盾型態',dialga_standard:'帝牙盧卡',dialga_origin:'起源帝牙盧卡',palkia_standard:'帕路奇亞',palkia_origin:'起源帕路奇亞',zygarde_10:'基格爾德（10%形態）',zygarde_50:'基格爾德（50%形態）',zygarde_complete:'基格爾德（完全體形態）',necrozma_base:'奈克洛茲瑪',necrozma_dusk_mane:'奈克洛茲瑪（黃昏之鬃）',necrozma_dawn_wings:'奈克洛茲瑪（拂曉之翼）',kyurem_base:'酋雷姆',kyurem_white:'焰白酋雷姆',kyurem_black:'闇黑酋雷姆'};assert.deepEqual(h.HUNDO_FORM_CANONICAL_NAMES,expected);assert.equal(Object.values(h.HUNDO_FORM_CANONICAL_NAMES).includes('炎白酋雷姆'),false);});
 test('unapproved official suffix cannot leak',()=>{for(const [species,official] of [['土地雲','土地雲（靈獸形態）'],['雷電雲','色違雷電雲（化身形態）'],['眷戀雲','眷戀雲（化身形態）'],['胡帕','胡帕（解放形態）'],['胡帕','胡帕（懲戒形態）']]) assert.equal(validated({base_species:species,official_name:official}).canonical_official_name,species);});
 test('uncertainty placeholders',()=>{for(const patch of [{form_id:'uncertain'},{shiny_state:'uncertain'},{rocket_state:'uncertain'},{background_type:'uncertain'}]) assert.equal(h.smartHundoCardsToPokemonList([validated(patch)]).pokemon_list,'待確認（CP1234）');assert.equal(h.smartHundoCardsToPokemonList([validated({shiny_state:'uncertain',cp:''})]).pokemon_list,'待確認');});
-test('favorite/lucky uncertainty do not block and purified hidden',()=>{assert.equal(h.smartHundoCardsToPokemonList([validated({favorite_state:'uncertain',lucky_state:'uncertain',rocket_state:'purified',rocket_evidence:purified})]).pokemon_list,'固拉多');});
+test('favorite/lucky uncertainty do not block and purified hidden',()=>{const card=validated({favorite_state:'uncertain',lucky_state:'uncertain',rocket_state:'purified',rocket_evidence:purified});assert.equal(h.smartHundoCardsToPokemonList([card]).pokemon_list,'固拉多');assert.equal(card.rocket_state,'purified');assert.equal(card.effective_rocket_state,'purified');assert.deepEqual(card.rocket_evidence,purified);});
 test('global grouping and placeholder preservation',()=>{const normal=validated();const shinyCard=validated({shiny_state:'yes',shiny_evidence:shiny});const unresolved=validated({shiny_state:'uncertain'});assert.equal(h.smartHundoCardsToPokemonList([normal,shinyCard,normal,unresolved,unresolved]).pokemon_list,'固拉多*2,色違固拉多,待確認（CP1234）,待確認（CP1234）');});
 test('first appearance grouping',()=>{const a=validated({base_species:'雷吉斯奇魯',official_name:'雷吉斯奇魯'}),b=validated({base_species:'胡帕',official_name:'胡帕'});assert.equal(h.smartHundoCardsToPokemonList([a,b,a,b]).pokemon_list,'雷吉斯奇魯*2,胡帕*2');});
 console.log(`PASS ${passed} position-first suites; 0 live OpenAI requests`);
