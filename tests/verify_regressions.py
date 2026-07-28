@@ -27,8 +27,8 @@ EXTRACTION_PROMPT_HASH = "1b061471ee97eeb1f6e0e9061acc8d6150b386fe6b46e4350b23b6
 EXTRACTION_PROMPT_LENGTH = 4643
 RESIZED_IMAGE_FUNCTION_HASH = "c4baf69d9b7a67771b356642bf549806254fe48a676952986150eb616a93daf4"
 RESIZED_IMAGE_FUNCTION_LENGTH = 1276
-SAVE_ACCOUNT_HASH = "3cc797671ec130054e89fb4e8ad5ef2c08d7c5d4a1da51d6b3e06be353a56d7d"
-SAVE_ACCOUNT_LENGTH = 11158
+SAVE_ACCOUNT_HASH = "609aa6914e7ff4e1fa533910eabd958154edd54cdb0466ed714d60ece6ff9052"
+SAVE_ACCOUNT_LENGTH = 11257
 NEW_ITEM_HASH = "5f7736d381b8c5f3914db57f5e1b9f33e358b205be918c314a3df6da6d07e2c4"
 NEW_ITEM_LENGTH = 1666
 GENERATE_TEXT_HASH = "9d288f3924c6a8d397546900c558f5335f0dfa5dde536249355850aff15a7eff"
@@ -455,7 +455,7 @@ def main() -> int:
             RESIZED_IMAGE_FUNCTION_HASH,
             RESIZED_IMAGE_FUNCTION_LENGTH,
         )),
-        ("Firebase/GAS/manual save path has the origin/main snapshot", lambda: assert_snapshot(
+        ("Firebase/GAS/manual save path has the sold-retention snapshot", lambda: assert_snapshot(
             "Firebase/GAS/manual save path",
             save_account,
             SAVE_ACCOUNT_HASH,
