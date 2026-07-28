@@ -9,6 +9,7 @@
     
     <script src="smart-hundo-helpers.js"></script>
     <script src="trainer-team-helpers.js"></script>
+    <script src="sold-account-cleanup.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -28,6 +29,7 @@
         const db = getDatabase(app);
         const inventoryRef = ref(db, 'inventory');
         let inventoryData = [];
+        let hasRunSoldAccountCleanup = false;
         const SETTINGS_FIELDS = [
             { elementId: 'googleSheetId', storageKey: 'googleSheetId' },
             { elementId: 'gasUrl', storageKey: 'gasUrl' },
@@ -86,11 +88,44 @@
             }, 2000);
         };
 
+        async function syncDeletedAccountToSheets(item) {
+            const sheetId = document.getElementById('googleSheetId')?.value.trim();
+            const scriptUrl = document.getElementById('gasUrl')?.value.trim();
+            if (!sheetId || !scriptUrl) return;
+            await fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete', id: sheetId, accountId: item.accountId })
+            });
+        }
+
+        async function runSoldAccountCleanup() {
+            const now = Date.now();
+            const { expired, needsSoldAt } = window.SoldAccountCleanup.planSoldAccountCleanup(inventoryData, now);
+            const updates = {};
+            expired.forEach(item => { updates[item.uid] = null; });
+            needsSoldAt.forEach(item => { updates[`${item.uid}/soldAt`] = now; });
+            if (Object.keys(updates).length === 0) return;
+
+            await update(inventoryRef, updates);
+
+            const BATCH_SIZE = 10;
+            for (let index = 0; index < expired.length; index += BATCH_SIZE) {
+                const batch = expired.slice(index, index + BATCH_SIZE);
+                await Promise.allSettled(batch.map(item => syncDeletedAccountToSheets(item)));
+            }
+        }
+
         onValue(inventoryRef, (snapshot) => {
             const data = snapshot.val();
             inventoryData = [];
             if (data) { Object.keys(data).forEach(key => inventoryData.push({ uid: key, ...data[key] })); }
-            renderInventory(); 
+            renderInventory();
+            if (!hasRunSoldAccountCleanup) {
+                hasRunSoldAccountCleanup = true;
+                void runSoldAccountCleanup().catch(() => console.warn('售出帳號自動清理失敗'));
+            }
         });
 
         window.syncAllToSheets = async function(btn) {
@@ -126,7 +161,7 @@
             if(!isAlreadySold) {
                 if(!confirm(`確定標記為售出？`)) return;
                 const existingItem = inventoryData.find(item => item.uid === uid);
-                const soldAt = existingItem?.soldAt ?? Date.now();
+                const soldAt = existingItem?.status === 'sold' && existingItem?.soldAt ? existingItem.soldAt : Date.now();
                 await update(ref(db, `inventory/${uid}`), { status: 'sold', soldAt });
                 window.showCopyModal(accountId); // ✅ 首次售出時立刻跳出
             }
@@ -209,7 +244,7 @@
 
         window.restoreAccount = async function(uid, accountId, btn) {
             if(!confirm(`確定要恢復為現貨嗎？`)) return;
-            update(ref(db, `inventory/${uid}`), { status: 'active' });
+            update(ref(db, `inventory/${uid}`), { status: 'active', soldAt: null });
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
                 btn.disabled = true; const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -255,8 +290,11 @@
             if (currentEditUid) {
                 const existingItem = inventoryData.find(i => i.uid === currentEditUid);
                 newItem.timestamp = existingItem ? existingItem.timestamp : Date.now();
-                if (existingItem?.soldAt !== undefined) newItem.soldAt = existingItem.soldAt;
-                if (newItem.status === 'sold' && existingItem?.status !== 'sold') newItem.soldAt = Date.now();
+                if (newItem.status === 'sold') {
+                    newItem.soldAt = existingItem?.status === 'sold' && existingItem?.soldAt ? existingItem.soldAt : Date.now();
+                } else if (existingItem?.soldAt !== undefined) {
+                    newItem.soldAt = null;
+                }
                 update(ref(db, `inventory/${currentEditUid}`), newItem);
                 showMsg("✅ 帳號資料已更新！", "green");
                 
