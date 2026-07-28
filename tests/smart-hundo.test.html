@@ -258,6 +258,7 @@
           normalizeSmartHundoCard,
           normalizeSmartHundoResult: normalizeSmartHundoResultV2,
           validateSmartHundoStructure,
+          deriveRocketDisplayClass,
           buildHundoDisplayName,
           smartHundoCardsToPokemonList: effectiveSmartHundoCardsToPokemonList,
           summarizeHundoManualReview,
@@ -1166,6 +1167,43 @@
           equal(validated.effective_shiny_state, 'uncertain');
           equal(validated.effective_rocket_state, 'purified');
           equal(buildHundoDisplayName(validated), '固拉多');
+        });
+
+        test('uses Rocket display equivalence without weakening shadow safeguards', () => {
+          const groudon = overrides => validateHundoCardStates(validateHundoPokemonForm(normalizedCard({
+            official_name: '固拉多',
+            ...overrides
+          }), normalizeName));
+          const ordinaryCards = [
+            groudon({ rocket_state: 'purified', rocket_confidence: 0.98, rocket_evidence: cyanPurificationEvidence() }),
+            groudon({ rocket_state: 'purified', rocket_confidence: 0.84, rocket_evidence: cyanPurificationEvidence() }),
+            groudon({ rocket_state: 'purified', rocket_evidence: rocketEvidence({
+              present: true, position: 'lower_left', color: 'other', shape: 'other'
+            }) })
+          ];
+          deepEqual(ordinaryCards.map(deriveRocketDisplayClass), ['ordinary', 'ordinary', 'ordinary']);
+          ordinaryCards.forEach(item => equal(effectiveSmartHundoCardsToPokemonList([item]).pokemon_list, '固拉多'));
+          equal(effectiveSmartHundoCardsToPokemonList([groudon({}), ordinaryCards[0]]).pokemon_list, '固拉多*2');
+
+          const shadowEvidence = rocketEvidence({
+            present: true, position: 'lower_left', color: 'purple', shape: 'purple_flame'
+          });
+          const shadowCard = groudon({ rocket_state: 'shadow', rocket_evidence: shadowEvidence });
+          equal(deriveRocketDisplayClass(shadowCard), 'shadow');
+          equal(effectiveSmartHundoCardsToPokemonList([shadowCard]).pokemon_list, '暗影固拉多');
+
+          const unresolvedCards = [
+            groudon({ rocket_state: 'shadow', rocket_evidence: cyanPurificationEvidence() }),
+            groudon({ rocket_state: 'normal', rocket_evidence: shadowEvidence }),
+            groudon({ rocket_state: 'purified', rocket_evidence: shadowEvidence }),
+            groudon({ rocket_state: 'uncertain', rocket_evidence: cyanPurificationEvidence() }),
+            groudon({ rocket_state: 'normal', rocket_evidence: rocketEvidence({ region_visibility: 'cropped' }) }),
+            groudon({ rocket_state: 'purified', rocket_evidence: rocketEvidence({ region_visibility: 'not_visible' }) })
+          ];
+          unresolvedCards.forEach(item => {
+            equal(deriveRocketDisplayClass(item), 'uncertain');
+            equal(effectiveSmartHundoCardsToPokemonList([item]).pokemon_list, '待確認（CP1234）');
+          });
         });
 
         test('validates combined shiny and shadow evidence in fixed display order', () => {
