@@ -10,7 +10,7 @@
 
 1. 採用「開啟網頁時檢查」，不新增 Firebase 排程、Cloud Function 或其他伺服器。
 2. 採用 Firebase 批次更新：同一次檢查找到的過期帳號，一次送出刪除；不是逐筆呼叫 Firebase 刪除。
-3. 舊售出資料如果沒有有效 `soldAt`，第一次遇到時補上當下時間，從新版上線後重新起算 30 天，不立即刪除。
+3. 舊售出資料如果沒有有效 `soldAt`，第一次遇到時補上當下時間，從新版第一次載入後重新起算 30 天，不立即刪除。
 4. 自動清理不跳出逐筆確認視窗。
 5. Firebase 刪除完成後，沿用既有 Google Apps Script `delete` 動作同步移除試算表紀錄。
 
@@ -38,7 +38,7 @@ SOLD_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 4. 將補日期與刪除合併為一次 Firebase `update(inventoryRef, updates)`：
    - `updates["<uid>/soldAt"] = now` 代表補日期。
    - `updates["<uid>"] = null` 代表永久刪除該帳號。
-5. Firebase 批次成功後，對已刪除帳號沿用現有 GAS 請求 `{ action: "delete", id, accountId }`。GAS 目前沒有批次刪除介面，因此只在 Firebase 端一次批次處理；試算表同步使用有限批量的 `Promise.allSettled`，避免一次送出過多請求。
+5. Firebase 批次成功後，對已刪除帳號沿用現有 GAS 請求 `{ action: "delete", id, accountId }`。GAS 目前沒有批次刪除介面，因此只在 Firebase 端一次批次處理；試算表同步固定每批最多 10 筆並使用 `Promise.allSettled`，避免一次送出過多請求。
 6. 有實際變更時顯示一次摘要，例如：
    - `已自動清理 5 筆售出超過 30 天的帳號`
    - `已為 12 筆舊售出資料開始計算 30 天`
@@ -84,7 +84,7 @@ SOLD_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 - Firebase 批次失敗：不宣告清理成功，顯示錯誤提示；重新載入頁面後可再次嘗試。
 - Google Sheet ID 或 GAS URL 未設定：Firebase 仍完成資料清理，但顯示「試算表未同步」提示。
-- 個別 GAS 請求失敗：不回復已刪除的 Firebase 資料；使用 `Promise.allSettled` 統計失敗筆數並提示使用者，避免單筆失敗中止其餘同步。
+- 個別 GAS 請求拋出網路錯誤：不回復已刪除的 Firebase 資料；使用 `Promise.allSettled` 統計失敗筆數並提示使用者，避免單筆失敗中止其餘同步。現有 `no-cors` 請求無法讀取 GAS 的 HTTP 回應內容，因此只能偵測瀏覽器實際拋出的網路錯誤。
 - 自動清理不修改帳號文案、價格、隊伍、圖片辨識或其他欄位。
 
 ## 測試與驗收
