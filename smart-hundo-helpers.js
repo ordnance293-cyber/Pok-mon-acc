@@ -23,17 +23,23 @@
         background: 'uncertain'
     });
     const REGION_VISIBILITY_VALUES = new Set(['clear', 'partially_occluded', 'cropped', 'not_visible', 'uncertain']);
-    const SHINY_POSITION_VALUES = new Set(['none', 'cp_area', 'lower_left', 'upper_right', 'around_pokemon', 'other', 'uncertain']);
+    const SHINY_POSITION_VALUES = new Set(['none', 'cp_area', 'other', 'uncertain']);
     const SHINY_COLOR_VALUES = new Set(['none', 'dark_blue', 'blue_black', 'teal_blue', 'dark_blue_teal', 'light_cyan', 'yellow', 'purple', 'other', 'uncertain']);
     const SHINY_SHAPE_VALUES = new Set(['none', 'multiple_four_point_sparkles', 'single_radial_sparkle', 'five_point_star', 'flame_or_smoke', 'other', 'uncertain']);
     const LUCKY_POSITION_VALUES = new Set(['none', 'behind_pokemon', 'other', 'uncertain']);
     const LUCKY_APPEARANCE_VALUES = new Set(['none', 'large_gold_shimmering_background', 'other', 'uncertain']);
     const FAVORITE_POSITION_VALUES = new Set(['none', 'upper_right', 'other', 'uncertain']);
     const FAVORITE_APPEARANCE_VALUES = new Set(['none', 'filled_yellow_five_point_star', 'other', 'uncertain']);
-    const ROCKET_POSITION_VALUES = new Set(['none', 'lower_left', 'lower_side', 'around_pokemon', 'other', 'uncertain']);
+    const ROCKET_POSITION_VALUES = new Set(['none', 'lower_left', 'other', 'uncertain']);
     const ROCKET_COLOR_VALUES = new Set(['none', 'light_blue', 'light_cyan', 'purple', 'other', 'uncertain']);
     const ROCKET_SHAPE_VALUES = new Set(['none', 'single_radial_sparkle', 'purification_starburst', 'flower_like_symbol', 'purple_flame', 'purple_smoke', 'shadow_aura', 'other', 'uncertain']);
-    const BACKGROUND_POSITION_VALUES = new Set(['none', 'near_pokemon_or_card_background', 'other', 'uncertain']);
+    const BACKGROUND_POSITION_VALUES = new Set(['none', 'lower_right', 'other', 'uncertain']);
+    const HUNDO_STATE_POSITION_VALUES = Object.freeze({
+        shiny: Object.freeze([...SHINY_POSITION_VALUES]),
+        favorite: Object.freeze([...FAVORITE_POSITION_VALUES]),
+        rocket: Object.freeze([...ROCKET_POSITION_VALUES]),
+        background: Object.freeze([...BACKGROUND_POSITION_VALUES])
+    });
     const BADGE_TYPE_VALUES = new Set(['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain']);
     const BACKGROUND_APPEARANCE_VALUES = new Set(['none', 'location_style_background', 'event_special_background', 'other', 'uncertain']);
     const RECOGNITION_VALUES = new Set(['recognized', 'partial', 'uncertain']);
@@ -383,14 +389,14 @@
         if (!isClearPresentEvidence(evidence)) return 'uncertain';
 
         const isPurified = (
-            ['lower_left', 'lower_side'].includes(evidence?.position)
+            evidence?.position === 'lower_left'
             && ['light_blue', 'light_cyan'].includes(evidence?.color)
             && ['single_radial_sparkle', 'purification_starburst', 'flower_like_symbol'].includes(evidence?.shape)
         );
         if (isPurified) return 'purified';
 
         const isShadow = (
-            ['lower_left', 'around_pokemon'].includes(evidence?.position)
+            evidence?.position === 'lower_left'
             && evidence?.color === 'purple'
             && ['purple_flame', 'purple_smoke', 'shadow_aura'].includes(evidence?.shape)
         );
@@ -401,15 +407,15 @@
         if (isExactNegativeEvidence(evidence, ['position', 'badge_type', 'appearance'])) return 'none';
         if (
             !isClearPresentEvidence(evidence)
-            || evidence?.position !== 'near_pokemon_or_card_background'
+            || evidence?.position !== 'lower_right'
         ) return 'uncertain';
         if (
             evidence?.badge_type === 'commemorative_location_badge'
-            && evidence?.appearance === 'location_style_background'
+            && evidence?.appearance !== 'event_special_background'
         ) return 'commemorative';
         if (
             evidence?.badge_type === 'special_background_badge'
-            && evidence?.appearance === 'event_special_background'
+            && evidence?.appearance !== 'location_style_background'
         ) return 'special';
         return 'uncertain';
     };
@@ -1127,6 +1133,14 @@
         return 'uncertain';
     };
 
+    const deriveEffectiveShinyState = (rawState, confidence, evidence) => deriveIndependentState(
+        rawState, confidence, evidence, isValidShinyEvidence, ['position', 'color', 'shape']
+    );
+
+    const deriveEffectiveFavoriteState = (rawState, confidence, evidence) => deriveIndependentState(
+        rawState, confidence, evidence, isValidFavoriteEvidence, ['position', 'appearance']
+    );
+
     const deriveEffectiveRocketState = (rawState, confidence, evidence) => {
         const evidenceState = deriveRocketStateFromEvidence(evidence);
         if (
@@ -1159,13 +1173,7 @@
 
     const validateHundoCardStates = (card = {}) => {
         const effectiveStates = {
-            shiny: deriveIndependentState(
-                card?.shiny_state,
-                card?.shiny_confidence,
-                card?.shiny_evidence,
-                isValidShinyEvidence,
-                ['position', 'color', 'shape']
-            ),
+            shiny: deriveEffectiveShinyState(card?.shiny_state, card?.shiny_confidence, card?.shiny_evidence),
             lucky: deriveIndependentState(
                 card?.lucky_state,
                 card?.lucky_confidence,
@@ -1173,13 +1181,7 @@
                 isValidLuckyEvidence,
                 ['position', 'appearance']
             ),
-            favorite: deriveIndependentState(
-                card?.favorite_state,
-                card?.favorite_confidence,
-                card?.favorite_evidence,
-                isValidFavoriteEvidence,
-                ['position', 'appearance']
-            ),
+            favorite: deriveEffectiveFavoriteState(card?.favorite_state, card?.favorite_confidence, card?.favorite_evidence),
             rocket: deriveEffectiveRocketState(
                 card?.rocket_state,
                 card?.rocket_confidence,
@@ -1235,7 +1237,7 @@
             return HUNDO_FORM_CANONICAL_NAMES[card.effective_form_id];
         }
         if (card?.effective_form_id === 'not_applicable') {
-            return normalizeSmartHundoOfficialName(card?.official_name, normalizeOfficialName);
+            return normalizeHundoBaseSpecies(card?.base_species, normalizeOfficialName);
         }
         return '';
     };
@@ -1389,6 +1391,23 @@
         return `${prefix}${canonicalOfficialName}`;
     };
 
+    const hasDisplayAffectingUncertainty = (card = {}) => (
+        !hasUsableRecognizedSpecies(card)
+        || !stringValue(card?.canonical_official_name)
+        || card?.effective_form_id === 'uncertain'
+        || card?.effective_shiny_state === 'uncertain'
+        || card?.effective_rocket_state === 'uncertain'
+        || card?.effective_background_type === 'uncertain'
+    );
+
+    const buildHundoListEntry = (card = {}) => {
+        if (!hasDisplayAffectingUncertainty(card)) {
+            return { value: buildHundoDisplayName(card), status: 'resolved' };
+        }
+        const digits = stringValue(card?.cp).normalize('NFKC').replace(/\D/g, '');
+        return { value: digits ? `待確認（CP${digits}）` : '待確認', status: 'unresolved' };
+    };
+
     const summarizeHundoManualReview = (cards = [], screenshotReasons = []) => {
         const reviewCardIds = new Set();
         const reviewReasonCounts = {};
@@ -1413,19 +1432,31 @@
     };
 
     const smartHundoCardsToPokemonList = (cards = []) => {
+        const entries = [];
         const displayGroups = new Map();
         let recognizedCount = 0;
 
         (Array.isArray(cards) ? cards : []).forEach(card => {
-            const displayName = buildHundoDisplayName(card);
-            if (!displayName) return;
-            displayGroups.set(displayName, (displayGroups.get(displayName) || 0) + 1);
+            const entry = buildHundoListEntry(card);
+            if (entry.status === 'unresolved') {
+                entries.push(entry);
+                return;
+            }
+            if (!displayGroups.has(entry.value)) {
+                displayGroups.set(entry.value, { count: 0, index: entries.length });
+                entries.push(entry);
+            }
+            displayGroups.get(entry.value).count += 1;
             recognizedCount += 1;
         });
 
         const manualReview = summarizeHundoManualReview(cards);
         return {
-            pokemon_list: [...displayGroups].map(([name, count]) => count > 1 ? `${name}*${count}` : name).join(','),
+            pokemon_list: entries.map(entry => {
+                if (entry.status === 'unresolved') return entry.value;
+                const count = displayGroups.get(entry.value).count;
+                return count > 1 ? `${entry.value}*${count}` : entry.value;
+            }).join(','),
             recognized_count: recognizedCount,
             review_card_count: manualReview.review_card_count,
             review_reason_counts: manualReview.review_reason_counts
@@ -1437,6 +1468,7 @@
         isSmartHundoClassification,
         partitionImageJobs,
         adaptLegacyRocketState,
+        HUNDO_STATE_POSITION_VALUES,
         HUNDO_FORM_CANONICAL_NAMES,
         HUNDO_FORMS_BY_BASE_SPECIES,
         normalizeHundoBaseSpecies,
@@ -1465,11 +1497,17 @@
         isValidFavoriteEvidence,
         deriveRocketStateFromEvidence,
         deriveBackgroundTypeFromEvidence,
+        deriveEffectiveShinyState,
+        deriveEffectiveFavoriteState,
+        deriveEffectiveRocketState,
+        deriveEffectiveBackgroundType,
         validateHundoCardStates,
         validateHundoPokemonForm,
         buildHundoCanonicalOfficialName,
         HUNDO_REVIEW_REASON_MESSAGES,
         buildHundoDisplayName,
+        hasDisplayAffectingUncertainty,
+        buildHundoListEntry,
         smartHundoCardsToPokemonList,
         summarizeHundoManualReview
     };
