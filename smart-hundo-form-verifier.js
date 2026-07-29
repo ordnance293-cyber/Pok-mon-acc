@@ -14,29 +14,31 @@
         酋雷姆: Object.freeze(['kyurem_base', 'kyurem_white', 'kyurem_black', 'uncertain'])
     });
     const TARGET_HUNDO_FORM_BASE_SPECIES = Object.freeze(Object.keys(VERIFIED_FORM_IDS_BY_BASE_SPECIES));
-    const legacyDetailedEvidence = {
-        dialga_standard: ['dialga_stocky_wide_quadruped', 'four_standard_legs', 'not_applicable', 'dialga_standard_stocky_neck_chest'],
-        dialga_origin: ['dialga_elongated_equine_quadruped', 'four_long_legs', 'not_applicable', 'dialga_origin_elongated_neck_chest'],
-        palkia_standard: ['palkia_upright_biped_with_arms', 'two_arms_two_legs', 'not_applicable', 'palkia_standard_visible_arms'],
-        palkia_origin: ['palkia_centaur_quadruped', 'four_legs_no_standard_arms', 'not_applicable', 'palkia_origin_centaur_body'],
-        necrozma_base: ['necrozma_upright_crystalline', 'upright_crystalline_limbs', 'none', 'necrozma_base_crystal_body'],
-        necrozma_dusk_mane: ['necrozma_quadruped_lion', 'quadruped_lion', 'solgaleo', 'necrozma_dusk_mane_lion_crystal_armor'],
-        necrozma_dawn_wings: ['necrozma_wide_moon_wings', 'giant_wings_no_lion_body', 'lunala', 'necrozma_dawn_wings_moon_wings']
-    };
-    const evidenceFor = (baseSpecies, formId) => {
-        const values = legacyDetailedEvidence[formId] || [
-            `${formId}_body_plan`, `${formId}_limb_layout`, `${formId}_fusion_host`, `${formId}_decisive_feature`
-        ];
-        return Object.freeze({
-            base_species: baseSpecies,
-            body_plan: values[0], limb_layout: values[1], fusion_host: values[2], decisive_feature: values[3]
-        });
-    };
-    const REQUIRED_VERIFIED_FORM_EVIDENCE = Object.freeze(Object.fromEntries(
-        Object.entries(VERIFIED_FORM_IDS_BY_BASE_SPECIES).flatMap(([species, ids]) =>
-            ids.filter(id => id !== 'uncertain').map(id => [id, evidenceFor(species, id)])
-        )
-    ));
+    const REQUIRED_VERIFIED_FORM_EVIDENCE = Object.freeze({
+        articuno_standard: Object.freeze({ base_species: '急凍鳥', body_plan: 'articuno_broad_seabird', limb_layout: 'two_broad_rounded_wings', fusion_host: 'not_applicable', decisive_feature: 'articuno_standard_crest_and_long_tail', visual_rule: '急凍鳥：寬大圓翼、短喙、三片頭冠與長帶狀尾羽；不可只靠顏色。' }),
+        articuno_galarian: Object.freeze({ base_species: '急凍鳥', body_plan: 'articuno_slender_raptor', limb_layout: 'two_angular_swept_wings', fusion_host: 'not_applicable', decisive_feature: 'articuno_galarian_mask_and_angular_wings', visual_rule: '急凍鳥：伽勒爾形態是細長猛禽輪廓、面罩狀眼部、尖銳後掠翼與較短尾部；不可只靠顏色。' }),
+        zapdos_standard: Object.freeze({ base_species: '閃電鳥', body_plan: 'zapdos_spiky_bird', limb_layout: 'two_jagged_spread_wings', fusion_host: 'not_applicable', decisive_feature: 'zapdos_standard_spikes_and_short_legs', visual_rule: '閃電鳥：一般形態有全身尖刺羽毛、鋸齒狀展翼、短腿與短粗喙；不可只靠顏色。' }),
+        zapdos_galarian: Object.freeze({ base_species: '閃電鳥', body_plan: 'zapdos_tall_running_bird', limb_layout: 'reduced_wings_and_long_running_legs', fusion_host: 'not_applicable', decisive_feature: 'zapdos_galarian_long_legs_and_runner_posture', visual_rule: '閃電鳥：伽勒爾形態是高大奔跑鳥姿勢、長而強健的腿、縮小翅膀與較長尖喙；不可只靠顏色。' }),
+        moltres_standard: Object.freeze({ base_species: '火焰鳥', body_plan: 'moltres_broad_flying_bird', limb_layout: 'two_broad_flame_edged_wings', fusion_host: 'not_applicable', decisive_feature: 'moltres_standard_flame_wings_and_tail', visual_rule: '火焰鳥：一般形態有寬大飛鳥身體、火焰狀翼緣與長火焰尾；不可只靠顏色。' }),
+        moltres_galarian: Object.freeze({ base_species: '火焰鳥', body_plan: 'moltres_vulture_like_bird', limb_layout: 'two_long_angular_wings', fusion_host: 'not_applicable', decisive_feature: 'moltres_galarian_vulture_posture_and_flame_aura', visual_rule: '火焰鳥：伽勒爾形態有禿鷹式姿勢、長角形翼、彎鉤喙與環繞翼尾的火焰狀氣場；不可只靠顏色。' }),
+        zacian_standard: Object.freeze({ base_species: '蒼響', body_plan: 'zacian_ordinary_wolf', limb_layout: 'four_unarmored_wolf_legs', fusion_host: 'not_applicable', decisive_feature: 'zacian_standard_no_mouth_sword', visual_rule: '蒼響：一般狼形，口中沒有劍且沒有劍之王裝甲；嘴部、頭頸與身體必須清楚，不能以看不見劍推定一般形態。' }),
+        zacian_crowned: Object.freeze({ base_species: '蒼響', body_plan: 'zacian_armored_sword_wolf', limb_layout: 'four_armored_wolf_legs', fusion_host: 'not_applicable', decisive_feature: 'zacian_crowned_visible_mouth_sword', visual_rule: '蒼響：劍之王必須清楚看見口中長劍與 Crowned Sword 頭頸胸裝甲。' }),
+        zamazenta_standard: Object.freeze({ base_species: '藏瑪然特', body_plan: 'zamazenta_ordinary_wolf', limb_layout: 'four_unarmored_wolf_legs', fusion_host: 'not_applicable', decisive_feature: 'zamazenta_standard_clear_head_neck_chest_without_shield_mane', visual_rule: '藏瑪然特：一般狼身與頭部輪廓，頭周圍無大型盾形裝甲鬃毛且無厚重盾王胸甲；只有頭、頸、胸清楚可見時才可用裝甲缺席判定，否則 uncertain。' }),
+        zamazenta_crowned: Object.freeze({ base_species: '藏瑪然特', body_plan: 'zamazenta_shield_armored_wolf', limb_layout: 'four_shield_armored_wolf_legs', fusion_host: 'not_applicable', decisive_feature: 'zamazenta_crowned_shield_mane_and_chest_armor', visual_rule: '藏瑪然特：盾之王有包圍頭頸的大型盾形裝甲鬃毛、向兩側延伸的盾牌防禦輪廓，以及清楚的頭頸胸 Crowned Shield 裝甲。' }),
+        dialga_standard: Object.freeze({ base_species: '帝牙盧卡', body_plan: 'dialga_stocky_wide_quadruped', limb_layout: 'four_standard_legs', fusion_host: 'not_applicable', decisive_feature: 'dialga_standard_stocky_neck_chest', visual_rule: '帝牙盧卡：一般形態是粗壯寬闊四足、標準四腿與厚實頸胸。' }),
+        dialga_origin: Object.freeze({ base_species: '帝牙盧卡', body_plan: 'dialga_elongated_equine_quadruped', limb_layout: 'four_long_legs', fusion_host: 'not_applicable', decisive_feature: 'dialga_origin_elongated_neck_chest', visual_rule: '帝牙盧卡：起源形態是修長馬型四足、四條長腿與拉長頸胸。' }),
+        palkia_standard: Object.freeze({ base_species: '帕路奇亞', body_plan: 'palkia_upright_biped_with_arms', limb_layout: 'two_arms_two_legs', fusion_host: 'not_applicable', decisive_feature: 'palkia_standard_visible_arms', visual_rule: '帕路奇亞：一般形態直立雙足且有兩隻清楚手臂。' }),
+        palkia_origin: Object.freeze({ base_species: '帕路奇亞', body_plan: 'palkia_centaur_quadruped', limb_layout: 'four_legs_no_standard_arms', fusion_host: 'not_applicable', decisive_feature: 'palkia_origin_centaur_body', visual_rule: '帕路奇亞：起源形態是半人馬式四足且沒有一般形態手臂。' }),
+        zygarde_10: Object.freeze({ base_species: '基格爾德', body_plan: 'zygarde_canid_low_body', limb_layout: 'four_canid_legs', fusion_host: 'not_applicable', decisive_feature: 'zygarde_10_dog_architecture', visual_rule: '基格爾德：10%形態是低矮犬型完整架構、四足與細長尾，不能只看局部或顏色。' }),
+        zygarde_50: Object.freeze({ base_species: '基格爾德', body_plan: 'zygarde_serpentine_cobra', limb_layout: 'serpentine_no_legs', fusion_host: 'not_applicable', decisive_feature: 'zygarde_50_cobra_hood_architecture', visual_rule: '基格爾德：50%形態是蛇形／眼鏡蛇完整架構、寬頸罩與無腿盤曲身體。' }),
+        zygarde_complete: Object.freeze({ base_species: '基格爾德', body_plan: 'zygarde_complete_humanoid_giant', limb_layout: 'two_massive_legs_and_wing_arms', fusion_host: 'not_applicable', decisive_feature: 'zygarde_complete_humanoid_architecture', visual_rule: '基格爾德：完全體是巨大直立人形完整架構、粗壯雙腿、翼狀手臂與胸部核心。' }),
+        necrozma_base: Object.freeze({ base_species: '奈克洛茲瑪', body_plan: 'necrozma_upright_crystalline', limb_layout: 'upright_crystalline_limbs', fusion_host: 'none', decisive_feature: 'necrozma_base_crystal_body', visual_rule: '奈克洛茲瑪：一般形態是直立狹窄黑色結晶身體與結晶肢體。' }),
+        necrozma_dusk_mane: Object.freeze({ base_species: '奈克洛茲瑪', body_plan: 'necrozma_quadruped_lion', limb_layout: 'quadruped_lion', fusion_host: 'solgaleo', decisive_feature: 'necrozma_dusk_mane_lion_crystal_armor', visual_rule: '奈克洛茲瑪：黃昏之鬃是索爾迦雷歐宿主的四足獅身與結晶裝甲。' }),
+        necrozma_dawn_wings: Object.freeze({ base_species: '奈克洛茲瑪', body_plan: 'necrozma_wide_moon_wings', limb_layout: 'giant_wings_no_lion_body', fusion_host: 'lunala', decisive_feature: 'necrozma_dawn_wings_moon_wings', visual_rule: '奈克洛茲瑪：拂曉之翼是露奈雅拉宿主的巨大側向月翼且沒有獅身。' }),
+        kyurem_base: Object.freeze({ base_species: '酋雷姆', body_plan: 'kyurem_hunched_asymmetric_dragon', limb_layout: 'two_arms_two_legs_asymmetric_wings', fusion_host: 'none', decisive_feature: 'kyurem_base_unfused_hunched_architecture', visual_rule: '酋雷姆：一般形態是未融合、駝背且不對稱的冰龍架構；不可只靠顏色。' }),
+        kyurem_white: Object.freeze({ base_species: '酋雷姆', body_plan: 'kyurem_reshiram_fusion_dragon', limb_layout: 'two_arms_two_legs_feathered_wings', fusion_host: 'reshiram', decisive_feature: 'kyurem_white_reshiram_wings_and_turbine_tail', visual_rule: '酋雷姆：焰白形態必須有萊希拉姆融合結構、羽毛狀大翼與渦輪尾部；不可只靠白色。' }),
+        kyurem_black: Object.freeze({ base_species: '酋雷姆', body_plan: 'kyurem_zekrom_fusion_dragon', limb_layout: 'two_arms_two_legs_angular_wings', fusion_host: 'zekrom', decisive_feature: 'kyurem_black_zekrom_arms_and_generator_tail', visual_rule: '酋雷姆：闇黑形態必須有捷克羅姆融合結構、粗壯機械式手臂／角翼與發電機尾；不可只靠黑色。' })
+    });
     const HUNDO_FORM_BBOX_CONFIDENCE_THRESHOLD = 0.80;
     const HUNDO_FORM_VERIFY_CONFIDENCE_THRESHOLD = 0.90;
     const HUNDO_FORM_VERIFY_PARTIAL_THRESHOLD = 0.95;
@@ -439,6 +441,7 @@
             primary_effective_form_id: card?.effective_form_id,
             primary_form_confidence: card?.form_confidence,
             primary_form_evidence: card?.form_evidence,
+            stage2_candidate_form_ids: VERIFIED_FORM_IDS_BY_BASE_SPECIES[card?.base_species]?.slice() || [],
             verified_form_id: 'uncertain',
             verification_confidence: 0,
             verification_evidence: verificationEvidenceDefaults(),
@@ -456,6 +459,7 @@
         const plannedCards = inputCards.map((card, cardIndex) => {
             if (!isTargetHundoFormBaseSpecies(card?.base_species)) return card;
             targetCardCount += 1;
+            if (card?.effective_form_id !== 'uncertain') return card;
             const bboxContract = normalizeHundoBboxContract(card);
             const eligibleSpecies = ['recognized', 'partial'].includes(card?.recognition_status)
                 && isFinitePrimitiveNumber(card?.species_confidence)
@@ -474,13 +478,9 @@
                 reason = 'form_crop_missing';
             }
             const candidateReady = eligibleSpecies && usableCrop && candidateIdentity !== null;
-            const plannedCard = prepareTargetCard(
-                card,
-                bboxContract,
-                candidateReady ? 'pending' : 'not_requested',
-                reason,
-                candidateIdentity
-            );
+            const plannedCard = candidateReady
+                ? prepareTargetCard(card, bboxContract, 'pending', reason, candidateIdentity)
+                : card;
             if (candidateReady) {
                 candidatePlans.push({
                     input_card: card,
@@ -503,13 +503,7 @@
         });
         const candidates = candidatePlans.flatMap(candidatePlan => {
             if (candidateIdCounts.get(candidatePlan.candidate.card_id) === 1) return [candidatePlan.candidate];
-            plannedCards[candidatePlan.planned_card_index] = prepareTargetCard(
-                candidatePlan.input_card,
-                candidatePlan.bbox_contract,
-                'not_requested',
-                'form_crop_missing',
-                candidatePlan.candidate
-            );
+            plannedCards[candidatePlan.planned_card_index] = candidatePlan.input_card;
             return [];
         });
         return {

@@ -2336,7 +2336,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             });
         };
 
-        const buildSmartHundoFormVerifierPrompt = (verificationJobs, options = {}) => {
+        const buildSmartHundoFormVerifierPrompt = (verificationJobs) => {
             if (!isValidSmartHundoFormVerificationJobs(verificationJobs)) {
                 throw new Error('invalid form verification jobs');
             }
@@ -2347,7 +2347,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 .filter(formId => formId !== 'uncertain')
                 .map(formId => {
                     const evidence = globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE[formId];
-                    return `${formId} | body_plan=${evidence.body_plan} | limb_layout=${evidence.limb_layout} | fusion_host=${evidence.fusion_host} | decisive_feature=${evidence.decisive_feature}`;
+                    return `${formId} | 視覺規則=${evidence.visual_rule} | body_plan=${evidence.body_plan} | limb_layout=${evidence.limb_layout} | fusion_host=${evidence.fusion_host} | decisive_feature=${evidence.decisive_feature}`;
                 })).join('\n');
             return `你是寶可夢 GO 指定形態的嚴格視覺驗證器。
 
@@ -2383,7 +2383,7 @@ necrozma_dawn_wings | body_plan=necrozma_wide_moon_wings | limb_layout=giant_win
 ${evidenceLines}
 
 【本次 tile 對應】
-${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查所有 tile，但仍只依本體證據輸出完整 cards。' : ''}`;
+${mappingLines}`;
         };
 
         const fileToOriginalDataUrlImplementation = (file) => new Promise((resolve, reject) => {
@@ -2823,9 +2823,7 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
             if (typeof contactSheetDataUrl !== 'string' || !/^data:image\/png;base64,/.test(contactSheetDataUrl)) {
                 throw new Error('invalid form verification contact sheet');
             }
-            const prompt = buildSmartHundoFormVerifierPrompt(verificationJobs, {
-                structuralRetry: requestOptions.structuralRetry === true
-            });
+            const prompt = buildSmartHundoFormVerifierPrompt(verificationJobs);
             return requestOpenAiJsonSchema(
                 apiKey,
                 prompt,
@@ -2840,85 +2838,6 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                     retryParseErrors: false
                 }
             );
-        };
-
-        const requestSmartHundoFormVerificationWithStructuralRetry = async ({
-            apiKey,
-            contactSheetDataUrl,
-            verificationJobs,
-            statusUpdater,
-            requestOptions = {},
-            isCurrentRun = () => true
-        } = {}) => {
-            const verifier = globalThis.SmartHundoFormVerifier;
-            if (!verifier) throw new Error('Smart Hundo form verifier is unavailable');
-            const runAttempt = async structuralRetry => {
-                const response = await requestSmartHundoFormVerification({
-                    apiKey,
-                    contactSheetDataUrl,
-                    verificationJobs,
-                    statusUpdater,
-                    requestOptions: { ...requestOptions, structuralRetry }
-                });
-                const result = verifier.normalizeHundoFormVerifierResult(response?.result);
-                const finishReason = String(response?.finish_reason || '');
-                return {
-                    result,
-                    finish_reason: finishReason,
-                    structure: verifier.validateHundoFormVerifierStructure(result, verificationJobs, finishReason)
-                };
-            };
-            let firstAttempt;
-            try {
-                firstAttempt = await runAttempt(false);
-            } catch (error) {
-                if (error?.reasonCode !== 'openai_json_parse_error') throw error;
-                firstAttempt = {
-                    result: { cards: [] },
-                    finish_reason: '',
-                    structure: {
-                        complete: false,
-                        retry_reasons: ['openai_json_parse_error']
-                    }
-                };
-            }
-            if (!isCurrentRun()) {
-                return {
-                    ...firstAttempt,
-                    attempt_count: 1,
-                    structural_retry_used: false,
-                    structural_retry_reasons: [],
-                    stale: true
-                };
-            }
-            if (firstAttempt.structure.complete) {
-                return {
-                    ...firstAttempt,
-                    attempt_count: 1,
-                    structural_retry_used: false,
-                    structural_retry_reasons: []
-                };
-            }
-            let secondAttempt;
-            try {
-                secondAttempt = await runAttempt(true);
-            } catch (error) {
-                if (error?.reasonCode !== 'openai_json_parse_error') throw error;
-                secondAttempt = {
-                    result: { cards: [] },
-                    finish_reason: '',
-                    structure: {
-                        complete: false,
-                        retry_reasons: ['openai_json_parse_error']
-                    }
-                };
-            }
-            return {
-                ...secondAttempt,
-                attempt_count: 2,
-                structural_retry_used: true,
-                structural_retry_reasons: firstAttempt.structure.retry_reasons.slice()
-            };
         };
 
         const safeTrainerTeamErrorSummary = (operationFailure, stage = 'trainer_team', reasonCode = 'trainer_team_request_failed') => {
@@ -3075,13 +2994,12 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                 target_review_card_count: 0,
                 contact_sheet_count: 0,
                 verifier_request_count: 0,
-                verifier_structural_retry_count: 0,
                 form_verify_model: HUNDO_FORM_VERIFY_MODEL
             };
             if (planned.target_candidate_count === 0) {
                 metrics.target_review_card_count = finalCards.filter(card => (
                     verifier.isTargetHundoFormBaseSpecies(card?.base_species)
-                    && card?.verification_status !== 'verified'
+                    && card?.effective_form_id === 'uncertain'
                 )).length;
                 return { cards: finalCards, metrics, stale: false };
             }
@@ -3156,7 +3074,7 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
             metrics.target_verified_count = finalCards.filter(card => card?.verification_status === 'verified').length;
             metrics.target_review_card_count = finalCards.filter(card => (
                 verifier.isTargetHundoFormBaseSpecies(card?.base_species)
-                && card?.verification_status !== 'verified'
+                && card?.effective_form_id === 'uncertain'
             )).length;
             return { cards: finalCards, metrics, stale: false };
         };
@@ -3256,8 +3174,7 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                         target_review_card_count: 0,
                         contact_sheet_count: 0,
                         verifier_request_count: 0,
-                        verifier_structural_retry_count: 0,
-                        form_verify_model: HUNDO_FORM_VERIFY_MODEL
+                                form_verify_model: HUNDO_FORM_VERIFY_MODEL
                     }
                 };
             const manualReviewReasons = [];
@@ -3893,7 +3810,7 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                     const formVerificationMetrics = smartResults.reduce((metrics, result) => {
                         [
                             'target_candidate_count', 'target_verified_count', 'target_review_card_count',
-                            'contact_sheet_count', 'verifier_request_count', 'verifier_structural_retry_count'
+                            'contact_sheet_count', 'verifier_request_count'
                         ].forEach(field => {
                             const value = Number(result?.[field]);
                             metrics[field] += Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
@@ -3905,8 +3822,7 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                         target_review_card_count: 0,
                         contact_sheet_count: 0,
                         verifier_request_count: 0,
-                        verifier_structural_retry_count: 0,
-                        form_verify_model: HUNDO_FORM_VERIFY_MODEL
+                                form_verify_model: HUNDO_FORM_VERIFY_MODEL
                     });
                     const diagnostics = helpers.shapeSmartHundoDiagnostics({
                         scan_session_id: String(smartSessionId),
@@ -3936,7 +3852,6 @@ ${mappingLines}${options.structuralRetry ? '\n這是結構重試；重新檢查�
                             target_review_card_count: result.target_review_card_count,
                             contact_sheet_count: result.contact_sheet_count,
                             verifier_request_count: result.verifier_request_count,
-                            verifier_structural_retry_count: result.verifier_structural_retry_count,
                             form_verify_model: result.form_verify_model
                         })),
                         count_candidates: countMerge.candidates,

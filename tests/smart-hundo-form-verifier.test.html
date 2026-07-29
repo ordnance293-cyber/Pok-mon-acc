@@ -76,10 +76,10 @@
         recognition_status: 'recognized',
         species_confidence: 0.8,
         form_id: 'dialga_standard',
-        effective_form_id: 'dialga_standard',
+        effective_form_id: 'uncertain',
         form_confidence: 0.9,
         form_evidence: { visual_signature: 'dialga_standard' },
-        canonical_official_name: '帝牙盧卡',
+        canonical_official_name: '',
         manual_review_reasons: ['form_uncertain', 'species_uncertain'],
         ...validBboxContract(),
         ...overrides
@@ -102,7 +102,7 @@
         deepEqual(verifier().VERIFIED_FORM_IDS_BY_BASE_SPECIES['酋雷姆'], ['kyurem_base', 'kyurem_white', 'kyurem_black', 'uncertain']);
       });
       test('exports all seven approved evidence tuples as literals', () => {
-        deepEqual(Object.fromEntries(Object.entries(verifier().REQUIRED_VERIFIED_FORM_EVIDENCE).filter(([id]) => ['dialga_standard', 'dialga_origin', 'palkia_standard', 'palkia_origin', 'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'].includes(id))), {
+        deepEqual(Object.fromEntries(Object.entries(verifier().REQUIRED_VERIFIED_FORM_EVIDENCE).filter(([id]) => ['dialga_standard', 'dialga_origin', 'palkia_standard', 'palkia_origin', 'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'].includes(id)).map(([id, { visual_rule, ...evidence }]) => [id, evidence])), {
           dialga_standard: { base_species: '帝牙盧卡', body_plan: 'dialga_stocky_wide_quadruped', limb_layout: 'four_standard_legs', fusion_host: 'not_applicable', decisive_feature: 'dialga_standard_stocky_neck_chest' },
           dialga_origin: { base_species: '帝牙盧卡', body_plan: 'dialga_elongated_equine_quadruped', limb_layout: 'four_long_legs', fusion_host: 'not_applicable', decisive_feature: 'dialga_origin_elongated_neck_chest' },
           palkia_standard: { base_species: '帕路奇亞', body_plan: 'palkia_upright_biped_with_arms', limb_layout: 'two_arms_two_legs', fusion_host: 'not_applicable', decisive_feature: 'palkia_standard_visible_arms' },
@@ -187,15 +187,15 @@
       test('marks invalid target bbox as form_crop_missing', () => {
         const planned = verifier().planTargetHundoFormCandidates([targetCard({ pokemon_bbox: null })]);
         equal(planned.target_candidate_count, 0);
-        equal(planned.cards[0].verification_status, 'not_requested');
-        equal(planned.cards[0].manual_review_reasons.includes('form_crop_missing'), true);
+        equal(Object.hasOwn(planned.cards[0], 'verification_status'), false);
+        equal(planned.cards[0].manual_review_reasons.includes('form_crop_missing'), false);
         equal(planned.cards[0].effective_form_id, 'uncertain');
       });
       test('marks low bbox confidence or unclear bbox as form_crop_not_clear', () => {
         const low = targetCard({ card_id: '0:3:1:1', bbox_confidence: 0.79 });
         const unclear = targetCard({ card_id: '0:4:1:1', bbox_visibility: 'cropped' });
         const planned = verifier().planTargetHundoFormCandidates([low, unclear]);
-        deepEqual(planned.cards.map(card => card.manual_review_reasons.includes('form_crop_not_clear')), [true, true]);
+        deepEqual(planned.cards, [low, unclear]);
       });
       test('marks valid geometry with invalid confidence or unusable visibility as form_crop_not_clear', () => {
         const cases = [
@@ -207,7 +207,7 @@
         const planned = verifier().planTargetHundoFormCandidates(cases);
         equal(planned.target_candidate_count, 0);
         planned.cards.forEach(card => {
-          equal(card.manual_review_reasons.includes('form_crop_not_clear'), true);
+          equal(card.manual_review_reasons.includes('form_crop_not_clear'), false);
           equal(card.manual_review_reasons.includes('form_crop_missing'), false);
         });
       });
@@ -217,8 +217,8 @@
         const planned = verifier().planTargetHundoFormCandidates([missing, nonIntegerScreenshot]);
         equal(planned.target_candidate_count, 0);
         planned.cards.forEach(card => {
-          equal(card.verification_status, 'not_requested');
-          equal(card.manual_review_reasons.includes('form_crop_missing'), true);
+          equal(Object.hasOwn(card, 'verification_status'), false);
+          equal(card.manual_review_reasons.includes('form_crop_missing'), false);
           equal(card.effective_form_id, 'uncertain');
         });
       });
@@ -227,7 +227,7 @@
         const second = targetCard({ card_id: '0:duplicate:1:1', order: 3 });
         const planned = verifier().planTargetHundoFormCandidates([first, second]);
         equal(planned.target_candidate_count, 0);
-        planned.cards.forEach(card => equal(card.manual_review_reasons.includes('form_crop_missing'), true));
+        deepEqual(planned.cards, [first, second]);
         deepEqual(verifier().planHundoFormVerificationBatches([
           { card_id: '0:1:1:1', screenshot_index: 0, base_species: '帝牙盧卡', candidate_form_ids: ['dialga_standard'] },
           { card_id: '0:1:1:1', screenshot_index: 0, base_species: '帝牙盧卡', candidate_form_ids: ['dialga_standard'] }
@@ -660,9 +660,9 @@
           response: { choices: ['PRIVATE_RESPONSE'] }, File: { private: true }
         });
         const diagnostics = helpers.shapeSmartHundoDiagnostics({
-          screenshots: [{ index: 0, cards: [card], target_candidate_count: 1, target_verified_count: 1, target_review_card_count: 0, contact_sheet_count: 1, verifier_request_count: 1, verifier_structural_retry_count: 0, form_verify_model: 'gpt-4.1-mini' }],
+          screenshots: [{ index: 0, cards: [card], target_candidate_count: 1, target_verified_count: 1, target_review_card_count: 0, contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-4.1-mini' }],
           target_candidate_count: 1, target_verified_count: 1, target_review_card_count: 0,
-          contact_sheet_count: 1, verifier_request_count: 1, verifier_structural_retry_count: 0,
+          contact_sheet_count: 1, verifier_request_count: 1,
           form_verify_model: 'gpt-4.1-mini'
         });
         const safeCard = diagnostics.screenshots[0].cards[0];

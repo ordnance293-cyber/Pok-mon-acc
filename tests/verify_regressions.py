@@ -208,17 +208,10 @@ def assert_form_verifier_manual_acceptance_doc() -> None:
         raise AssertionError(f"form verifier manual acceptance document does not exist: {FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC}")
     document = normalized_source(FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC)
     for fragment in (
-        "CP is an anonymized card-position locator only and must not be used as a recognition feature.",
-        "CP 4634", "CP 2914", "CP 2624", "necrozma_dawn_wings", "necrozma_dusk_mane", "necrozma_base",
-        "CP 2882", "CP 2311", "CP 2823", "dialga_origin", "dialga_standard",
-        "CP 2223", "CP 2225", "CP 2255", "palkia_origin", "palkia_standard",
-        "upright crystal vs lion vs wide moon wings",
-        "stocky vs elongated equine",
-        "upright biped with arms vs centaur quadruped",
-        "full commit SHA", "anonymized image ID", "CP locator", "base species", "primary form",
-        "primary confidence", "bbox", "bbox confidence", "tile ID", "verified form",
-        "verification confidence", "body plan", "limb layout", "fusion host", "decisive feature",
-        "final effective form", "canonical name", "pass/fail", "failure summary", "NOT RUN",
+        "all 23 forms", "Articuno", "Zapdos", "Moltres", "Zacian", "Zamazenta",
+        "Dialga", "Palkia", "Zygarde", "Necrozma", "Kyurem", "CP3282",
+        "zamazenta_standard", "藏瑪然特", "待確認（CP3282）", "Crowned Shield",
+        "ceil(unresolved_eligible_candidates / 6)", "NOT RUN",
     ):
         require_fragment(document, fragment, "form verifier manual acceptance document")
     if "data:image/" in document or "base64," in document:
@@ -239,7 +232,7 @@ def assert_task7_safe_diagnostics_and_status(source: str, helpers_source: str) -
         "contact_sheet_id", "tile_id", "verified_form_id", "verification_confidence",
         "verification_evidence", "target_candidate_count", "target_verified_count",
         "target_review_card_count", "contact_sheet_count", "verifier_request_count",
-        "verifier_structural_retry_count", "form_verify_model",
+        "form_verify_model",
     ):
         require_fragment(diagnostics, fragment, "Task 7 safe diagnostics")
     assert_forbidden_identifiers(diagnostics, ("apiKey", "dataUrl", "request", "response", "payload", "headers", "File"), "Task 7 diagnostics")

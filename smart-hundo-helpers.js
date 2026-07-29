@@ -892,26 +892,22 @@
             label_relationship: diagnosticEnum(source.label_relationship, FORM_LABEL_RELATIONSHIP_VALUES)
         };
     };
-    const DIAGNOSTIC_VERIFIED_FORM_VALUES = new Set([
-        'uncertain', 'dialga_standard', 'dialga_origin', 'palkia_standard', 'palkia_origin',
-        'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings'
-    ]);
     const DIAGNOSTIC_CROP_VISIBILITY_VALUES = new Set(['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain']);
-    const DIAGNOSTIC_BODY_PLAN_VALUES = new Set([
-        'uncertain', 'dialga_stocky_wide_quadruped', 'dialga_elongated_equine_quadruped',
-        'palkia_upright_biped_with_arms', 'palkia_centaur_quadruped', 'necrozma_upright_crystalline',
-        'necrozma_quadruped_lion', 'necrozma_wide_moon_wings'
+    const DIAGNOSTIC_VERIFICATION_STATUS_VALUES = new Set([
+        'pending', 'verified', 'uncertain', 'low_confidence', 'species_mismatch',
+        'evidence_mismatch', 'invalid_result', 'structural_incomplete', 'request_failed', 'failed'
     ]);
-    const DIAGNOSTIC_LIMB_LAYOUT_VALUES = new Set([
-        'uncertain', 'four_standard_legs', 'four_long_legs', 'two_arms_two_legs',
-        'four_legs_no_standard_arms', 'upright_crystalline_limbs', 'quadruped_lion', 'giant_wings_no_lion_body'
-    ]);
-    const DIAGNOSTIC_FUSION_HOST_VALUES = new Set(['not_applicable', 'none', 'solgaleo', 'lunala', 'uncertain']);
-    const DIAGNOSTIC_DECISIVE_FEATURE_VALUES = new Set([
-        'uncertain', 'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest',
-        'palkia_standard_visible_arms', 'palkia_origin_centaur_body', 'necrozma_base_crystal_body',
-        'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings'
-    ]);
+    const diagnosticVerifierContract = () => {
+        const evidence = globalThis.SmartHundoFormVerifier?.REQUIRED_VERIFIED_FORM_EVIDENCE || {};
+        const values = field => new Set(['uncertain', ...Object.values(evidence).map(item => item?.[field]).filter(value => typeof value === 'string')]);
+        return {
+            verifiedForms: new Set(['uncertain', ...Object.keys(HUNDO_FORM_CANONICAL_NAMES)]),
+            bodyPlans: values('body_plan'),
+            limbLayouts: values('limb_layout'),
+            fusionHosts: values('fusion_host'),
+            decisiveFeatures: values('decisive_feature')
+        };
+    };
     const diagnosticStrictNonnegativeInteger = (value) => (
         typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0 ? value : 0
     );
@@ -944,12 +940,13 @@
     };
     const diagnosticVerificationEvidence = (evidence) => {
         const value = field => diagnosticOwnObjectValue(evidence, field);
+        const contract = diagnosticVerifierContract();
         return {
             crop_visibility: diagnosticEnum(value('crop_visibility'), DIAGNOSTIC_CROP_VISIBILITY_VALUES),
-            body_plan: diagnosticEnum(value('body_plan'), DIAGNOSTIC_BODY_PLAN_VALUES),
-            limb_layout: diagnosticEnum(value('limb_layout'), DIAGNOSTIC_LIMB_LAYOUT_VALUES),
-            fusion_host: diagnosticEnum(value('fusion_host'), DIAGNOSTIC_FUSION_HOST_VALUES),
-            decisive_feature: diagnosticEnum(value('decisive_feature'), DIAGNOSTIC_DECISIVE_FEATURE_VALUES),
+            body_plan: diagnosticEnum(value('body_plan'), contract.bodyPlans),
+            limb_layout: diagnosticEnum(value('limb_layout'), contract.limbLayouts),
+            fusion_host: diagnosticEnum(value('fusion_host'), contract.fusionHosts),
+            decisive_feature: diagnosticEnum(value('decisive_feature'), contract.decisiveFeatures),
             key_features_visible: value('key_features_visible') === true
         };
     };
@@ -980,7 +977,8 @@
         const diagnosticBaseSpecies = diagnosticString(card?.base_species);
         const rawFormId = diagnosticEnum(rawForm.form_id ?? card?.form_id, HUNDO_FORM_ID_VALUES);
         const effectiveFormId = diagnosticEnum(card?.effective_form_id, HUNDO_FORM_ID_VALUES);
-        const isTargetFormCard = ['帝牙盧卡', '帕路奇亞', '奈克洛茲瑪'].includes(diagnosticBaseSpecies);
+        const isTargetFormCard = Object.hasOwn(HUNDO_FORMS_BY_BASE_SPECIES, diagnosticBaseSpecies);
+        const verifierContract = diagnosticVerifierContract();
 
         return {
             card_id: diagnosticString(card?.card_id),
@@ -1070,9 +1068,12 @@
                     ? diagnosticString(card?.contact_sheet_id)
                     : '',
                 tile_id: /^T[1-6]$/.test(diagnosticString(card?.tile_id)) ? diagnosticString(card?.tile_id) : '',
-                verified_form_id: diagnosticEnum(card?.verified_form_id, DIAGNOSTIC_VERIFIED_FORM_VALUES),
+                stage2_candidate_form_ids: diagnosticStrings(card?.stage2_candidate_form_ids)
+                    .filter(value => verifierContract.verifiedForms.has(value)),
+                verified_form_id: diagnosticEnum(card?.verified_form_id, verifierContract.verifiedForms),
                 verification_confidence: clampStrictConfidence(card?.verification_confidence),
-                verification_evidence: diagnosticVerificationEvidence(card?.verification_evidence)
+                verification_evidence: diagnosticVerificationEvidence(card?.verification_evidence),
+                verification_status: diagnosticEnum(card?.verification_status, DIAGNOSTIC_VERIFICATION_STATUS_VALUES)
             } : {}),
             manual_review_reasons: diagnosticReviewReasons(card?.manual_review_reasons)
         };
@@ -1092,7 +1093,6 @@
         target_review_card_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_review_card_count')),
         contact_sheet_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'contact_sheet_count')),
         verifier_request_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_request_count')),
-        verifier_structural_retry_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_structural_retry_count')),
         form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-4.1-mini' ? 'gpt-4.1-mini' : ''
     });
     const shapeSmartHundoDiagnostics = (session = {}) => ({
