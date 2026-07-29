@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEST_PATHS = (
     "/tests/trainer-team.test.html",
     "/tests/smart-hundo.test.html",
+    "/tests/smart-hundo-form-verifier.test.html",
 )
 BROWSER_CANDIDATES = (
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
