@@ -276,6 +276,7 @@
                 chk_kyurem: getChk('chk_kyurem'), sel_kyurem: getVal('sel_kyurem'),
                 chk_zamazenta: getChk('chk_zamazenta'), sel_dogs: getVal('sel_dogs'),
                 chk_necrozma: getChk('chk_necrozma'), sel_necrozma: getVal('sel_necrozma'),
+                chk_mewtwo: getChk('chk_mewtwo'), sel_mewtwo: getVal('sel_mewtwo'),
                 chk_lati: getChk('chk_lati'), sel_lati: getVal('sel_lati'),
                 chk_hoenn: getChk('chk_hoenn'), sel_hoenn: getVal('sel_hoenn'),
                 chk_dyna_form: getChk('chk_dyna'), chk_groudon: getChk('chk_groudon'),
@@ -370,6 +371,13 @@
             else if(txt.includes('‼️奈克洛茲瑪月亮型態合體‼️')) setVal('sel_necrozma', '‼️奈克洛茲瑪月亮型態合體‼️');
             else setVal('sel_necrozma', item.sel_necrozma || '‼️奈克洛茲瑪雙型態合體‼️');
 
+            const hasMewtwo = item.chk_mewtwo !== undefined ? item.chk_mewtwo : (txt.includes('超夢') || txt.includes('Mega超夢'));
+            setChk('chk_mewtwo', hasMewtwo);
+            if(txt.includes('⭐️Mega超夢雙型態⭐️')) setVal('sel_mewtwo', '⭐️Mega超夢雙型態⭐️');
+            else if(txt.includes('⭐️Mega超夢X⭐️')) setVal('sel_mewtwo', '⭐️Mega超夢X⭐️');
+            else if(txt.includes('⭐️Mega超夢Y⭐️')) setVal('sel_mewtwo', '⭐️Mega超夢Y⭐️');
+            else setVal('sel_mewtwo', item.sel_mewtwo || '⭐️Mega超夢雙型態⭐️');
+
             const hasLati = item.chk_lati !== undefined ? item.chk_lati : (txt.includes('飛機兄妹') || txt.includes('拉帝'));
             setChk('chk_lati', hasLati);
             if(txt.includes('⭐️飛機兄妹可Mega⭐️')) setVal('sel_lati', '⭐️飛機兄妹可Mega⭐️');
@@ -394,6 +402,7 @@
             document.getElementById('sel_kyurem').classList.toggle('hidden', !document.getElementById('chk_kyurem').checked);
             document.getElementById('sel_dogs').classList.toggle('hidden', !document.getElementById('chk_zamazenta').checked);
             document.getElementById('sel_necrozma').classList.toggle('hidden', !document.getElementById('chk_necrozma').checked);
+            document.getElementById('sel_mewtwo').classList.toggle('hidden', !document.getElementById('chk_mewtwo').checked);
             document.getElementById('sel_lati').classList.toggle('hidden', !document.getElementById('chk_lati').checked);
             document.getElementById('sel_hoenn').classList.toggle('hidden', !document.getElementById('chk_hoenn').checked);
             
@@ -1221,6 +1230,7 @@
             'chk_kyurem', 'sel_kyurem',
             'chk_zamazenta', 'sel_dogs',
             'chk_necrozma', 'sel_necrozma',
+            'chk_mewtwo', 'sel_mewtwo',
             'chk_lati', 'sel_lati',
             'chk_hoenn', 'sel_hoenn',
             'chk_dyna', 'chk_groudon', 'chk_kyogre', 'chk_rayquaza'
@@ -1290,6 +1300,7 @@
             document.getElementById('sel_kyurem').classList.toggle('hidden', !document.getElementById('chk_kyurem').checked);
             document.getElementById('sel_dogs').classList.toggle('hidden', !document.getElementById('chk_zamazenta').checked);
             document.getElementById('sel_necrozma').classList.toggle('hidden', !document.getElementById('chk_necrozma').checked);
+            document.getElementById('sel_mewtwo').classList.toggle('hidden', !document.getElementById('chk_mewtwo').checked);
             document.getElementById('sel_lati').classList.toggle('hidden', !document.getElementById('chk_lati').checked);
             document.getElementById('sel_hoenn').classList.toggle('hidden', !document.getElementById('chk_hoenn').checked);
         };
@@ -4036,6 +4047,7 @@ ${mappingLines}`;
             if(checked('chk_kyurem')) res.push(v('sel_kyurem'));
             if(checked('chk_zamazenta')) res.push(v('sel_dogs'));
             if(checked('chk_necrozma')) res.push(v('sel_necrozma'));
+            if(checked('chk_mewtwo')) res.push(v('sel_mewtwo'));
             if(checked('chk_dyna')) res.push(`✨可打極巨化／超極巨化✨`);
             if(checked('chk_lati')) res.push(v('sel_lati'));
             if(checked('chk_hoenn')) res.push(v('sel_hoenn'));
@@ -4221,6 +4233,10 @@ ${mappingLines}`;
                             <div class="space-y-1">
                                 <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪</label>
                                 <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_mewtwo" onchange="document.getElementById('sel_mewtwo').classList.toggle('hidden', !this.checked)">超夢</label>
+                                <select id="sel_mewtwo" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️Mega超夢雙型態⭐️">Mega超夢雙型態</option><option value="⭐️Mega超夢X⭐️">Mega超夢X</option><option value="⭐️Mega超夢Y⭐️">Mega超夢Y</option></select>
                             </div>
                             <div class="space-y-1">
                                 <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
