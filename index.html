@@ -739,7 +739,7 @@
         const AI_IMAGE_RESULT_FIELDS = [...AI_NUMERIC_RESULT_FIELDS, ...AI_TEXT_RESULT_FIELDS, ...AI_WAN_RESULT_FIELDS];
         const AI_MERGED_RESULT_FIELDS = [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'];
         const AI_IMAGE_TYPE_ALLOWED_FIELDS = {
-            CATEGORY_OVERVIEW_SCREEN: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            CATEGORY_OVERVIEW_SCREEN: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'poke_bag'],
             HUNDO_LEGENDARY_SCREEN: ['hundo_leg', 'pokemon_list'],
             LEGENDARY_TOTAL_SCREEN: ['legendary'],
             SHINY_LEGENDARY_SCREEN: ['shiny_leg'],
@@ -757,7 +757,7 @@
             OTHER: []
         };
         const AI_EXPECTED_FIELDS_BY_IMAGE_TYPE = {
-            CATEGORY_OVERVIEW_SCREEN: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            CATEGORY_OVERVIEW_SCREEN: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'poke_bag'],
             HUNDO_LEGENDARY_SCREEN: ['hundo_leg', 'pokemon_list'],
             LEGENDARY_TOTAL_SCREEN: ['legendary'],
             SHINY_LEGENDARY_SCREEN: ['shiny_leg'],
@@ -775,7 +775,7 @@
             OTHER: []
         };
         const AI_RETRY_REQUIRED_FIELDS_BY_IMAGE_TYPE = {
-            CATEGORY_OVERVIEW_SCREEN: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect'],
+            CATEGORY_OVERVIEW_SCREEN: ['shiny', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect', 'poke_bag'],
             HUNDO_LEGENDARY_SCREEN: ['hundo_leg', 'pokemon_list'],
             LEGENDARY_TOTAL_SCREEN: ['legendary'],
             SHINY_LEGENDARY_SCREEN: ['shiny_leg'],
@@ -808,7 +808,7 @@
             greenpass: { RESOURCE_SCREEN: 1 },
             rarecandy: { RESOURCE_SCREEN: 1 },
             coin: { RESOURCE_SCREEN: 1 },
-            poke_bag: { RESOURCE_SCREEN: 1 },
+            poke_bag: { CATEGORY_OVERVIEW_SCREEN: 2, RESOURCE_SCREEN: 1 },
             item_bag: { RESOURCE_SCREEN: 1 },
             level: { TRAINER_PROFILE_SCREEN: 1 },
             xp: { TRAINER_PROFILE_SCREEN: 1 },
@@ -891,6 +891,7 @@
                 type: 'object',
                 additionalProperties: false,
                 properties: {
+                    header_type: { type: 'string', enum: ['pokemon', 'item', 'none'] },
                     legendary: { type: 'string' },
                     hundo_leg: { type: 'string' },
                     shiny: { type: 'string' },
@@ -915,6 +916,7 @@
                     pokemon_list: { type: 'string' }
                 },
                 required: [
+                    'header_type',
                     'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume',
                     'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
                     'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin',
@@ -1445,6 +1447,7 @@
         const buildEmptyAiResult = () => ({
             image_type: 'OTHER',
             search_query: '',
+            header_type: 'none',
             legendary: '',
             hundo_leg: '',
             shiny: '',
@@ -1536,6 +1539,9 @@
             const normalized = buildEmptyAiResult();
             normalized.image_type = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'OTHER';
             normalized.search_query = AI_IMAGE_TYPE_TO_QUERY[normalized.image_type] || String(classification?.search_query || '').trim();
+            normalized.header_type = ['pokemon', 'item'].includes(String(result?.header_type || '').trim())
+                ? String(result.header_type).trim()
+                : 'none';
 
             AI_NUMERIC_RESULT_FIELDS.forEach(field => {
                 normalized[field] = ['poke_bag', 'item_bag'].includes(field)
@@ -1551,6 +1557,17 @@
                 if (!allowedFieldSet.has(field)) normalized[field] = '';
             });
 
+            // Capacity ownership is visual evidence, not a consequence of image_type.
+            // A single top storage header can own exactly one slash-capacity value.
+            if (normalized.header_type === 'pokemon') {
+                normalized.item_bag = '';
+            } else if (normalized.header_type === 'item') {
+                normalized.poke_bag = '';
+            } else {
+                normalized.poke_bag = '';
+                normalized.item_bag = '';
+            }
+
             return normalized;
         };
 
@@ -1563,7 +1580,11 @@
         };
 
         const getRetryableMissingFields = (result = {}, expectedFields = []) => {
-            return expectedFields.filter(field => !String(result[field] || '').trim());
+            return expectedFields.filter(field => {
+                if (field === 'poke_bag' && result.header_type !== 'pokemon') return false;
+                if (field === 'item_bag' && result.header_type !== 'item') return false;
+                return !String(result[field] || '').trim();
+            });
         };
 
         const mergeSingleImageAttempts = (firstAttempt = buildEmptyAiResult(), secondAttempt = buildEmptyAiResult(), allowedFields = null) => {
@@ -1572,6 +1593,9 @@
                 image_type: firstAttempt.image_type || secondAttempt.image_type || 'OTHER',
                 search_query: firstAttempt.search_query || secondAttempt.search_query || ''
             };
+            merged.header_type = firstAttempt.header_type !== 'none'
+                ? firstAttempt.header_type
+                : (secondAttempt.header_type || 'none');
 
             (Array.isArray(allowedFields) ? allowedFields : (AI_IMAGE_TYPE_ALLOWED_FIELDS[merged.image_type] || [])).forEach(field => {
                 if (field === 'pokemon_list') {
@@ -1581,6 +1605,10 @@
                 }
                 merged[field] = String(secondAttempt[field] || '').trim() || String(firstAttempt[field] || '').trim();
             });
+
+            if (merged.header_type === 'pokemon') merged.item_bag = '';
+            else if (merged.header_type === 'item') merged.poke_bag = '';
+            else { merged.poke_bag = ''; merged.item_bag = ''; }
 
             return merged;
         };
@@ -1627,19 +1655,24 @@
 
         const isPopulatedAiValue = (value) => String(value || '').trim() !== '';
         const getRequiredValidationFields = () => [...AI_REQUIRED_VALIDATION_FIELDS];
-        const getCandidateImageIndexesForField = (field, classifications = []) => {
+        const getCandidateImageIndexesForField = (field, classifications = [], taskResults = []) => {
             const candidateTypes = new Set(AI_FIELD_TO_IMAGE_TYPES[field] || []);
+            const resultsByIndex = new Map(taskResults.map(task => [task.imageIndex, task.imageResult]));
             return classifications.reduce((indexes, classification, index) => {
-                if (candidateTypes.has(classification.image_type)) indexes.push(index);
+                if (!candidateTypes.has(classification.image_type)) return indexes;
+                const headerType = resultsByIndex.get(index)?.header_type;
+                if (field === 'poke_bag' && headerType !== 'pokemon') return indexes;
+                if (field === 'item_bag' && headerType !== 'item') return indexes;
+                indexes.push(index);
                 return indexes;
             }, []);
         };
-        const evaluateRequiredFieldCoverage = (mergedResult = {}, classifications = []) => {
+        const evaluateRequiredFieldCoverage = (mergedResult = {}, classifications = [], taskResults = []) => {
             const missingWithScreens = [];
             const missingWithoutScreens = [];
             getRequiredValidationFields(classifications).forEach(field => {
                 if (isPopulatedAiValue(mergedResult[field])) return;
-                const candidateIndexes = getCandidateImageIndexesForField(field, classifications);
+                const candidateIndexes = getCandidateImageIndexesForField(field, classifications, taskResults);
                 if (candidateIndexes.length > 0) {
                     missingWithScreens.push({ field, candidateIndexes });
                 } else {
@@ -1769,6 +1802,7 @@ image_type 只能是：
 
         const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [] }) => {
             const outputTemplate = `{
+  "header_type": "none",
   "legendary": "",
   "hundo_leg": "",
   "shiny": "",
@@ -1832,8 +1866,10 @@ ${outputTemplate}
 - 超極巨化 -> giga
 - 完美 -> perfect
 
+若同一張圖頂部儲存空間標頭清楚顯示「寶可夢」且緊鄰 current/capacity（例如 373/1150），另填 header_type="pokemon" 與 poke_bag="1150"。只取斜線右側；標頭與數字必須屬於同一頂部區域。否則 header_type="none" 且 poke_bag 留空。
+
 不能因為你認為其他截圖會補資料就略過。
-除了上述 7 個欄位外，其餘欄位與 pokemon_list 必須留空字串。`;
+除了上述 7 個欄位及符合規則的 poke_bag 外，其餘欄位與 pokemon_list 必須留空字串。`;
                 case 'LEGENDARY_TOTAL_SCREEN':
                     return `${baseRules}
 
@@ -1950,9 +1986,11 @@ ${outputTemplate}
 - 綠票 -> greenpass
 
 【RESOURCE_SCREEN 規則】
-1. 若畫面顯示為「目前/上限」，例如「4200/7800」，請取右邊上限數字。
-2. 若只看得到其中一種背包，就只填看得到的那一種。
-3. 若沒看到明確數字就留空字串。
+1. 只看頂部同一個儲存空間標頭區域中的標頭與 current/capacity；永遠只取斜線右側數字。
+2. 若「寶可夢」與 slash 數字明確相連，填 header_type="pokemon" 及 poke_bag，item_bag 留空。
+3. 若「道具」與 slash 數字明確相連，填 header_type="item" 及 item_bag，poke_bag 留空。
+4. 若沒有可信的相符頂部標頭，填 header_type="none"，poke_bag 與 item_bag 都留空。不得用畫面別處的「寶可夢」作證據。
+5. image_type 本身不能決定背包欄位。資源頁仍可同時擷取畫面中明確可見的其他道具數量。
 
 除了上述資源欄位之外，其餘欄位都必須留空字串。`;
                 default:
@@ -3386,6 +3424,7 @@ ${mappingLines}`;
                 : getAiExtractionFields(classification);
             if (extractionFields.length === 0) {
                 return {
+                    imageIndex,
                     imageResult: normalizeAiExtraction({}, classification, extractionFields),
                     expectedFields: extractionFields
                 };
@@ -3415,7 +3454,7 @@ ${mappingLines}`;
                 extracted_fields: getExtractedFieldsForLog(imageResult, extractionFields)
             });
 
-            return { imageResult, expectedFields: extractionFields };
+            return { imageIndex, imageResult, expectedFields: extractionFields };
         };
 
         const runRequiredFieldValidation = async ({
@@ -3426,7 +3465,7 @@ ${mappingLines}`;
             statusWriter = setAiActionButtonStatus
         }) => {
             let mergedResult = mergeTaskResultsIntoAiResult(taskResults);
-            let coverage = evaluateRequiredFieldCoverage(mergedResult, classifications);
+            let coverage = evaluateRequiredFieldCoverage(mergedResult, classifications, taskResults);
             const validationTaskResults = [];
 
             for (let pass = 0; pass < AI_REQUIRED_VALIDATION_PASSES && coverage.missingWithScreens.length > 0; pass += 1) {
@@ -3460,7 +3499,11 @@ ${mappingLines}`;
 
                 validationTaskResults.push(...passResults);
                 mergedResult = mergeTaskResultsIntoAiResult([...taskResults, ...validationTaskResults]);
-                coverage = evaluateRequiredFieldCoverage(mergedResult, classifications);
+                coverage = evaluateRequiredFieldCoverage(
+                    mergedResult,
+                    classifications,
+                    [...taskResults, ...validationTaskResults]
+                );
             }
 
             return {
