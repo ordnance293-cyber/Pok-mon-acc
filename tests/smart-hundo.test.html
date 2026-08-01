@@ -3155,6 +3155,9 @@
             smartHundoScan,
             formatSmartHundoStatus,
             normalizeAiClassification,
+            normalizeAiExtraction,
+            mergeAiResults,
+            getRetryableMissingFields,
             beginSmartHundoScanSession,
             markSmartHundoAiValue,
             handleSmartHundoManualEdit,
@@ -4292,6 +4295,33 @@
         });
         document.getElementById('openaiApiKey').value = 'test-key';
 
+        test('owns slash capacities by their visible storage header regardless of upload order', () => {
+          const category = normalizeAiExtraction(ordinaryModelResult({
+            header_type: 'pokemon', poke_bag: '373/1150', item_bag: '2675', shiny: '12'
+          }), { image_type: 'CATEGORY_OVERVIEW_SCREEN', search_query: '' });
+          const resource = normalizeAiExtraction(ordinaryModelResult({
+            header_type: 'item', poke_bag: '2675', item_bag: '2576/2675', coin: '123'
+          }), { image_type: 'RESOURCE_SCREEN', search_query: '' });
+
+          deepEqual({ poke_bag: category.poke_bag, item_bag: category.item_bag }, {
+            poke_bag: '1150', item_bag: ''
+          });
+          deepEqual({ poke_bag: resource.poke_bag, item_bag: resource.item_bag }, {
+            poke_bag: '', item_bag: '2675'
+          }, 'the deterministic item guard removes malicious duplicated poke_bag output');
+          deepEqual(mergeAiResults([category, resource]), mergeAiResults([resource, category]));
+          deepEqual({
+            poke_bag: mergeAiResults([category, resource]).poke_bag,
+            item_bag: mergeAiResults([category, resource]).item_bag
+          }, { poke_bag: '1150', item_bag: '2675' });
+        });
+
+        test('retries a capacity only for the matching visible header', () => {
+          equal(getRetryableMissingFields({ header_type: 'pokemon', poke_bag: '', item_bag: '' }, ['poke_bag', 'item_bag']).join(','), 'poke_bag');
+          equal(getRetryableMissingFields({ header_type: 'item', poke_bag: '', item_bag: '' }, ['poke_bag', 'item_bag']).join(','), 'item_bag');
+          equal(getRetryableMissingFields({ header_type: 'none', poke_bag: '', item_bag: '' }, ['poke_bag', 'item_bag']).length, 0);
+        });
+
         test('clears only unchanged AI-owned hundo values when a new session begins', () => {
           document.getElementById('g_hundos').value = '';
           document.getElementById('st_hundo_leg').value = '';
@@ -4550,6 +4580,7 @@
           POLLUTED_NAME: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&4*' }
         };
         const ordinaryModelResult = (overrides = {}) => ({
+          header_type: 'none',
           legendary: '', hundo_leg: '', shiny: '', shiny_leg: '', costume: '',
           bg_comm: '', bg_special: '', dyna: '', giga: '', perfect: '',
           old_poke: '', old_leg: '', masterball: '', greenpass: '', rarecandy: '', coin: '',
@@ -4567,7 +4598,7 @@
           if (prompt.includes('image_type = SHINY_LEGENDARY_SCREEN')) return ordinaryModelResult({ shiny_leg: '12' });
           if (prompt.includes('image_type = OLD_POKEMON_SCREEN')) return ordinaryModelResult({ old_poke: '42' });
           if (prompt.includes('image_type = RESOURCE_SCREEN')) {
-            return ordinaryModelResult({ coin: '123', poke_bag: '7800', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' });
+            return ordinaryModelResult({ header_type: 'item', coin: '123', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' });
           }
           fail(`unexpected ordinary extraction prompt: ${prompt.slice(0, 120)}`);
         };
