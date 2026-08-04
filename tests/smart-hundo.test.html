@@ -4546,6 +4546,7 @@
           TEAM_CLASSIFICATION_RESET: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           TEAM_SELECTION_INVALIDATED: { image_type: 'TRAINER_PROFILE_SCREEN', search_query: '' },
           RESOURCE: { image_type: 'RESOURCE_SCREEN', search_query: '' },
+          RESOURCE_FAIL: { image_type: 'RESOURCE_SCREEN', search_query: '' },
           SHINY_LEGENDARY: { image_type: 'SHINY_LEGENDARY_SCREEN', search_query: '傳說的寶可夢,幻,究極異獸&異色' },
           EXACT_A: { image_type: 'HUNDO_LEGENDARY_SCREEN', search_query: '　傳說的寶可夢， 幻， 究極異獸 ＆ ４＊ ' },
           EXACT_B_RAW_OTHER: { image_type: 'OTHER', search_query: ' 傳說的寶可夢, 幻, 究極異獸 & 4* ' },
@@ -4634,6 +4635,7 @@
         let failedOperations = new Set();
         let failedOperationErrorNames = new Map();
         let failedClassificationIdentities = new Set();
+        let failedOrdinaryIdentities = new Set();
         let trainerTeamResultByImage = new Map();
         let failedTrainerTeamIdentities = new Set();
         let delayedTrainerTeamIdentity = '';
@@ -4759,6 +4761,11 @@
                 notifyDelayedOrdinary?.();
               });
             }
+            if (failedOrdinaryIdentities.has(identity)) {
+              const error = new Error('ORDINARY_REQUEST_SECRET');
+              error.httpStatus = 503;
+              throw error;
+            }
             return openAiResponse(extractionForPrompt(prompt), () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           fail(`unexpected schema ${schemaName}`);
@@ -4773,6 +4780,7 @@
           failedOperations = new Set();
           failedOperationErrorNames = new Map();
           failedClassificationIdentities = new Set();
+          failedOrdinaryIdentities = new Set();
           trainerTeamResultByImage = new Map();
           failedTrainerTeamIdentities = new Set();
           delayedTrainerTeamIdentity = '';
@@ -5411,6 +5419,33 @@
           equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
           equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
           equal(document.getElementById('aiAutoBtn').disabled, false, 'button is restored');
+        });
+
+        await asyncTest('preserves Smart Hundo and successful normal results when one normal image fails', async () => {
+          resetScanScenario();
+          setScanFiles(['RESOURCE_FAIL', 'EXACT_A', 'PROFILE']);
+          failedOrdinaryIdentities.add('RESOURCE_FAIL');
+          trainerTeamResultByImage.set('PROFILE', trainerTeamEvidence('red'));
+          countResultByImage.set('EXACT_A', validCount('(1)', '1'));
+          cardResultByImage.set('EXACT_A', completeCardResult([
+            v2Card({ order: 1, row: 1, column: 1, cp: '3123', visible_label: '鳳王', official_name: '鳳王' })
+          ]));
+
+          await autoScan();
+
+          const ordinaryRequests = routedRequests.filter(request => request.schemaName === 'pokemon_go_forced_field_extractor');
+          const smartRequests = routedRequests.filter(request => (
+            request.schemaName === 'pokemon_go_hundo_count_extractor'
+            || request.schemaName === 'pokemon_go_hundo_smart_extractor_v2'
+          ));
+          equal(ordinaryRequests.some(request => request.imageUrl.includes('EXACT_A')), false, 'smart image is excluded from every normal request');
+          equal(smartRequests.every(request => request.imageUrl.includes('EXACT_A')), true, 'only the smart image enters the dedicated pipeline');
+          equal(document.getElementById('g_hundos').value, '鳳王', 'successful Smart Hundo list survives the normal failure');
+          equal(document.getElementById('st_hundo_leg').value, '1', 'successful Smart Hundo count survives the normal failure');
+          equal(document.getElementById('g_level').value, '50', 'successful normal result is also merged');
+          equal(document.getElementById('g_xp').value, '350', 'other normal fields survive their sibling failure');
+          equal(document.getElementById('aiAutoStatus').textContent, '掃描完成，但有 1 張失敗；成功結果已保留');
+          equal(document.getElementById('aiAutoBtn').disabled, false, 'partial failure restores the button');
         });
 
         await asyncTest('keeps schema-complete non-whitelist cards in the production list', async () => {
