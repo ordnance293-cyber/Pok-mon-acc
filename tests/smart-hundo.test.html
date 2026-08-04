@@ -3497,18 +3497,18 @@
             apiKey: 'PRIVATE_KEY', File: { private: true }
           });
           const diagnostics = shapeSmartHundoDiagnostics({
-            screenshots: [{ index: 0, cards: [privateCard], target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1, contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-4.1-mini' }],
+            screenshots: [{ index: 0, cards: [privateCard], target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1, contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-5.6-luna' }],
             target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1,
-            contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-4.1-mini'
+            contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-5.6-luna'
           });
           const metrics = ['target_candidate_count', 'target_verified_count', 'target_review_card_count', 'contact_sheet_count', 'verifier_request_count', 'form_verify_model'];
           deepEqual(Object.fromEntries(metrics.map(key => [key, diagnostics[key]])), {
             target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1,
-            contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-4.1-mini'
+            contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-5.6-luna'
           });
           deepEqual(Object.fromEntries(metrics.map(key => [key, diagnostics.screenshots[0][key]])), {
             target_candidate_count: 3, target_verified_count: 2, target_review_card_count: 1,
-            contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-4.1-mini'
+            contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-5.6-luna'
           });
           const shaped = diagnostics.screenshots[0].cards[0];
           deepEqual(shaped.verification_evidence, { crop_visibility: 'clear', body_plan: 'dialga_elongated_equine_quadruped', limb_layout: 'four_long_legs', fusion_host: 'not_applicable', decisive_feature: 'dialga_origin_elongated_neck_chest', key_features_visible: true });
@@ -3751,6 +3751,10 @@
         const ordinaryResult = await requestOpenAiJsonSchema('test-key', 'normal', resizedUrl, HUNDO_SMART_SCHEMA, null);
         equal(ordinaryResult.detected_card_count, 0);
         equal(Object.hasOwn(ordinaryResult, 'result'), false, 'ordinary callers retain parsed-object return');
+        equal(OPENAI_MODEL, 'gpt-4.1-mini');
+        equal(HUNDO_COUNT_MODEL, 'gpt-5.6-luna');
+        equal(HUNDO_SMART_MODEL, 'gpt-5.6-luna');
+        equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-5.6-luna');
         equal(lastPayload.model, 'gpt-4.1-mini', 'ordinary extraction uses the ordinary model');
         equal(lastPayload.temperature, 0.1, 'ordinary extraction keeps temperature');
         equal(Object.hasOwn(lastPayload, 'reasoning_effort'), false, 'ordinary extraction excludes reasoning effort');
@@ -3797,9 +3801,9 @@
         equal(lastPayload.response_format.json_schema.name, 'pokemon_go_hundo_count_extractor');
         equal(lastPayload.messages[0].content[1].image_url.detail, 'high');
         equal(lastPayload.messages[0].content[1].image_url.url.startsWith('data:image/png'), true);
-        equal(lastPayload.model, 'gpt-4.1-mini', 'Hundo count uses the ordinary model');
-        equal(lastPayload.temperature, 0.1, 'Hundo count keeps ordinary temperature');
-        equal(Object.hasOwn(lastPayload, 'reasoning_effort'), false, 'Hundo count excludes reasoning effort');
+        equal(lastPayload.model, 'gpt-5.6-luna', 'Hundo count uses its dedicated Luna model');
+        equal(lastPayload.reasoning_effort, 'medium', 'Hundo count uses medium reasoning');
+        equal(Object.hasOwn(lastPayload, 'temperature'), false, 'Hundo count excludes temperature');
         deepEqual({
           schema: lastPayload.response_format.json_schema,
           prompt: lastPayload.messages[0].content[0].text,
@@ -4150,7 +4154,7 @@
           equal(attempts.length, 2, 'one logical retry makes exactly two extraction calls');
           attempts.forEach(({ payload, schemaName }) => {
             equal(schemaName, 'pokemon_go_hundo_smart_extractor_v2');
-            equal(payload.model, 'gpt-5.4-mini', 'both complete-image attempts use the Smart Hundo model');
+            equal(payload.model, 'gpt-5.6-luna', 'both complete-image attempts use the Smart Hundo model');
             equal(payload.reasoning_effort, 'medium', 'both complete-image attempts use medium reasoning');
             equal(Object.hasOwn(payload, 'temperature'), false, 'Smart Hundo never sends temperature');
             equal(payload.messages[0].content[1].image_url.url, originalDataUrl);
@@ -5374,6 +5378,11 @@
           equal(ordinaryRequests.length, 3, 'only non-smart jobs use ordinary extraction');
           equal(countRequests.length, 2, 'each exact job gets one logical count operation');
           equal(cardRequests.length, 2, 'each exact job gets one logical full-image card operation');
+          equal(classifierRequests.every(request => request.payload.model === 'gpt-4.1-mini' && request.payload.temperature === 0.1 && !Object.hasOwn(request.payload, 'reasoning_effort')), true, 'classification remains on the ordinary model');
+          equal(ordinaryRequests.every(request => request.payload.model === 'gpt-4.1-mini' && request.payload.temperature === 0.1 && !Object.hasOwn(request.payload, 'reasoning_effort')), true, 'ordinary extraction remains on the ordinary model');
+          equal(countRequests.every(request => request.payload.model === 'gpt-5.6-luna' && request.payload.reasoning_effort === 'medium' && !Object.hasOwn(request.payload, 'temperature')), true, 'Smart Hundo count routes only to Luna');
+          equal(cardRequests.every(request => request.payload.model === 'gpt-5.6-luna' && request.payload.reasoning_effort === 'medium' && !Object.hasOwn(request.payload, 'temperature')), true, 'Smart Hundo cards route only to Luna');
+          equal(routedRequests.some(request => ['pokemon_go_hundo_count_extractor', 'pokemon_go_hundo_smart_extractor_v2', 'pokemon_go_smart_hundo_form_verifier_v2'].includes(request.schemaName) && ['gpt-4.1-mini', 'gpt-5.4-mini'].includes(request.payload.model)), false, 'dedicated Smart Hundo requests never fall back');
           deepEqual(cardRequests.map(request => request.imageUrl), [
             'data:image/png;base64,ORIGINAL_EXACT_A',
             'data:image/png;base64,ORIGINAL_EXACT_B_RAW_OTHER'
@@ -5413,8 +5422,8 @@
           equal(window.lastSmartHundoDiagnostics.screenshots[1].cards[0].effective_states.rocket, 'purified');
           const routedSmartScreenshot = window.lastSmartHundoDiagnostics.screenshots[0];
           equal(routedSmartScreenshot.classification_model, 'gpt-4.1-mini');
-          equal(routedSmartScreenshot.hundo_count_model, 'gpt-4.1-mini');
-          equal(routedSmartScreenshot.smart_hundo_requested_model, 'gpt-5.4-mini');
+          equal(routedSmartScreenshot.hundo_count_model, 'gpt-5.6-luna');
+          equal(routedSmartScreenshot.smart_hundo_requested_model, 'gpt-5.6-luna');
           equal(routedSmartScreenshot.smart_hundo_reasoning_effort, 'medium');
           equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
           equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');
@@ -6230,7 +6239,7 @@
 
         await asyncTest('defines the strict limited-candidate verifier schema', async () => {
           const fields = ['tile_id', 'card_id', 'base_species', 'verified_form_id', 'verification_confidence', 'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible'];
-          equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-4.1-mini');
+          equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-5.6-luna');
           equal(HUNDO_FORM_VERIFIER_SCHEMA.name, 'pokemon_go_smart_hundo_form_verifier_v2');
           equal(HUNDO_FORM_VERIFIER_SCHEMA.strict, true);
           deepEqual(HUNDO_FORM_VERIFIER_SCHEMA.schema.required, ['cards']);
@@ -6307,11 +6316,11 @@
           try {
             installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
               equal(schemaName, 'pokemon_go_smart_hundo_form_verifier_v2');
-              equal(payload.model, 'gpt-4.1-mini');
-              equal(payload.temperature, 0.1);
+              equal(payload.model, 'gpt-5.6-luna');
+              equal(payload.reasoning_effort, 'medium');
               equal(payload.messages[0].content[1].image_url.detail, 'high');
               equal(payload.messages[0].content[1].image_url.url, 'data:image/png;base64,CONTACT_SHEET_ONLY');
-              equal(Object.hasOwn(payload, 'reasoning_effort'), false);
+              equal(Object.hasOwn(payload, 'temperature'), false);
               equal(JSON.stringify(payload).includes('ORIGINAL_SCREENSHOT_SENTINEL'), false);
               return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"cards":[]}' } }] }) };
             });
@@ -6528,7 +6537,7 @@
             decisive_feature: ['uncertain', 'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest', 'palkia_standard_visible_arms', 'palkia_origin_centaur_body', 'necrozma_base_crystal_body', 'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings']
           };
           const schema = HUNDO_FORM_VERIFIER_SCHEMA;
-          equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-4.1-mini');
+          equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-5.6-luna');
           equal(schema.name, 'pokemon_go_smart_hundo_form_verifier_v2');
           equal(schema.strict, true);
           equal(schema.schema.type, 'object');
@@ -6600,12 +6609,12 @@
             installStrictOpenAiFetchMock(async ({ payload, schemaName }) => {
               requestCount += 1;
               equal(schemaName, 'pokemon_go_smart_hundo_form_verifier_v2');
-              equal(payload.model, 'gpt-4.1-mini');
-              equal(payload.temperature, 0.1);
+              equal(payload.model, 'gpt-5.6-luna');
+              equal(payload.reasoning_effort, 'medium');
               equal(payload.messages[0].content[1].image_url.detail, 'high');
               equal(payload.messages[0].content[1].image_url.url, 'data:image/png;base64,CONTACT_SHEET_ONLY');
               deepEqual(payload.response_format.json_schema, HUNDO_FORM_VERIFIER_SCHEMA);
-              equal(Object.hasOwn(payload, 'reasoning_effort'), false);
+              equal(Object.hasOwn(payload, 'temperature'), false);
               const serializedPayload = JSON.stringify(payload);
               equal(serializedPayload.includes('ORIGINAL_SCREENSHOT_SENTINEL'), false);
               equal(serializedPayload.includes('INDIVIDUAL_CROP_SENTINEL'), false);

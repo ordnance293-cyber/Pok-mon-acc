@@ -660,10 +660,10 @@
           response: { choices: ['PRIVATE_RESPONSE'] }, File: { private: true }
         });
         const diagnostics = helpers.shapeSmartHundoDiagnostics({
-          screenshots: [{ index: 0, cards: [card], target_candidate_count: 1, target_verified_count: 1, target_review_card_count: 0, contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-4.1-mini' }],
+          screenshots: [{ index: 0, cards: [card], target_candidate_count: 1, target_verified_count: 1, target_review_card_count: 0, contact_sheet_count: 1, verifier_request_count: 1, form_verify_model: 'gpt-5.6-luna' }],
           target_candidate_count: 1, target_verified_count: 1, target_review_card_count: 0,
           contact_sheet_count: 1, verifier_request_count: 1,
-          form_verify_model: 'gpt-4.1-mini'
+          form_verify_model: 'gpt-5.6-luna'
         });
         const safeCard = diagnostics.screenshots[0].cards[0];
         deepEqual(Object.keys(safeCard).filter(key => ['primary_form_id', 'primary_effective_form_id', 'primary_form_confidence', 'card_bbox', 'pokemon_bbox', 'bbox_confidence', 'bbox_visibility', 'crop_source_size', 'contact_sheet_id', 'tile_id', 'verified_form_id', 'verification_confidence', 'verification_evidence'].includes(key)).sort(), ['bbox_confidence', 'bbox_visibility', 'card_bbox', 'contact_sheet_id', 'crop_source_size', 'pokemon_bbox', 'primary_effective_form_id', 'primary_form_confidence', 'primary_form_id', 'tile_id', 'verification_confidence', 'verification_evidence', 'verified_form_id']);
