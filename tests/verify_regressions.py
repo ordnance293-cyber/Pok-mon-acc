@@ -34,8 +34,8 @@ NEW_ITEM_HASH = "1f9b3fdb2b0448e92ecc7a329a29fa4b6ab22e5029d2d5bfa177f9de85ca692
 NEW_ITEM_LENGTH = 1750
 GENERATE_TEXT_HASH = "1b0ab9f692069a5a377aff9f729b74a663cead47202da24cd4542299866a477a"
 GENERATE_TEXT_LENGTH = 4654
-HUNDO_COUNT_HELPERS_HASH = "218f80f1c30bc6247f214cc62e7a2959b3c16d33b061c01af1445a669e38152d"
-HUNDO_COUNT_HELPERS_LENGTH = 4332
+HUNDO_COUNT_HELPERS_HASH = "86537cfe41bb72af6aedd209bd5d1443911701ce322890cf624657dd74c2883a"
+HUNDO_COUNT_HELPERS_LENGTH = 5041
 HUNDO_COUNT_SCHEMA_HASH = "98a1d9191cf3aef23a34b2613edace96db7ae0664e9a26e422ef63c91e60eac5"
 HUNDO_COUNT_SCHEMA_LENGTH = 1128
 HUNDO_COUNT_PROMPT_HASH = "d93623450e28e7da3672ed22cd9b5c4b7a2f6d2cdb5609e58f4637a92e33b307"
@@ -456,12 +456,22 @@ def main() -> int:
             source,
             "trainer-team-helpers.js",
         )),
-        ("hundo-count helpers have the origin/main snapshot", lambda: assert_snapshot(
-            "hundo-count helpers",
-            hundo_count_helpers,
-            HUNDO_COUNT_HELPERS_HASH,
-            HUNDO_COUNT_HELPERS_LENGTH,
-        )),
+        ("hundo-count helpers keep exact-parenthesized fallback locked", lambda: [
+            assert_snapshot(
+                "hundo-count helpers",
+                hundo_count_helpers,
+                HUNDO_COUNT_HELPERS_HASH,
+                HUNDO_COUNT_HELPERS_LENGTH,
+            ),
+            require_fragment(hundo_count_helpers, "const strictSemanticValid = (", "strict semantic count path"),
+            require_fragment(hundo_count_helpers, r"const rawTextContainsSlash = /[\/／]/.test(normalized.raw_count_text);", "raw slash rejection"),
+            require_fragment(hundo_count_helpers, "const hasExplicitContextContradiction = (", "explicit context contradiction"),
+            require_fragment(hundo_count_helpers, "normalized.active_tab === 'egg'", "egg contradiction"),
+            require_fragment(hundo_count_helpers, "normalized.count_source === 'other'", "source contradiction"),
+            require_fragment(hundo_count_helpers, "normalized.relative_position === 'other'", "position contradiction"),
+            require_fragment(hundo_count_helpers, "const exactParenthesizedTextValid = (", "exact parenthesized fallback"),
+            require_fragment(hundo_count_helpers, "const valid = strictSemanticValid || exactParenthesizedTextValid;", "count validation union"),
+        ]),
         ("hundo-count schema has the origin/main snapshot", lambda: assert_snapshot(
             "hundo-count schema",
             hundo_count_schema,
@@ -611,10 +621,10 @@ def main() -> int:
             require_fragment(source, "const OPENAI_MODEL = 'gpt-4.1-mini';", "OpenAI model"),
             require_fragment(source, "const HUNDO_COUNT_MODEL = 'gpt-5.6-luna';", "Hundo count model"),
             require_fragment(source, "const HUNDO_COUNT_REASONING_EFFORT = 'medium';", "Hundo count reasoning"),
-            require_fragment(source, "const HUNDO_SMART_MODEL = 'gpt-5.6-luna';", "Smart Hundo model"),
-            require_fragment(source, "const HUNDO_SMART_REASONING_EFFORT = 'max';", "Smart Hundo reasoning"),
-            require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-luna';", "form verifier model"),
-            require_fragment(source, "const HUNDO_FORM_VERIFY_REASONING_EFFORT = 'max';", "form verifier reasoning"),
+            require_fragment(source, "const HUNDO_SMART_MODEL = 'gpt-5.6-sol';", "Smart Hundo model"),
+            require_fragment(source, "const HUNDO_SMART_REASONING_EFFORT = 'high';", "Smart Hundo reasoning"),
+            require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-sol';", "form verifier model"),
+            require_fragment(source, "const HUNDO_FORM_VERIFY_REASONING_EFFORT = 'high';", "form verifier reasoning"),
             require_fragment(source, "const AI_MAX_IMAGE_SIZE = 1000;", "maximum image size"),
             require_fragment(source, "const AI_JPEG_QUALITY = 0.7;", "JPEG quality"),
             require_fragment(source, "const AI_IMAGE_DETAIL = 'auto';", "normal image detail"),
@@ -639,7 +649,7 @@ def main() -> int:
             require_fragment(source, "不得被 visible_label 帶回 dialga_standard", "Dialga direct-recognition example"),
         ]),
         ("limited-candidate form verifier request remains isolated and strict", lambda: [
-            require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-luna';", "verifier model"),
+            require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-sol';", "verifier model"),
             require_fragment(source, "const HUNDO_FORM_VERIFIER_SCHEMA = {", "verifier schema"),
             require_fragment(
                 source,
