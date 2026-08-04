@@ -682,9 +682,12 @@
         };
 
         const OPENAI_MODEL = 'gpt-4.1-mini';
-        const HUNDO_SMART_MODEL = 'gpt-5.4-mini';
+        const HUNDO_COUNT_MODEL = 'gpt-5.6-luna';
+        const HUNDO_COUNT_REASONING_EFFORT = 'medium';
+        const HUNDO_SMART_MODEL = 'gpt-5.6-luna';
         const HUNDO_SMART_REASONING_EFFORT = 'medium';
-        const HUNDO_FORM_VERIFY_MODEL = 'gpt-4.1-mini';
+        const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-luna';
+        const HUNDO_FORM_VERIFY_REASONING_EFFORT = 'medium';
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
@@ -2803,10 +2806,10 @@ ${mappingLines}`;
                     json_schema: jsonSchema
                 }
             };
-            if (requestModel === HUNDO_SMART_MODEL) {
-                requestPayload.reasoning_effort = options.reasoningEffort || HUNDO_SMART_REASONING_EFFORT;
+            if (Object.hasOwn(options, 'reasoningEffort')) {
+                requestPayload.reasoning_effort = options.reasoningEffort;
             } else {
-                requestPayload.temperature = 0.1;
+                requestPayload.temperature = options.temperature ?? 0.1;
             }
             const payload = JSON.stringify(requestPayload);
 
@@ -2882,6 +2885,7 @@ ${mappingLines}`;
                 {
                     ...requestOptions,
                     model: HUNDO_FORM_VERIFY_MODEL,
+                    reasoningEffort: HUNDO_FORM_VERIFY_REASONING_EFFORT,
                     imageDetail: 'high',
                     includeMetadata: true,
                     retryParseErrors: false
@@ -2953,7 +2957,12 @@ ${mappingLines}`;
             countRegionDataUrl,
             HUNDO_COUNT_SCHEMA,
             statusUpdater,
-            { imageDetail: 'high', includeMetadata: true }
+            {
+                model: HUNDO_COUNT_MODEL,
+                reasoningEffort: HUNDO_COUNT_REASONING_EFFORT,
+                imageDetail: 'high',
+                includeMetadata: true
+            }
         );
 
         const requestSmartHundoExtractionV2 = async (
@@ -3254,7 +3263,7 @@ ${mappingLines}`;
                 },
                 finish_reason: cardExtraction?.finish_reason || '',
                 classification_model: OPENAI_MODEL,
-                hundo_count_model: OPENAI_MODEL,
+                hundo_count_model: HUNDO_COUNT_MODEL,
                 smart_hundo_requested_model: HUNDO_SMART_MODEL,
                 smart_hundo_returned_model: cardExtraction?.returned_model || '',
                 smart_hundo_reasoning_effort: HUNDO_SMART_REASONING_EFFORT,

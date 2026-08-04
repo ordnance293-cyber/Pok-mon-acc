@@ -1093,7 +1093,7 @@
         target_review_card_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_review_card_count')),
         contact_sheet_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'contact_sheet_count')),
         verifier_request_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_request_count')),
-        form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-4.1-mini' ? 'gpt-4.1-mini' : ''
+        form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-5.6-luna' ? 'gpt-5.6-luna' : ''
     });
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),

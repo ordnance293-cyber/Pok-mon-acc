@@ -609,7 +609,8 @@ def main() -> int:
                 "OpenAI endpoint",
             ),
             require_fragment(source, "const OPENAI_MODEL = 'gpt-4.1-mini';", "OpenAI model"),
-            require_fragment(source, "const HUNDO_SMART_MODEL = 'gpt-5.4-mini';", "Smart Hundo model"),
+            require_fragment(source, "const HUNDO_COUNT_MODEL = 'gpt-5.6-luna';", "Hundo count model"),
+            require_fragment(source, "const HUNDO_SMART_MODEL = 'gpt-5.6-luna';", "Smart Hundo model"),
             require_fragment(source, "const HUNDO_SMART_REASONING_EFFORT = 'medium';", "Smart Hundo reasoning"),
             require_fragment(source, "const AI_MAX_IMAGE_SIZE = 1000;", "maximum image size"),
             require_fragment(source, "const AI_JPEG_QUALITY = 0.7;", "JPEG quality"),
@@ -623,7 +624,7 @@ def main() -> int:
         ("OpenAI wrapper routes Smart Hundo without an ordinary-model fallback", lambda: [
             require_fragment(openai_request, "const requestModel = options.model || OPENAI_MODEL;", "request model override"),
             require_fragment(openai_request, "requestPayload.reasoning_effort", "Smart Hundo reasoning payload"),
-            require_fragment(openai_request, "requestPayload.temperature = 0.1;", "ordinary temperature payload"),
+            require_fragment(openai_request, "requestPayload.temperature = options.temperature ?? 0.1;", "ordinary temperature payload"),
             require_fragment(smart_hundo_request, "model: HUNDO_SMART_MODEL", "Smart Hundo model route"),
             require_fragment(smart_hundo_request, "reasoningEffort: HUNDO_SMART_REASONING_EFFORT", "Smart Hundo reasoning route"),
             assert_forbidden(smart_hundo_request, ("OPENAI_MODEL",), "Smart Hundo wrapper fallback"),
@@ -635,7 +636,7 @@ def main() -> int:
             require_fragment(source, "不得被 visible_label 帶回 dialga_standard", "Dialga direct-recognition example"),
         ]),
         ("limited-candidate form verifier request remains isolated and strict", lambda: [
-            require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-4.1-mini';", "verifier model"),
+            require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-luna';", "verifier model"),
             require_fragment(source, "const HUNDO_FORM_VERIFIER_SCHEMA = {", "verifier schema"),
             require_fragment(
                 source,
