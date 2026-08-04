@@ -3474,7 +3474,7 @@ ${mappingLines}`;
 
                 let completedCount = 0;
                 const totalTargets = validationTargets.length;
-                const passResults = await Promise.all(validationTargets.map((target, progressIndex) =>
+                const passSettlements = await Promise.allSettled(validationTargets.map((target, progressIndex) =>
                     extractSingleAiImage({
                         apiKey,
                         dataUrl: dataUrls[target.index],
@@ -3497,6 +3497,9 @@ ${mappingLines}`;
                     })
                 ));
 
+                const passResults = passSettlements
+                    .filter(settlement => settlement.status === 'fulfilled')
+                    .map(settlement => settlement.value);
                 validationTaskResults.push(...passResults);
                 mergedResult = mergeTaskResultsIntoAiResult([...taskResults, ...validationTaskResults]);
                 coverage = evaluateRequiredFieldCoverage(
@@ -3526,7 +3529,7 @@ ${mappingLines}`;
             const totalTargets = targetIndexes.length;
             const mergeLabel = '快速掃描統整中';
 
-            return Promise.all(targetIndexes.map((targetIndex, progressIndex) =>
+            const settlements = await Promise.allSettled(targetIndexes.map((targetIndex, progressIndex) =>
                 extractSingleAiImage({
                     apiKey,
                     dataUrl: dataUrls[targetIndex],
@@ -3547,6 +3550,11 @@ ${mappingLines}`;
                     return result;
                 })
             ));
+            const results = settlements
+                .filter(settlement => settlement.status === 'fulfilled')
+                .map(settlement => settlement.value);
+            results.failedJobCount = settlements.length - results.length;
+            return results;
         };
 
         const quickScan = async ({ apiKey, dataUrls, classifications, statusWriter }) => runAiExtractionBatch({
@@ -3598,7 +3606,7 @@ ${mappingLines}`;
                         `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} ${message}｜已分類 ${classifiedCount}/${totalFiles}`
                     );
                 };
-                const classifiedJobs = await Promise.all(jobs.map(job =>
+                const classificationSettlements = await Promise.allSettled(jobs.map(job =>
                     classifySingleAiImage({
                         apiKey,
                         dataUrl: job.classificationDataUrl,
@@ -3613,9 +3621,16 @@ ${mappingLines}`;
                         return { ...job, classification };
                     })
                 ));
+                const classifiedJobs = classificationSettlements
+                    .filter(settlement => settlement.status === 'fulfilled')
+                    .map(settlement => settlement.value);
+                const classificationFailureCount = classificationSettlements.length - classifiedJobs.length;
                 if (!isCurrentAutoScanRun(scanRunId)) return;
 
                 const { normalJobs, smartHundoJobs } = helpers.partitionImageJobs(classifiedJobs);
+                if (smartHundoJobs.length > 0) {
+                    writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 已偵測 ${smartHundoJobs.length} 張百神截圖，將分開掃描；其餘 ${normalJobs.length} 張進行數字辨識`);
+                }
                 const trainerTeamJobs = activeTrainerTeamScanId === trainerTeamContextIdAtStart
                     ? normalJobs.filter(
                         job => job.classification.image_type === 'TRAINER_PROFILE_SCREEN'
@@ -3642,13 +3657,17 @@ ${mappingLines}`;
                         statusWriter: writeBatchStatus
                     });
                     if (!isCurrentAutoScanRun(scanRunId)) return null;
-                    return runRequiredFieldValidation({
+                    const validationResult = await runRequiredFieldValidation({
                         apiKey,
                         dataUrls: normalDataUrls,
                         classifications: normalClassifications,
                         taskResults,
                         statusWriter: writeBatchStatus
                     });
+                    return {
+                        ...validationResult,
+                        failedJobCount: Number(taskResults.failedJobCount || 0)
+                    };
                 })();
                 const smartTasks = smartHundoJobs.map(job => (async () => {
                     const originalDataUrl = await fileToOriginalDataUrl(job.file);
@@ -3683,7 +3702,9 @@ ${mappingLines}`;
                 const smartSettlements = settlements.slice(1, 1 + smartTasks.length);
                 const trainerTeamSettlements = settlements.slice(1 + smartTasks.length);
                 if (!isCurrentAutoScanRun(scanRunId)) return;
-                if (normalSettlement.status === 'rejected') throw normalSettlement.reason;
+                const normalFailureCount = normalSettlement.status === 'rejected'
+                    ? normalJobs.length
+                    : Number(normalSettlement.value?.failedJobCount || 0);
 
                 const smartResults = smartSettlements.map((settlement, index) => {
                     if (settlement.status === 'fulfilled') return settlement.value;
@@ -3724,11 +3745,18 @@ ${mappingLines}`;
                     };
                 });
 
+                const normalOutcome = normalSettlement.status === 'fulfilled' && normalSettlement.value
+                    ? normalSettlement.value
+                    : {
+                        mergedResult: buildEmptyMergedAiResult(),
+                        coverage: evaluateRequiredFieldCoverage({}, normalClassifications, []),
+                        validationTaskResults: []
+                    };
                 const {
                     mergedResult: normalMergedResult,
                     coverage: ordinaryCoverage,
                     validationTaskResults
-                } = normalSettlement.value;
+                } = normalOutcome;
                 let finalCoverage = ordinaryCoverage;
                 if (!isCurrentAutoScanRun(scanRunId)) return;
                 applyAiResultToForm(normalMergedResult);
@@ -3962,7 +3990,13 @@ ${mappingLines}`;
                     console.warn('AI required field validation result:', finalCoverage);
                     alert(`以下欄位已逐一驗證，但本次仍未能自動填入：\n${missingMessages.join('\n')}`);
                 }
-                if (smartHundoJobs.length === 0) writeRunStatus(AI_SUCCESS_LABEL);
+                const smartFailureCount = smartSettlements.filter(settlement => settlement.status === 'rejected').length;
+                const totalFailureCount = classificationFailureCount + normalFailureCount + smartFailureCount;
+                if (totalFailureCount > 0) {
+                    writeRunStatus(`<i class="fas fa-exclamation-triangle text-amber-600"></i> 掃描完成，但有 ${totalFailureCount} 張失敗；成功結果已保留`);
+                } else if (smartHundoJobs.length === 0) {
+                    writeRunStatus(AI_SUCCESS_LABEL);
+                }
             } catch (error) {
                 if (!isCurrentAutoScanRun(scanRunId)) return;
                 alert("GPT 解析失敗，請稍後再試");
