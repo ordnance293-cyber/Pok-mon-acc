@@ -200,11 +200,14 @@
 
     const validateHundoCountEvidence = (result = {}, classification = {}) => {
         const normalized = normalizeHundoCountResult(result);
+        const exactQuery = (
+            normalizeSearchQuery(classification?.search_query) === HUNDO_LEGENDARY_QUERY
+        );
         const rawMatch = normalized.raw_count_text.match(/^\(\s*(\d+)\s*\)$/);
         const parsedNumber = rawMatch ? Number(rawMatch[1]) : NaN;
         const parsedCount = Number.isFinite(parsedNumber) ? String(parsedNumber) : '';
-        const valid = (
-            normalizeSearchQuery(classification?.search_query) === HUNDO_LEGENDARY_QUERY
+        const strictSemanticValid = (
+            exactQuery
             && normalized.active_tab === 'pokemon'
             && normalized.count_source === 'pokemon_search_result_summary'
             && normalized.relative_position === 'associated_with_active_pokemon_tab'
@@ -214,6 +217,20 @@
             && normalized.hundo_leg === parsedCount
             && normalized.confidence >= HUNDO_COUNT_CONFIDENCE_THRESHOLD
         );
+        const rawTextContainsSlash = /[\/／]/.test(normalized.raw_count_text);
+        const hasExplicitContextContradiction = (
+            normalized.active_tab === 'egg'
+            || normalized.count_source === 'other'
+            || normalized.relative_position === 'other'
+        );
+        const exactParenthesizedTextValid = (
+            exactQuery
+            && rawMatch !== null
+            && normalized.hundo_leg === parsedCount
+            && rawTextContainsSlash === false
+            && hasExplicitContextContradiction === false
+        );
+        const valid = strictSemanticValid || exactParenthesizedTextValid;
 
         return {
             hundo_leg: valid ? parsedCount : '',
@@ -1093,7 +1110,7 @@
         target_review_card_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_review_card_count')),
         contact_sheet_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'contact_sheet_count')),
         verifier_request_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_request_count')),
-        form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-5.6-luna' ? 'gpt-5.6-luna' : ''
+        form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-5.6-sol' ? 'gpt-5.6-sol' : ''
     });
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),
