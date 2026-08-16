@@ -28,11 +28,11 @@ EXTRACTION_PROMPT_HASH = "3f0fb62a1461ff5b3997c06a8c76cca22bbdccf3bf4dc6aa89b56e
 EXTRACTION_PROMPT_LENGTH = 5080
 RESIZED_IMAGE_FUNCTION_HASH = "c4baf69d9b7a67771b356642bf549806254fe48a676952986150eb616a93daf4"
 RESIZED_IMAGE_FUNCTION_LENGTH = 1276
-SAVE_ACCOUNT_HASH = "7fe0e43b03888ec0d9738c1b8d52c93dd1d7435460cbc34afaad8ce7184a0cf4"
-SAVE_ACCOUNT_LENGTH = 11973
+SAVE_ACCOUNT_HASH = "26a9fc83f335232b49a8cdd2aa9b9a3b0b5a2fbae3f07d0c7bb489c8f1dad829"
+SAVE_ACCOUNT_LENGTH = 12794
 NEW_ITEM_HASH = "1f9b3fdb2b0448e92ecc7a329a29fa4b6ab22e5029d2d5bfa177f9de85ca6923"
 NEW_ITEM_LENGTH = 1750
-GENERATE_TEXT_HASH = "1b0ab9f692069a5a377aff9f729b74a663cead47202da24cd4542299866a477a"
+GENERATE_TEXT_HASH = "b9193d73c4b4ae2289141c5960cd05dad6bda746a8fba1b4bbc400dbbe356698"
 GENERATE_TEXT_LENGTH = 4654
 HUNDO_COUNT_HELPERS_HASH = "86537cfe41bb72af6aedd209bd5d1443911701ce322890cf624657dd74c2883a"
 HUNDO_COUNT_HELPERS_LENGTH = 5041
@@ -452,6 +452,51 @@ def main() -> int:
     ))
 
     checks.extend([
+        ("Special Research options cover save, restore, AI protection, and generated text", lambda: [
+            *[
+                require_fragment(source, fragment, "Special Research expansion")
+                for fragment in (
+                    'id="chk_sp_12" value="捷拉奧拉">捷拉奧拉',
+                    'id="chk_sp_13" value="色違蒂安希">色違蒂安希',
+                    'id="chk_sp_14" value="蒂安希">蒂安希',
+                    'id="chk_sp_15" value="色違凱路迪歐">色違凱路迪歐',
+                )
+            ],
+            require_fragment(
+                source,
+                "for(let i=1; i<=15; i++) newItem['chk_sp_'+i] = getChk('chk_sp_'+i);",
+                "Special Research persistence range",
+            ),
+            require_fragment(
+                source,
+                "...Array.from({ length: 15 }, (_, index) => `chk_sp_${index + 1}`),",
+                "Special Research AI protection range",
+            ),
+            require_fragment(
+                generate_text,
+                "for(let i=1; i<=15; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }",
+                "Special Research generated text range",
+            ),
+            *[
+                require_fragment(source, f"'chk_sp_{index}',", "Special Research restoration")
+                for index in range(12, 16)
+            ],
+            require_fragment(
+                source,
+                ": (txt.includes('蒂安希') && !txt.includes('色違蒂安希'))",
+                "Special Research Diancie collision protection",
+            ),
+            require_fragment(
+                source,
+                "!txt.includes('凱路迪歐,瑪夏多') &&\n                        !txt.includes('色違凱路迪歐')",
+                "Special Research Keldeo collision protection",
+            ),
+            require_fragment(
+                source,
+                "setChk('chk_sp_11', item.chk_sp_11 !== undefined ? item.chk_sp_11 : txt.includes('凱路迪歐,瑪夏多'));",
+                "Special Research Keldeo and Marshadow restoration",
+            ),
+        ]),
         ("trainer-team helper loads before the production module", lambda: assert_script_before_module(
             source,
             "trainer-team-helpers.js",
