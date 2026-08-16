@@ -49,12 +49,16 @@ Add restore logic for `chk_sp_12` through `chk_sp_15` using the same pattern as 
 - Prefer the stored boolean field when present.
 - Otherwise infer the value from decoded `fullText` for legacy records.
 
-The text fallback must avoid false matches where one new name is a substring of another. In particular:
+Use these fallback rules for the new fields:
 
-- `色違蒂安希` and `蒂安希` must be distinguished so a legacy record containing only `色違蒂安希` does not automatically select both checkboxes.
-- `色違凱路迪歐` and `凱路迪歐` must be distinguished so a legacy record containing only `色違凱路迪歐` does not automatically select the normal `凱路迪歐` checkbox.
+- `chk_sp_12`: `txt.includes('捷拉奧拉')`
+- `chk_sp_13`: `txt.includes('色違蒂安希')`
+- `chk_sp_14`: `txt.includes('蒂安希') && !txt.includes('色違蒂安希')`
+- `chk_sp_15`: `txt.includes('色違凱路迪歐')`
 
-Existing special cases such as `凱路迪歐,瑪夏多` must continue to work unchanged.
+Also refine the existing legacy fallback for normal `chk_sp_3` (`凱路迪歐`) so it excludes both the existing combined `凱路迪歐,瑪夏多` case and the new `色違凱路迪歐` case. This prevents a legacy record containing only shiny Keldeo from selecting the normal Keldeo checkbox.
+
+All other existing Special Research fallback behavior remains unchanged.
 
 ### AI Protection
 
@@ -86,9 +90,10 @@ Verify at minimum:
 5. A legacy `fullText` containing `色違蒂安希` restores only `色違蒂安希`, not normal `蒂安希`.
 6. A legacy `fullText` containing normal `蒂安希` restores only normal `蒂安希`.
 7. A legacy `fullText` containing `色違凱路迪歐` restores only `色違凱路迪歐`, not normal `凱路迪歐`.
-8. Existing `凱路迪歐` and `凱路迪歐,瑪夏多` fallback behavior remains correct.
-9. `AI_PROTECTED_INPUT_IDS` contains `chk_sp_1` through `chk_sp_15`.
-10. No unrelated UI or inventory behavior changes.
+8. Existing normal `凱路迪歐` fallback continues to work.
+9. Existing `凱路迪歐,瑪夏多` fallback behavior remains correct.
+10. `AI_PROTECTED_INPUT_IDS` contains `chk_sp_1` through `chk_sp_15`.
+11. No unrelated UI or inventory behavior changes.
 
 ## Implementation Boundary
 
