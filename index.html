@@ -284,7 +284,7 @@
                 fullText: encodeURIComponent(window.generateText()), status: getVal('g_item_status')
             };
 
-            for(let i=1; i<=11; i++) newItem['chk_sp_'+i] = getChk('chk_sp_'+i);
+            for(let i=1; i<=15; i++) newItem['chk_sp_'+i] = getChk('chk_sp_'+i);
 
             const sheetId = document.getElementById('googleSheetId').value.trim(); 
             const scriptUrl = document.getElementById('gasUrl').value.trim();
@@ -340,7 +340,16 @@
 
             setChk('chk_sp_1', item.chk_sp_1 !== undefined ? item.chk_sp_1 : txt.includes('色違美洛耶塔'));
             setChk('chk_sp_2', item.chk_sp_2 !== undefined ? item.chk_sp_2 : txt.includes('色違夢幻'));
-            setChk('chk_sp_3', item.chk_sp_3 !== undefined ? item.chk_sp_3 : (txt.includes('凱路迪歐') && !txt.includes('凱路迪歐,瑪夏多')));
+            setChk(
+                'chk_sp_3',
+                item.chk_sp_3 !== undefined
+                    ? item.chk_sp_3
+                    : (
+                        txt.includes('凱路迪歐') &&
+                        !txt.includes('凱路迪歐,瑪夏多') &&
+                        !txt.includes('色違凱路迪歐')
+                    )
+            );
             setChk('chk_sp_4', item.chk_sp_4 !== undefined ? item.chk_sp_4 : txt.includes('至尊鳳王'));
             setChk('chk_sp_5', item.chk_sp_5 !== undefined ? item.chk_sp_5 : txt.includes('至尊洛奇亞'));
             setChk('chk_sp_6', item.chk_sp_6 !== undefined ? item.chk_sp_6 : (txt.includes('瑪夏多') && !txt.includes('凱路迪歐,瑪夏多')));
@@ -349,6 +358,20 @@
             setChk('chk_sp_9', item.chk_sp_9 !== undefined ? item.chk_sp_9 : txt.includes('波爾凱尼恩'));
             setChk('chk_sp_10', item.chk_sp_10 !== undefined ? item.chk_sp_10 : txt.includes('薩戮德'));
             setChk('chk_sp_11', item.chk_sp_11 !== undefined ? item.chk_sp_11 : txt.includes('凱路迪歐,瑪夏多'));
+            setChk('chk_sp_12', item.chk_sp_12 !== undefined ? item.chk_sp_12 : txt.includes('捷拉奧拉'));
+            setChk('chk_sp_13', item.chk_sp_13 !== undefined ? item.chk_sp_13 : txt.includes('色違蒂安希'));
+            setChk(
+                'chk_sp_14',
+                item.chk_sp_14 !== undefined
+                    ? item.chk_sp_14
+                    : (txt.includes('蒂安希') && !txt.includes('色違蒂安希'))
+            );
+            setChk(
+                'chk_sp_15',
+                item.chk_sp_15 !== undefined
+                    ? item.chk_sp_15
+                    : txt.includes('色違凱路迪歐')
+            );
 
             const hasKyurem = item.chk_kyurem !== undefined ? item.chk_kyurem : txt.includes('酋雷姆合體');
             setChk('chk_kyurem', hasKyurem);
@@ -1231,7 +1254,7 @@
             perfect: 'st_perfect'
         };
         const AI_PROTECTED_INPUT_IDS = [
-            ...Array.from({ length: 11 }, (_, index) => `chk_sp_${index + 1}`),
+            ...Array.from({ length: 15 }, (_, index) => `chk_sp_${index + 1}`),
             'chk_kyurem', 'sel_kyurem',
             'chk_zamazenta', 'sel_dogs',
             'chk_necrozma', 'sel_necrozma',
@@ -4116,7 +4139,7 @@ ${mappingLines}`;
             }
             res.push(`${lvlStr}${v('g_team')}`);
             
-            let spList = []; for(let i=1; i<=11; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
+            let spList = []; for(let i=1; i<=15; i++){ if(checked('chk_sp_'+i)) spList.push(document.getElementById('chk_sp_'+i).value); }
             if(spList.length > 0) res.push(`🔥${spList.join(', ')}特殊調查🔥`);
             
             const rareListText = v('g_rare_list');
@@ -4302,6 +4325,10 @@ ${mappingLines}`;
                             <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_9" value="波爾凱尼恩">波爾凱尼恩</label>
                             <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_10" value="薩戮德">薩戮德</label>
                             <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_11" value="凱路迪歐,瑪夏多">凱路迪歐,瑪夏多</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_12" value="捷拉奧拉">捷拉奧拉</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_13" value="色違蒂安希">色違蒂安希</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_14" value="蒂安希">蒂安希</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_15" value="色違凱路迪歐">色違凱路迪歐</label>
                         </div>
                     </div>
 
