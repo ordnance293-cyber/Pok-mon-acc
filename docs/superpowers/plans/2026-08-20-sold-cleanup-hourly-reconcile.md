@@ -114,7 +114,13 @@ Run `python tests/verify_regressions.py`. It must report all static checks and t
 
 **Interfaces:**
 - `SoldReconcileLogic.planInventoryReconciliation(items, now)` returns `sold`, `expired`, `needsDeleteAt`, `retained`, and `duplicateAccountIds`.
-- `SoldReconcileLogic.buildFirebaseInventoryUpdates(plan, now)` returns relative `inventory` PATCH paths, with no UID in both migration and deletion paths.
+- `SoldReconcileLogic.buildFirebaseInventoryUpdates(plan, now)` remains a pure
+  relative-update helper for deterministic planning; the hourly Apps Script
+  path instead uses `applyInventoryReconciliationToSnapshot(...)` to mutate a
+  complete inventory object and PUT that full snapshot conditionally.
+- `SoldReconcileLogic.runConditionalSnapshotTransaction(...)` re-reads and
+  re-plans after every 412 conflict, with three total attempts and no post-GET
+  side effects before a successful write.
 - `SoldReconcileLogic.mapAccountIdsToSheetRows(rows, accountIdColumn)` maps every duplicate account ID to all matching data rows.
 - `hourlySoldReconcile()` is the time-driven handler.
 - `installHourlySoldReconcileTrigger()` removes existing handler triggers and creates exactly one `.everyHours(1)` trigger using `TIMEZONE` or `Asia/Taipei`.
@@ -126,11 +132,11 @@ Use the same finite-positive timestamp rule and 14-day constant as the browser h
 
 - [ ] **Step 2: Implement secure Firebase and Sheet adapters.**
 
-Read `FIREBASE_DATABASE_URL`, `FIREBASE_AUTH_TOKEN`, `SPREADSHEET_ID`, `SHEET_NAME`, `ACCOUNT_ID_COLUMN`, and `TIMEZONE` from `PropertiesService`. Read Firebase once through `UrlFetchApp.fetch` with `X-Firebase-ETag: true`; PATCH only relative inventory paths with `If-Match`. Never log tokens, passwords, full account IDs, or raw inventory payloads.
+Read `FIREBASE_DATABASE_URL`, `FIREBASE_AUTH_TOKEN`, `SPREADSHEET_ID`, `SHEET_NAME`, `ACCOUNT_ID_COLUMN`, `TIMEZONE`, and `SOLD_FORMATTER_READY` from `PropertiesService`. Read Firebase through `UrlFetchApp.fetch` with `X-Firebase-ETag: true`; PUT the complete returned inventory object with `If-Match`, never a partial object. On HTTP 412, re-read and re-plan up to three total attempts. Never log tokens, passwords, full account IDs, or raw inventory payloads.
 
 - [ ] **Step 3: Implement safe operation ordering and logging.**
 
-Acquire `LockService.getScriptLock()` with `tryLock`; return safely on contention. Persist expired UID/account-ID mappings in a Script Properties retry queue, apply one ETag-guarded Firebase migration/deletion patch, then delete queued Sheet rows bottom-up in grouped ranges, treating missing rows as already deleted. Remove a queue entry when its UID is present again because it was restored or reused. Repaint remaining SOLD rows through `applySoldFormattingBatch`; catch/log aggregate-safe errors so the next hourly trigger retries.
+Acquire `LockService.getScriptLock()` with `tryLock`; return safely on contention. Refuse all work unless `SOLD_FORMATTER_READY` is exactly `true` and the real formatter adapter exists. After a successful complete-snapshot Firebase PUT, persist expired UID/account-ID mappings in a Script Properties retry queue, then delete queued Sheet rows bottom-up in grouped ranges, treating missing rows as already deleted. Remove a queue entry when its UID is present again because it was restored or reused. Repaint remaining SOLD rows through `applySoldFormattingBatch`; catch/log aggregate-safe errors so the next hourly trigger retries.
 
 - [ ] **Step 4: Implement and test trigger installation.**
 

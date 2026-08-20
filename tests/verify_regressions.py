@@ -108,6 +108,26 @@ def assert_forbidden(source: str, forbidden: tuple[str, ...], label: str) -> Non
             raise AssertionError(f"{label}: forbidden source fragment {term!r} is present")
 
 
+def assert_no_patch_if_match(source: str, label: str) -> None:
+    patch_then_if_match = re.search(
+        r"(?is)\bpatch\b[\s\S]{0,600}\bIf-Match\b",
+        source,
+    )
+    if_match_then_patch = re.search(
+        r"(?is)\bIf-Match\b[\s\S]{0,600}\bpatch\b",
+        source,
+    )
+    if patch_then_if_match or if_match_then_patch:
+        raise AssertionError(f"{label}: Firebase conditional reconciliation combines PATCH and If-Match")
+
+
+def assert_source_order(source: str, first: str, second: str, label: str) -> None:
+    first_index = source.find(first)
+    second_index = source.find(second)
+    if first_index < 0 or second_index < 0 or second_index <= first_index:
+        raise AssertionError(f"{label}: expected {first!r} before {second!r}")
+
+
 def assert_forbidden_identifiers(source: str, forbidden: tuple[str, ...], label: str) -> None:
     for identifier in forbidden:
         if re.search(rf"(?<![\w$]){re.escape(identifier)}(?![\w$])", source):
@@ -497,8 +517,12 @@ def main() -> int:
         ("Apps Script hourly adapter has secure, idempotent boundaries", lambda: [
             require_fragment(apps_script_logic_source, "const SOLD_ACCOUNT_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;", "Apps Script retention constant"),
             require_fragment(apps_script_logic_source, "typeof value === 'number'", "Apps Script strict timestamp type"),
+            require_fragment(apps_script_logic_source, "function isFormatterReadyPropertyValue", "formatter readiness pure helper"),
+            require_fragment(apps_script_logic_source, "return value === 'true';", "exact formatter readiness value"),
             require_fragment(apps_script_logic_source, "function planInventoryReconciliation(items, now)", "Apps Script inventory planner"),
             require_fragment(apps_script_logic_source, "function buildFirebaseInventoryUpdates(plan, now)", "Apps Script Firebase batch planner"),
+            require_fragment(apps_script_logic_source, "function applyInventoryReconciliationToSnapshot", "complete Firebase snapshot mutation"),
+            require_fragment(apps_script_logic_source, "function runConditionalSnapshotTransaction", "bounded conditional transaction helper"),
             require_fragment(apps_script_logic_source, "function mapAccountIdsToSheetRows", "Apps Script duplicate row mapping"),
             require_fragment(apps_script_logic_source, "function planHourlyTriggerInstallation", "Apps Script trigger planner"),
             require_fragment(apps_script_handler_source, "function hourlySoldReconcile()", "hourly handler"),
@@ -509,15 +533,32 @@ def main() -> int:
             require_fragment(apps_script_handler_source, ".everyHours(1)", "hourly trigger interval"),
             require_fragment(apps_script_handler_source, "X-Firebase-ETag", "Firebase snapshot ETag"),
             require_fragment(apps_script_handler_source, "If-Match", "conditional Firebase mutation"),
+            require_fragment(apps_script_handler_source, "fetchFirebaseJson_(config, 'inventory.json', 'put'", "complete Firebase PUT"),
+            require_fragment(apps_script_handler_source, "MAX_FIREBASE_RECONCILIATION_ATTEMPTS = 3", "bounded Firebase retry count"),
+            require_fragment(apps_script_handler_source, "status === 412", "Firebase conflict handling"),
+            require_fragment(apps_script_handler_source, "function reconcileSheetAfterFirebaseCommit_", "post-commit Sheet ordering boundary"),
+            assert_source_order(
+                apps_script_handler_source,
+                "var reconciliation = reconcileFirebaseWithRetry_(config);",
+                "var sheetResult = reconcileSheetAfterFirebaseCommit_(config, attempt);",
+                "Firebase commit before Sheet side effects",
+            ),
+            require_fragment(apps_script_handler_source, "function isSoldFormatterReady_", "formatter readiness gate"),
+            require_fragment(apps_script_handler_source, "getProperty('SOLD_FORMATTER_READY')", "formatter readiness property"),
+            require_fragment(apps_script_handler_source, "SoldReconcileLogic.isFormatterReadyPropertyValue(ready)", "exact formatter readiness value"),
             require_fragment(apps_script_handler_source, "SOLD_SHEET_DELETE_QUEUE", "Sheet deletion retry queue"),
             require_fragment(apps_script_handler_source, "FIREBASE_DATABASE_URL", "Firebase URL Script Property"),
             require_fragment(apps_script_handler_source, "FIREBASE_AUTH_TOKEN", "Firebase server credential Script Property"),
             require_fragment(apps_script_handler_source, "PropertiesService.getScriptProperties()", "Script Properties access"),
             require_fragment(apps_script_handler_source, "function applySoldFormattingBatch", "formatter adapter boundary"),
             require_fragment(apps_script_handler_source, "applyExistingSoldFormattingBatch", "existing formatter delegation hook"),
-            assert_forbidden(apps_script_handler_source, ("AIzaSy", "function doPost", "apiKey:"), "Apps Script credential and doPost safety"),
+            assert_forbidden(apps_script_handler_source, ("AIzaSy", "function doPost", "apiKey:", "patchFirebaseInventory_", "method: 'patch'", "method: \"patch\""), "Apps Script credential, method, and doPost safety"),
+            assert_no_patch_if_match(apps_script_handler_source, "Apps Script Firebase conditional method safety"),
             require_fragment(apps_script_readme_source, "FIREBASE_AUTH_TOKEN", "Apps Script deployment credential documentation"),
             require_fragment(apps_script_readme_source, "exact formatter already used by production", "Apps Script formatter deployment boundary"),
+            require_fragment(apps_script_readme_source, "SOLD_FORMATTER_READY", "formatter readiness deployment gate"),
+            require_fragment(apps_script_readme_source, "complete-inventory `PUT`", "complete Firebase write documentation"),
+            require_fragment(apps_script_readme_source, "three total attempts", "bounded retry documentation"),
         ]),
         ("Special Research options cover save, restore, AI protection, and generated text", lambda: [
             *[

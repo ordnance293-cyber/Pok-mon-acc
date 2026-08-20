@@ -1,8 +1,14 @@
 var SOLD_RECONCILE_HANDLER = 'hourlySoldReconcile';
 var DEFAULT_SOLD_RECONCILE_TIMEZONE = 'Asia/Taipei';
 var SOLD_SHEET_DELETE_QUEUE_PROPERTY = 'SOLD_SHEET_DELETE_QUEUE';
+var MAX_FIREBASE_RECONCILIATION_ATTEMPTS = 3;
 
 function hourlySoldReconcile() {
+  if (!isSoldFormatterReady_()) {
+    console.log(JSON.stringify({ event: 'hourlySoldReconcile', skipped: 'formatter-not-ready' }));
+    return { skipped: true, reason: 'formatter-not-ready' };
+  }
+
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) {
     console.log(JSON.stringify({ event: 'hourlySoldReconcile', skipped: 'lock-held' }));
@@ -16,77 +22,33 @@ function hourlySoldReconcile() {
     expiredFound: 0,
     expiredDeleted: 0,
     sheetRepainted: 0,
-    errors: 0
+    errors: 0,
+    firebaseAttempts: 0,
+    firebaseConflicts: 0,
+    firebaseRetries: 0,
+    firebaseConflictAborted: 0
   };
 
   try {
     var config = getSoldReconcileConfig_();
-    var now = Date.now();
-    var firebaseSnapshot = readFirebaseInventory_(config);
-    var inventory = firebaseSnapshot.items;
-    var plan = SoldReconcileLogic.planInventoryReconciliation(inventory, now);
-    counts.soldFound = plan.sold.length;
-    counts.legacyDeleteAtInitialized = plan.needsDeleteAt.length;
-    counts.expiredFound = plan.expired.length;
+    var reconciliation = reconcileFirebaseWithRetry_(config);
+    counts.firebaseAttempts = reconciliation.attempts;
+    counts.firebaseConflicts = reconciliation.conflicts;
+    counts.firebaseRetries = reconciliation.retries;
+    if (!reconciliation.committed) {
+      counts.firebaseConflictAborted = 1;
+    } else {
+      var attempt = reconciliation.plan;
+      counts.soldFound = attempt.plan.sold.length;
+      counts.legacyDeleteAtInitialized = attempt.plan.needsDeleteAt.length;
+      counts.expiredFound = attempt.plan.expired.length;
+      counts.expiredDeleted = attempt.safeExpired.length;
 
-    var protectedAccountIds = buildProtectedAccountIds_(inventory, plan);
-    var safeExpired = plan.expired.filter(function (item) {
-      var accountId = normalizeAccountId_(item.accountId);
-      return accountId
-        && protectedAccountIds[accountId] !== true;
-    });
-    var currentExpiredQueue = safeExpired.map(function (item) {
-      return { uid: item.uid, accountId: normalizeAccountId_(item.accountId) };
-    });
-    var inventoryByUid = {};
-    inventory.forEach(function (item) {
-      if (item && item.uid) inventoryByUid[item.uid] = true;
-    });
-    var pendingQueue = readPendingSheetDeleteQueue_().filter(function (entry) {
-      // A UID that is present again was restored or reused; never delete its
-      // queued Sheet row based on an older Firebase snapshot.
-      return !inventoryByUid[entry.uid];
-    });
-    var sheetDeleteQueue = mergeSheetDeleteQueues_(pendingQueue, currentExpiredQueue);
-    savePendingSheetDeleteQueue_(sheetDeleteQueue);
-
-    var firebasePlan = {
-      needsDeleteAt: plan.needsDeleteAt,
-      expired: safeExpired
-    };
-    var firebaseUpdates = SoldReconcileLogic.buildFirebaseInventoryUpdates(firebasePlan, now);
-    if (Object.keys(firebaseUpdates).length > 0) {
-      patchFirebaseInventory_(config, firebaseUpdates, firebaseSnapshot.etag);
-    }
-    counts.expiredDeleted = safeExpired.length;
-
-    var sheet = null;
-    if (sheetDeleteQueue.length > 0 || plan.sold.length > 0) {
-      try {
-        sheet = openSoldSheet_(config);
-        if (sheetDeleteQueue.length > 0) {
-          var deletionResult = deleteExpiredSheetRows_(sheet, sheetDeleteQueue, config);
-          savePendingSheetDeleteQueue_(deletionResult.remaining);
-          counts.errors += deletionResult.errors.length;
-        }
-      } catch (error) {
-        counts.errors += 1;
-        logSoldReconcileError_('sheet-adapter', error);
-      }
-    }
-
-    if (sheet && plan.sold.length > 0) {
-      var remainingSold = plan.retained.concat(plan.needsDeleteAt);
-      if (remainingSold.length > 0) {
-        try {
-          var rowMap = readSoldSheetRowMap_(sheet, config);
-          var repaintResult = applySoldFormattingBatch(sheet, rowMap, remainingSold, config);
-          counts.sheetRepainted = Number(repaintResult && repaintResult.repainted) || remainingSold.length;
-        } catch (error) {
-          counts.errors += 1;
-          logSoldReconcileError_('sold-formatter', error);
-        }
-      }
+      // No Sheet state is touched until the complete Firebase snapshot PUT
+      // has committed successfully.
+      var sheetResult = reconcileSheetAfterFirebaseCommit_(config, attempt);
+      counts.sheetRepainted = sheetResult.sheetRepainted;
+      counts.errors += sheetResult.errors;
     }
   } catch (error) {
     counts.errors += 1;
@@ -100,6 +62,10 @@ function hourlySoldReconcile() {
       expiredFound: counts.expiredFound,
       expiredDeleted: counts.expiredDeleted,
       sheetRepainted: counts.sheetRepainted,
+      firebaseAttempts: counts.firebaseAttempts,
+      firebaseConflicts: counts.firebaseConflicts,
+      firebaseRetries: counts.firebaseRetries,
+      firebaseConflictAborted: counts.firebaseConflictAborted,
       errors: counts.errors,
       durationMs: counts.durationMs
     }));
@@ -107,6 +73,126 @@ function hourlySoldReconcile() {
   }
 
   return counts;
+}
+
+function reconcileFirebaseWithRetry_(config) {
+  var transaction = SoldReconcileLogic.runConditionalSnapshotTransaction({
+    maxAttempts: MAX_FIREBASE_RECONCILIATION_ATTEMPTS,
+    readSnapshot: function () {
+      return {
+        firebaseSnapshot: readFirebaseInventory_(config),
+        now: Date.now()
+      };
+    },
+    buildPlan: function (input) {
+      return buildFirebaseReconciliationAttempt_(input);
+    },
+    conditionalWrite: function (attempt) {
+      return putFirebaseInventory_(config, attempt.resultingSnapshot, attempt.firebaseSnapshot.etag);
+    }
+  });
+  return {
+    committed: transaction.committed,
+    attempts: transaction.attempts,
+    conflicts: transaction.conflicts,
+    retries: Math.max(0, transaction.attempts - 1),
+    plan: transaction.plan
+  };
+}
+
+function buildFirebaseReconciliationAttempt_(input) {
+  var firebaseSnapshot = input.firebaseSnapshot;
+  var inventory = firebaseSnapshot.items;
+  var plan = SoldReconcileLogic.planInventoryReconciliation(inventory, input.now);
+  var protectedAccountIds = buildProtectedAccountIds_(inventory, plan);
+  var safeExpired = plan.expired.filter(function (item) {
+    var accountId = normalizeAccountId_(item.accountId);
+    return accountId && protectedAccountIds[accountId] !== true;
+  });
+  var safeExpiredUids = {};
+  safeExpired.forEach(function (item) {
+    if (item && item.uid) safeExpiredUids[item.uid] = true;
+  });
+  var currentExpiredQueue = safeExpired.map(function (item) {
+    return { uid: item.uid, accountId: normalizeAccountId_(item.accountId) };
+  });
+  var inventoryByUid = {};
+  inventory.forEach(function (item) {
+    if (item && item.uid) inventoryByUid[item.uid] = true;
+  });
+  var pendingQueue = readPendingSheetDeleteQueue_().filter(function (entry) {
+    // A UID that is present again was restored or reused; never delete its
+    // queued Sheet row based on an older Firebase snapshot.
+    return !inventoryByUid[entry.uid];
+  });
+  var sheetDeleteQueue = mergeSheetDeleteQueues_(pendingQueue, currentExpiredQueue);
+  var firebasePlan = {
+    needsDeleteAt: plan.needsDeleteAt,
+    expired: safeExpired
+  };
+  var resultingSnapshot = SoldReconcileLogic.applyInventoryReconciliationToSnapshot(
+    firebaseSnapshot.snapshot,
+    firebasePlan,
+    input.now
+  );
+  var remainingSold = plan.sold.filter(function (item) {
+    return !safeExpiredUids[item.uid];
+  });
+
+  return {
+    firebaseSnapshot: firebaseSnapshot,
+    now: input.now,
+    plan: plan,
+    safeExpired: safeExpired,
+    resultingSnapshot: resultingSnapshot,
+    sheetDeleteQueue: sheetDeleteQueue,
+    remainingSold: remainingSold
+  };
+}
+
+function reconcileSheetAfterFirebaseCommit_(config, attempt) {
+  var result = { sheetRepainted: 0, errors: 0 };
+  savePendingSheetDeleteQueue_(attempt.sheetDeleteQueue);
+
+  var sheet = null;
+  if (attempt.sheetDeleteQueue.length > 0 || attempt.remainingSold.length > 0) {
+    try {
+      sheet = openSoldSheet_(config);
+    } catch (error) {
+      result.errors += 1;
+      logSoldReconcileError_('sheet-adapter', error);
+    }
+  }
+  if (!sheet) return result;
+
+  if (attempt.sheetDeleteQueue.length > 0) {
+    try {
+      var deletionResult = deleteExpiredSheetRows_(sheet, attempt.sheetDeleteQueue, config);
+      savePendingSheetDeleteQueue_(deletionResult.remaining);
+      result.errors += deletionResult.errors.length;
+    } catch (error) {
+      result.errors += 1;
+      logSoldReconcileError_('sheet-delete', error);
+    }
+  }
+
+  if (attempt.remainingSold.length > 0) {
+    try {
+      var rowMap = readSoldSheetRowMap_(sheet, config);
+      var repaintResult = applySoldFormattingBatch(
+        sheet,
+        rowMap,
+        attempt.remainingSold,
+        config
+      );
+      result.sheetRepainted = Number(repaintResult && repaintResult.repainted)
+        || attempt.remainingSold.length;
+    } catch (error) {
+      result.errors += 1;
+      logSoldReconcileError_('sold-formatter', error);
+    }
+  }
+  return result;
 }
 
 function removeDuplicateHourlySoldReconcileTriggers() {
@@ -125,6 +211,11 @@ function removeDuplicateHourlySoldReconcileTriggers() {
 }
 
 function installHourlySoldReconcileTrigger() {
+  if (!isSoldFormatterReady_()) {
+    console.log(JSON.stringify({ event: 'installHourlySoldReconcileTrigger', skipped: 'formatter-not-ready' }));
+    return { skipped: true, reason: 'formatter-not-ready' };
+  }
+
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) {
     console.log(JSON.stringify({ event: 'installHourlySoldReconcileTrigger', skipped: 'lock-held' }));
@@ -143,6 +234,12 @@ function installHourlySoldReconcileTrigger() {
   } finally {
     lock.releaseLock();
   }
+}
+
+function isSoldFormatterReady_() {
+  var ready = PropertiesService.getScriptProperties().getProperty('SOLD_FORMATTER_READY');
+  return SoldReconcileLogic.isFormatterReadyPropertyValue(ready)
+    && typeof applyExistingSoldFormattingBatch === 'function';
 }
 
 function getSoldReconcileConfig_() {
@@ -170,18 +267,25 @@ function readFirebaseInventory_(config) {
     requestHeaders: { 'X-Firebase-ETag': 'true' }
   });
   var payload = response.data;
-  var items = !payload || typeof payload !== 'object' ? [] : Object.keys(payload).map(function (uid) {
+  var items = !payload || typeof payload !== 'object' || Array.isArray(payload) ? [] : Object.keys(payload).map(function (uid) {
     var item = payload[uid];
     return Object.assign({ uid: uid }, item && typeof item === 'object' ? item : {});
   });
-  return { items: items, etag: getResponseHeader_(response.headers, 'ETag') };
+  return {
+    snapshot: payload,
+    items: items,
+    etag: getResponseHeader_(response.headers, 'ETag')
+  };
 }
 
-function patchFirebaseInventory_(config, updates, etag) {
+function putFirebaseInventory_(config, completeSnapshot, etag) {
   if (!etag) throw new Error('Firebase inventory ETag was unavailable; refusing an unguarded mutation');
-  fetchFirebaseJson_(config, 'inventory.json', 'patch', updates, {
+  var response = fetchFirebaseJson_(config, 'inventory.json', 'put', completeSnapshot, {
+    returnResponse: true,
+    acceptedStatuses: [412],
     requestHeaders: { 'If-Match': etag }
   });
+  return { conflict: response.status === 412, status: response.status };
 }
 
 function fetchFirebaseJson_(config, path, method, payload, requestOptions) {
@@ -198,13 +302,16 @@ function fetchFirebaseJson_(config, path, method, payload, requestOptions) {
 
   var response = UrlFetchApp.fetch(url, options);
   var status = response.getResponseCode();
-  if (status < 200 || status >= 300) {
+  var acceptedStatuses = requestOptions && Array.isArray(requestOptions.acceptedStatuses)
+    ? requestOptions.acceptedStatuses
+    : [];
+  if ((status < 200 || status >= 300) && acceptedStatuses.indexOf(status) === -1) {
     throw new Error('Firebase request failed with HTTP ' + status);
   }
   var text = response.getContentText();
-  var data = text ? JSON.parse(text) : null;
+  var data = status >= 200 && status < 300 && text ? JSON.parse(text) : null;
   if (requestOptions && requestOptions.returnResponse) {
-    return { data: data, headers: response.getHeaders() };
+    return { data: data, headers: response.getHeaders(), status: status };
   }
   return data;
 }

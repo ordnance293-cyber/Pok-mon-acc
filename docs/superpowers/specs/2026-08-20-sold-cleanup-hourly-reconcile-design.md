@@ -73,9 +73,12 @@ The isolated Apps Script adapter consists of:
 - a deployment README with Script Properties, secure Firebase authentication,
   installation, verification, and the exact formatter integration boundary.
 
-The handler obtains one Firebase inventory snapshot with an ETag, computes
-migration and expiration, conditionally applies the Firebase multi-location
-patch, then removes expired Sheet rows through direct Spreadsheet service calls.
+The handler obtains one complete Firebase inventory snapshot with an ETag,
+computes migration and expiration, mutates only the in-memory copy, and
+conditionally PUTs the complete resulting inventory back with `If-Match`. It
+never sends a partial inventory object. A 412 conflict causes a fresh GET,
+fresh ETag, and fresh plan, up to three total attempts. Only after a successful
+PUT does it remove expired Sheet rows through direct Spreadsheet service calls.
 Sheet deletions are persisted in a Script Properties retry queue. A queued UID
 that is present again in a later Firebase snapshot is treated as restored or
 reused and is not deleted from the Sheet. The handler then calls a required
@@ -100,8 +103,12 @@ timezone, making repeated installation idempotent.
 - Timestamp validation accepts only finite positive numbers or non-empty numeric
   strings; booleans and arrays fail safe into migration.
 - Sheet deletion is retried safely; missing rows are treated as already deleted.
-- Firebase deletion uses `null` paths in one ETag-guarded patch. A stale ETag
-  aborts the mutation safely, and the next hourly run retries it.
+- Firebase migration/deletion uses a complete-inventory ETag-guarded PUT. A
+  stale ETag returns 412, causes a fresh plan, and aborts safely after three
+  conflicts without Sheet side effects; the next hourly run retries it.
+- `SOLD_FORMATTER_READY` is fail-closed: only the exact string `true`, together
+  with the real formatter adapter, permits trigger installation or hourly
+  Firebase/Sheet work.
 - Sheet deletion failures remain in a Script Properties queue; a restored or
   reused UID removes its stale queue entry without deleting its current row.
 - Repaint failures are logged as counts and safe error summaries without
