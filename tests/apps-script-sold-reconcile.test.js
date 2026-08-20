@@ -46,7 +46,7 @@ async function run() {
   ];
 
   const plan = planInventoryReconciliation(records, NOW);
-  assert.deepEqual(ids(plan.sold), ['legacy', 'invalid', 'expired', 'retained', 'duplicate']);
+  assert.deepEqual(ids(plan.sold), ['legacy', 'invalid', 'malformed', 'malformed-array', 'expired', 'retained', 'duplicate']);
   assert.deepEqual(ids(plan.expired), ['expired']);
   assert.deepEqual(ids(plan.needsDeleteAt), ['legacy', 'invalid', 'malformed', 'malformed-array']);
   assert.deepEqual(ids(plan.retained), ['retained', 'duplicate']);
