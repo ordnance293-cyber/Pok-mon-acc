@@ -126,11 +126,11 @@ Use the same finite-positive timestamp rule and 14-day constant as the browser h
 
 - [ ] **Step 2: Implement secure Firebase and Sheet adapters.**
 
-Read `FIREBASE_DATABASE_URL`, `FIREBASE_AUTH_TOKEN`, `SPREADSHEET_ID`, `SHEET_NAME`, `ACCOUNT_ID_COLUMN`, and `TIMEZONE` from `PropertiesService`. Read Firebase once through `UrlFetchApp.fetch`; PATCH only relative inventory paths. Never log tokens, passwords, full account IDs, or raw inventory payloads.
+Read `FIREBASE_DATABASE_URL`, `FIREBASE_AUTH_TOKEN`, `SPREADSHEET_ID`, `SHEET_NAME`, `ACCOUNT_ID_COLUMN`, and `TIMEZONE` from `PropertiesService`. Read Firebase once through `UrlFetchApp.fetch` with `X-Firebase-ETag: true`; PATCH only relative inventory paths with `If-Match`. Never log tokens, passwords, full account IDs, or raw inventory payloads.
 
 - [ ] **Step 3: Implement safe operation ordering and logging.**
 
-Acquire `LockService.getScriptLock()` with `tryLock`; return safely on contention. Delete expired Sheet rows bottom-up in grouped ranges, treating missing rows as already deleted. Apply the Firebase migration/deletion patch only for expired records whose Sheet deletion is safe. Repaint remaining SOLD rows through `applySoldFormattingBatch`; catch/log count-only errors so the next hourly trigger retries.
+Acquire `LockService.getScriptLock()` with `tryLock`; return safely on contention. Persist expired UID/account-ID mappings in a Script Properties retry queue, apply one ETag-guarded Firebase migration/deletion patch, then delete queued Sheet rows bottom-up in grouped ranges, treating missing rows as already deleted. Remove a queue entry when its UID is present again because it was restored or reused. Repaint remaining SOLD rows through `applySoldFormattingBatch`; catch/log aggregate-safe errors so the next hourly trigger retries.
 
 - [ ] **Step 4: Implement and test trigger installation.**
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 from typing import Callable
@@ -19,6 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "index.html"
 SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
 TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
+SOLD_ACCOUNT_CLEANUP = ROOT / "sold-account-cleanup.js"
+SOLD_CLEANUP_TEST = ROOT / "tests" / "sold-account-cleanup.test.js"
+APPS_SCRIPT_LOGIC = ROOT / "apps-script" / "sold-reconcile-logic.js"
+APPS_SCRIPT_HANDLER = ROOT / "apps-script" / "hourly-sold-reconcile.gs"
+APPS_SCRIPT_README = ROOT / "apps-script" / "README.md"
 MANUAL_V2_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-pipeline-v2.md"
 MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
 FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-crop-form-verifier-v2.md"
@@ -28,8 +34,8 @@ EXTRACTION_PROMPT_HASH = "3f0fb62a1461ff5b3997c06a8c76cca22bbdccf3bf4dc6aa89b56e
 EXTRACTION_PROMPT_LENGTH = 5080
 RESIZED_IMAGE_FUNCTION_HASH = "c4baf69d9b7a67771b356642bf549806254fe48a676952986150eb616a93daf4"
 RESIZED_IMAGE_FUNCTION_LENGTH = 1276
-SAVE_ACCOUNT_HASH = "26a9fc83f335232b49a8cdd2aa9b9a3b0b5a2fbae3f07d0c7bb489c8f1dad829"
-SAVE_ACCOUNT_LENGTH = 12794
+SAVE_ACCOUNT_HASH = "5d7342d0dd9f5d07d16c1049de37279bf91e9abd66f076d0bb0866e168163ca0"
+SAVE_ACCOUNT_LENGTH = 13451
 NEW_ITEM_HASH = "1f9b3fdb2b0448e92ecc7a329a29fa4b6ab22e5029d2d5bfa177f9de85ca6923"
 NEW_ITEM_LENGTH = 1750
 GENERATE_TEXT_HASH = "b9193d73c4b4ae2289141c5960cd05dad6bda746a8fba1b4bbc400dbbe356698"
@@ -337,6 +343,11 @@ def main() -> int:
     source = normalized_source(INDEX_HTML)
     helpers_source = normalized_source(SMART_HUNDO_HELPERS)
     trainer_helpers_source = normalized_source(TRAINER_TEAM_HELPERS)
+    sold_cleanup_source = normalized_source(SOLD_ACCOUNT_CLEANUP)
+    sold_cleanup_test_source = normalized_source(SOLD_CLEANUP_TEST)
+    apps_script_logic_source = normalized_source(APPS_SCRIPT_LOGIC)
+    apps_script_handler_source = normalized_source(APPS_SCRIPT_HANDLER)
+    apps_script_readme_source = normalized_source(APPS_SCRIPT_README)
     checks: list[tuple[str, Callable[[], object]]] = []
 
     classification_prompt = source_span(
@@ -384,6 +395,13 @@ def main() -> int:
         "        window.saveAccountToInventory = async function() {",
         "\n        window.deleteAccount = async function",
         "Firebase/GAS save path",
+        include_end=False,
+    )
+    bulk_repaint = source_span(
+        source,
+        "        window.bulkMarkAsSold = async function(btn) {",
+        "\n        window.showCopyModal",
+        "manual SOLD repaint fallback",
         include_end=False,
     )
     smart_schema = source_span(
@@ -452,6 +470,55 @@ def main() -> int:
     ))
 
     checks.extend([
+        ("SOLD cleanup uses migration-safe 14-day deleteAt retention", lambda: [
+            require_fragment(sold_cleanup_source, "const SOLD_ACCOUNT_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;", "14-day retention constant"),
+            require_fragment(sold_cleanup_source, "const needsDeleteAt = [];", "legacy deleteAt migration list"),
+            require_fragment(sold_cleanup_source, "typeof value === 'number'", "strict numeric timestamp type"),
+            require_fragment(sold_cleanup_source, "typeof value === 'string' && value.trim() !== ''", "numeric string timestamp type"),
+            require_fragment(sold_cleanup_source, "const deleteAt = validTimestamp(item.deleteAt);", "deleteAt authority"),
+            require_fragment(sold_cleanup_source, "} else if (deleteAt <= currentTime) {", "deleteAt expiration boundary"),
+            assert_forbidden(sold_cleanup_source, ("needsSoldAt", "soldAt <= currentTime"), "sold cleanup helper"),
+            require_fragment(sold_cleanup_test_source, "deleteAt: NOW", "deleteAt unit coverage"),
+            require_fragment(sold_cleanup_test_source, "legacy-old-soldAt", "old soldAt migration coverage"),
+        ]),
+        ("frontend SOLD retention, restore, batch cleanup, and fallback contracts exist", lambda: [
+            require_fragment(source, "const { expired, needsDeleteAt } = window.SoldAccountCleanup.planSoldAccountCleanup", "frontend deleteAt planner call"),
+            require_fragment(source, "updates[`${item.uid}/deleteAt`] = now + window.SoldAccountCleanup.SOLD_ACCOUNT_RETENTION_MS;", "frontend legacy migration update"),
+            require_fragment(source, "updates[item.uid] = null", "frontend Firebase null deletion"),
+            require_fragment(source, "await update(inventoryRef, updates)", "frontend single multi-location update"),
+            require_fragment(source, "{ status: 'sold', soldAt, deleteAt }", "frontend new sale timer fields"),
+            require_fragment(source, "{ status: 'active', soldAt: null, deleteAt: null }", "frontend restore timer clearing"),
+            require_fragment(source, "body: JSON.stringify({ action: 'delete', id: sheetId, accountId: item.accountId })", "frontend Sheet deletion integration"),
+            require_fragment(source, "const BATCH = 10", "manual repaint fallback batch size"),
+            require_fragment(source, "body: JSON.stringify({ action: 'sold', id: sheetId, accountId: item.accountId })", "manual repaint deployed request contract"),
+            assert_forbidden(bulk_repaint, ("soldAt", "deleteAt"), "manual repaint timer preservation"),
+            assert_forbidden(source, ("action: 'reconcileSold'", "needsSoldAt"), "frontend deployed contract"),
+        ]),
+        ("Apps Script hourly adapter has secure, idempotent boundaries", lambda: [
+            require_fragment(apps_script_logic_source, "const SOLD_ACCOUNT_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;", "Apps Script retention constant"),
+            require_fragment(apps_script_logic_source, "typeof value === 'number'", "Apps Script strict timestamp type"),
+            require_fragment(apps_script_logic_source, "function planInventoryReconciliation(items, now)", "Apps Script inventory planner"),
+            require_fragment(apps_script_logic_source, "function buildFirebaseInventoryUpdates(plan, now)", "Apps Script Firebase batch planner"),
+            require_fragment(apps_script_logic_source, "function mapAccountIdsToSheetRows", "Apps Script duplicate row mapping"),
+            require_fragment(apps_script_logic_source, "function planHourlyTriggerInstallation", "Apps Script trigger planner"),
+            require_fragment(apps_script_handler_source, "function hourlySoldReconcile()", "hourly handler"),
+            require_fragment(apps_script_handler_source, "function installHourlySoldReconcileTrigger()", "trigger installer"),
+            require_fragment(apps_script_handler_source, "function removeDuplicateHourlySoldReconcileTriggers()", "duplicate trigger cleanup"),
+            require_fragment(apps_script_handler_source, "LockService.getScriptLock()", "overlap lock"),
+            require_fragment(apps_script_handler_source, ".tryLock(1000)", "safe lock acquisition"),
+            require_fragment(apps_script_handler_source, ".everyHours(1)", "hourly trigger interval"),
+            require_fragment(apps_script_handler_source, "X-Firebase-ETag", "Firebase snapshot ETag"),
+            require_fragment(apps_script_handler_source, "If-Match", "conditional Firebase mutation"),
+            require_fragment(apps_script_handler_source, "SOLD_SHEET_DELETE_QUEUE", "Sheet deletion retry queue"),
+            require_fragment(apps_script_handler_source, "FIREBASE_DATABASE_URL", "Firebase URL Script Property"),
+            require_fragment(apps_script_handler_source, "FIREBASE_AUTH_TOKEN", "Firebase server credential Script Property"),
+            require_fragment(apps_script_handler_source, "PropertiesService.getScriptProperties()", "Script Properties access"),
+            require_fragment(apps_script_handler_source, "function applySoldFormattingBatch", "formatter adapter boundary"),
+            require_fragment(apps_script_handler_source, "applyExistingSoldFormattingBatch", "existing formatter delegation hook"),
+            assert_forbidden(apps_script_handler_source, ("AIzaSy", "function doPost", "apiKey:"), "Apps Script credential and doPost safety"),
+            require_fragment(apps_script_readme_source, "FIREBASE_AUTH_TOKEN", "Apps Script deployment credential documentation"),
+            require_fragment(apps_script_readme_source, "exact formatter already used by production", "Apps Script formatter deployment boundary"),
+        ]),
         ("Special Research options cover save, restore, AI protection, and generated text", lambda: [
             *[
                 require_fragment(source, fragment, "Special Research expansion")
@@ -839,18 +906,34 @@ def main() -> int:
         else:
             print("PASS: GAS JSON payloads exclude smart audit and purified fields")
 
-    position_test = subprocess.run(
-        ["node", str(ROOT / "tests" / "smart-hundo-position-first.test.js")],
-        cwd=ROOT, capture_output=True, text=True, check=False
+    blocked: list[str] = []
+    node_executable = shutil.which("node")
+    node_tests = (
+        ("position-first deterministic tests", ROOT / "tests" / "smart-hundo-position-first.test.js"),
+        ("sold-account cleanup tests", SOLD_CLEANUP_TEST),
+        ("Apps Script SOLD reconciliation tests", ROOT / "tests" / "apps-script-sold-reconcile.test.js"),
     )
-    if position_test.returncode != 0:
-        failures.append(f"FAIL: position-first deterministic tests\n  {position_test.stdout}{position_test.stderr}")
+    if node_executable is None:
+        blocked.extend(label for label, _path in node_tests)
     else:
-        print(position_test.stdout.strip())
+        for label, test_path in node_tests:
+            completed = subprocess.run(
+                [node_executable, str(test_path)],
+                cwd=ROOT, capture_output=True, text=True, check=False
+            )
+            if completed.returncode != 0:
+                failures.append(f"FAIL: {label}\n  {completed.stdout}{completed.stderr}")
+            else:
+                print(completed.stdout.strip())
 
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
+    if blocked:
+        for label in blocked:
+            print(f"BLOCKED: {label} (Node.js executable is unavailable)")
+        print(f"Static source regression checks passed: {len(checks) + 1}")
+        return 2
     print(f"Source regression checks passed: {len(checks) + 1}")
     return 0
 

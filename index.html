@@ -103,10 +103,12 @@
 
         async function runSoldAccountCleanup() {
             const now = Date.now();
-            const { expired, needsSoldAt } = window.SoldAccountCleanup.planSoldAccountCleanup(inventoryData, now);
+            const { expired, needsDeleteAt } = window.SoldAccountCleanup.planSoldAccountCleanup(inventoryData, now);
             const updates = {};
             expired.forEach(item => { updates[item.uid] = null; });
-            needsSoldAt.forEach(item => { updates[`${item.uid}/soldAt`] = now; });
+            needsDeleteAt.forEach(item => {
+                updates[`${item.uid}/deleteAt`] = now + window.SoldAccountCleanup.SOLD_ACCOUNT_RETENTION_MS;
+            });
             if (Object.keys(updates).length === 0) return;
 
             await update(inventoryRef, updates);
@@ -162,8 +164,14 @@
             if(!isAlreadySold) {
                 if(!confirm(`確定標記為售出？`)) return;
                 const existingItem = inventoryData.find(item => item.uid === uid);
-                const soldAt = existingItem?.status === 'sold' && existingItem?.soldAt ? existingItem.soldAt : Date.now();
-                await update(ref(db, `inventory/${uid}`), { status: 'sold', soldAt });
+                const now = Date.now();
+                const soldAt = existingItem?.status === 'sold' && Number.isFinite(Number(existingItem.soldAt))
+                    ? Number(existingItem.soldAt)
+                    : now;
+                const deleteAt = existingItem?.status === 'sold' && Number.isFinite(Number(existingItem.deleteAt))
+                    ? Number(existingItem.deleteAt)
+                    : now + window.SoldAccountCleanup.SOLD_ACCOUNT_RETENTION_MS;
+                await update(ref(db, `inventory/${uid}`), { status: 'sold', soldAt, deleteAt });
                 window.showCopyModal(accountId); // ✅ 首次售出時立刻跳出
             }
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
@@ -245,7 +253,7 @@
 
         window.restoreAccount = async function(uid, accountId, btn) {
             if(!confirm(`確定要恢復為現貨嗎？`)) return;
-            update(ref(db, `inventory/${uid}`), { status: 'active', soldAt: null });
+            await update(ref(db, `inventory/${uid}`), { status: 'active', soldAt: null, deleteAt: null });
             const sheetId = document.getElementById('googleSheetId').value.trim(); const scriptUrl = document.getElementById('gasUrl').value.trim();
             if(sheetId && scriptUrl) {
                 btn.disabled = true; const oldIcon = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -293,9 +301,17 @@
                 const existingItem = inventoryData.find(i => i.uid === currentEditUid);
                 newItem.timestamp = existingItem ? existingItem.timestamp : Date.now();
                 if (newItem.status === 'sold') {
-                    newItem.soldAt = existingItem?.status === 'sold' && existingItem?.soldAt ? existingItem.soldAt : Date.now();
-                } else if (existingItem?.soldAt !== undefined) {
+                    if (existingItem?.status === 'sold') {
+                        if (existingItem.soldAt !== undefined) newItem.soldAt = existingItem.soldAt;
+                        if (existingItem.deleteAt !== undefined) newItem.deleteAt = existingItem.deleteAt;
+                    } else {
+                        const now = Date.now();
+                        newItem.soldAt = now;
+                        newItem.deleteAt = now + window.SoldAccountCleanup.SOLD_ACCOUNT_RETENTION_MS;
+                    }
+                } else if (existingItem?.status === 'sold' || existingItem?.soldAt !== undefined || existingItem?.deleteAt !== undefined) {
                     newItem.soldAt = null;
+                    newItem.deleteAt = null;
                 }
                 update(ref(db, `inventory/${currentEditUid}`), newItem);
                 showMsg("✅ 帳號資料已更新！", "green");
@@ -303,7 +319,10 @@
                 if(sheetId && scriptUrl) fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', id: sheetId, accountId: accountId, data: decodeURIComponent(newItem.fullText) }) });
             } else {
                 newItem.timestamp = Date.now(); 
-                if (newItem.status === 'sold') newItem.soldAt = newItem.timestamp;
+                if (newItem.status === 'sold') {
+                    newItem.soldAt = newItem.timestamp;
+                    newItem.deleteAt = newItem.timestamp + window.SoldAccountCleanup.SOLD_ACCOUNT_RETENTION_MS;
+                }
                 push(inventoryRef, newItem); 
                 showMsg("✅ 帳號已新增！", "green");
                 

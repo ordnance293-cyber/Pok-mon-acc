@@ -73,13 +73,16 @@ The isolated Apps Script adapter consists of:
 - a deployment README with Script Properties, secure Firebase authentication,
   installation, verification, and the exact formatter integration boundary.
 
-The handler obtains one Firebase inventory snapshot, computes migration and
-expiration, removes expired Sheet rows through direct Spreadsheet service calls,
-applies the Firebase multi-location patch only after the Sheet deletion step is
-safe to retry, then calls a required `applySoldFormattingBatch(...)` adapter for
-remaining SOLD rows. The formatter adapter deliberately has no guessed column
-or color behavior. The existing production SOLD formatter must be inserted or
-delegated there before claiming exact Sheet repaint compatibility.
+The handler obtains one Firebase inventory snapshot with an ETag, computes
+migration and expiration, conditionally applies the Firebase multi-location
+patch, then removes expired Sheet rows through direct Spreadsheet service calls.
+Sheet deletions are persisted in a Script Properties retry queue. A queued UID
+that is present again in a later Firebase snapshot is treated as restored or
+reused and is not deleted from the Sheet. The handler then calls a required
+`applySoldFormattingBatch(...)` adapter for remaining SOLD rows. The formatter
+adapter deliberately has no guessed column or color behavior. The existing
+production SOLD formatter must be inserted or delegated there before claiming
+exact Sheet repaint compatibility.
 
 All Firebase server requests require Script Properties, including a database URL
 and server-authorized token. The frontend Firebase API key is never used as a
@@ -94,9 +97,13 @@ timezone, making repeated installation idempotent.
 
 - Migration updates are monotonic: valid `deleteAt` values are not moved.
 - A legacy record is migrated, not deleted, in its first classification run.
+- Timestamp validation accepts only finite positive numbers or non-empty numeric
+  strings; booleans and arrays fail safe into migration.
 - Sheet deletion is retried safely; missing rows are treated as already deleted.
-- Firebase deletion uses `null` paths in one patch and only includes SOLD records
-  whose Sheet deletion has completed or is already absent.
+- Firebase deletion uses `null` paths in one ETag-guarded patch. A stale ETag
+  aborts the mutation safely, and the next hourly run retries it.
+- Sheet deletion failures remain in a Script Properties queue; a restored or
+  reused UID removes its stale queue entry without deleting its current row.
 - Repaint failures are logged as counts and safe error summaries without
   credentials; the next hourly execution retries them.
 - A lock conflict exits without mutation.
