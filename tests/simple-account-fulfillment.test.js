@@ -135,6 +135,7 @@ const eligible = { rowNumber: 2, account: ' synthetic-account ', password: ' syn
 assert.equal(Logic.isEligibleCredentialRow(eligible), true);
 assert.equal(Logic.isEligibleCredentialRow({ ...eligible, account: 123456, password: 7890 }), true);
 assert.equal(Logic.isEligibleCredentialRow({ ...eligible, rowNumber: 1 }), false);
+assert.equal(Logic.isEligibleCredentialRow({ ...eligible, account: '   ' }), false);
 assert.equal(Logic.isEligibleCredentialRow({ ...eligible, password: '   ' }), false);
 assert.equal(Logic.isEligibleCredentialRow({ ...eligible, accountBackground: '#ffff00' }), false);
 assert.equal(Logic.isEligibleCredentialRow({ ...eligible, passwordBackground: '#eeeeee' }), false);
@@ -235,6 +236,11 @@ function createTransactionFake(options) {
     },
     paintFullRow(sheet, rowNumber) {
       events.push(['paint', sheet.name, rowNumber]);
+      const sourceRow = (rowsBySheet[sheet.name] || []).find(row => row.rowNumber === rowNumber);
+      if (sourceRow) {
+        sourceRow.accountBackground = '#ffff00';
+        sourceRow.passwordBackground = '#ffff00';
+      }
     },
     flush() {
       events.push(['flush']);
@@ -244,6 +250,7 @@ function createTransactionFake(options) {
       return timestamp;
     },
     logSafe(metadata) {
+      if (settings.logError) throw new Error('synthetic-log-error');
       logs.push({ ...metadata });
       events.push(['log', metadata && metadata.event]);
     }
@@ -294,7 +301,14 @@ for (const malformedConfig of [
   assert.deepEqual(result.events, []);
 }
 
-const newFulfillment = fulfillWithFake({});
+const newFulfillment = fulfillWithFake({
+  rowsBySheet: {
+    '3百神': [
+      credentialRow(2, 'synthetic-account-2', 'synthetic-password-2'),
+      credentialRow(3, 'synthetic-account-3', 'synthetic-password-3')
+    ]
+  }
+});
 assert.deepEqual(newFulfillment.response, {
   ok: true,
   requestId: VALID_REQUEST_ID,
@@ -317,6 +331,10 @@ assert.deepEqual(
   Logic.AUDIT_HEADERS
 );
 assert.equal('password' in newFulfillment.auditRecords[0], false);
+assert.equal(newFulfillment.auditRecords.length, 1);
+assert.equal(newFulfillment.events.filter(event => event[0] === 'append').length, 1);
+assert.equal(newFulfillment.events.filter(event => event[0] === 'paint').length, 1);
+assert.equal(newFulfillment.events.filter(event => event[0] === 'update').length, 1);
 
 const missingSheet = fulfillWithFake({ sheets: {} });
 assert.equal(missingSheet.response.code, 'SHEET_NOT_FOUND');
@@ -435,6 +453,13 @@ assert.equal(JSON.stringify(internalError.response).includes('synthetic-secret')
 assert.equal(JSON.stringify(internalError.logs).includes('synthetic-secret'), false);
 assert.equal(JSON.stringify(internalError.logs).includes('synthetic-password-2'), false);
 
+const loggingError = fulfillWithFake({ readRowsError: true, logError: true });
+assert.deepEqual(loggingError.response, {
+  ok: false,
+  code: 'INTERNAL_ERROR',
+  message: 'Unable to fulfill the request.'
+});
+
 function createAppsScriptContext(options) {
   const settings = options || {};
   const events = [];
@@ -452,9 +477,10 @@ function createAppsScriptContext(options) {
   ]];
   const sheets = {};
 
-  function makeSheet(name, values, backgrounds) {
+  function makeSheet(name, values, backgrounds, displayValues) {
     const data = values.map(row => row.slice());
     const colors = backgrounds.map(row => row.slice());
+    const displayData = (displayValues || values).map(row => row.slice());
     return {
       name,
       hidden: false,
@@ -462,11 +488,18 @@ function createAppsScriptContext(options) {
       getLastRow() { return data.length; },
       getMaxColumns() { return Math.max(1, ...data.map(row => row.length)); },
       hideSheet() { this.hidden = true; events.push(['hide', name]); return this; },
-      appendRow(row) { data.push(row.slice()); colors.push(row.map(() => '#ffffff')); events.push(['append-row', name]); return this; },
+      appendRow(row) { data.push(row.slice()); displayData.push(row.slice()); colors.push(row.map(() => '#ffffff')); events.push(['append-row', name]); return this; },
       getRange(row, column, numRows, numColumns) {
         return {
           getValues() {
             return data.slice(row - 1, row - 1 + numRows).map(source => {
+              const result = [];
+              for (let index = 0; index < numColumns; index += 1) result.push(source[column - 1 + index] || '');
+              return result;
+            });
+          },
+          getDisplayValues() {
+            return displayData.slice(row - 1, row - 1 + numRows).map(source => {
               const result = [];
               for (let index = 0; index < numColumns; index += 1) result.push(source[column - 1 + index] || '');
               return result;
@@ -496,9 +529,12 @@ function createAppsScriptContext(options) {
     };
   }
 
+  const displayProductRows = settings.productDisplayRows
+    ? [['header', 'account', 'password', '', ''], ...settings.productDisplayRows]
+    : null;
   sheets['3百神'] = makeSheet('3百神', [['header', 'account', 'password', '', ''], ...productRows], [
     ['#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], ...productBackgrounds
-  ]);
+  ], displayProductRows);
   if (settings.auditRows) {
     sheets['簡帳出貨紀錄'] = makeSheet(
       '簡帳出貨紀錄',
@@ -564,7 +600,13 @@ function createAppsScriptContext(options) {
         };
       }
     },
-    Logger: { log(value) { logs.push(value); events.push(['log']); } },
+    Logger: {
+      log(value) {
+        if (settings.throwLogger) throw new Error('synthetic-logger-error');
+        logs.push(value);
+        events.push(['log']);
+      }
+    },
     JSON,
     Date,
     Object,
@@ -586,6 +628,7 @@ assert.ok(codeSource.includes("SIMPLE_ACCOUNT_SPREADSHEET_ID"));
 assert.ok(codeSource.includes("SIMPLE_ACCOUNT_FULFILLMENT_SECRET"));
 assert.ok(codeSource.includes('tryLock(10000)'));
 assert.ok(codeSource.includes("setBackground('#ffff00')"));
+assert.ok(codeSource.includes('getDisplayValues()'));
 
 const lockTimeout = createAppsScriptContext({ lockAvailable: false });
 vm.createContext(lockTimeout.context);
@@ -635,6 +678,24 @@ const releaseIndex = appScriptSuccess.events.findIndex(event => event[0] === 're
 assert.equal(appScriptSuccess.events[releaseIndex - 1][0], 'flush');
 assert.equal(JSON.stringify(appScriptSuccess.logs).includes('synthetic-secret'), false);
 assert.equal(JSON.stringify(appScriptSuccess.logs).includes('synthetic-password-2'), false);
+
+const displayedCredentials = createAppsScriptContext({
+  productRows: [['unused', 1234, 7890, '', '']],
+  productDisplayRows: [['unused', '001234', '000789', '', '']]
+});
+vm.createContext(displayedCredentials.context);
+vm.runInContext(codeSource, displayedCredentials.context);
+const displayedOutput = displayedCredentials.context.doPost({ postData: { contents: JSON.stringify(VALID_REQUEST) } });
+const displayedResponse = JSON.parse(displayedOutput.getContent());
+assert.equal(displayedResponse.account, '001234');
+assert.equal(displayedResponse.password, '000789');
+
+const loggerFailure = createAppsScriptContext({ throwLogger: true });
+vm.createContext(loggerFailure.context);
+vm.runInContext(codeSource, loggerFailure.context);
+const loggerFailureOutput = loggerFailure.context.doPost({ postData: { contents: JSON.stringify(VALID_REQUEST) } });
+assert.equal(JSON.parse(loggerFailureOutput.getContent()).ok, true);
+assert.equal(loggerFailureOutput.getContent().includes('synthetic-logger-error'), false);
 
 const flushFailure = createAppsScriptContext({
   throwFlush: true,
