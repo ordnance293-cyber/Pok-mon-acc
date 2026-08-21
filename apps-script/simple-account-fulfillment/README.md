@@ -72,11 +72,13 @@ ID is replayed, so the service returns the original row rather than consuming
 the next account. Do not create a new request ID until the pending result has
 been confirmed.
 
-For `REPLAY_UNAVAILABLE`, inspect `簡帳出貨紀錄` and the referenced source tab
-and row manually, then clear the browser pending state only after that review.
-The service does not silently issue a replacement account. `INTERNAL_ERROR`,
-network failure, invalid JSON, unreadable responses, and HTML responses keep
-the pending ID because the server may already have reserved or painted a row.
+For `REPLAY_UNAVAILABLE`, the browser first shows a prominent instruction to
+inspect `簡帳出貨紀錄` and the referenced source tab and row; it then clears
+browser pending state. The operator must complete that manual review before
+taking any further fulfillment action. The service does not silently issue a
+replacement account. `INTERNAL_ERROR`, network failure, invalid JSON,
+unreadable responses, and HTML responses keep the pending ID because the
+server may already have reserved or painted a row.
 
 ## Acceptance boundary
 

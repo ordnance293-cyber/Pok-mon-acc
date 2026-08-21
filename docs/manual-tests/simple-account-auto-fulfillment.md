@@ -74,8 +74,9 @@ earlier incomplete or partially colored row, and a later complete white row.
 - [ ] A confirmed `OUT_OF_STOCK`, `BUSY`, `INVALID_REQUEST`, `UNAUTHORIZED`,
       `CONFIG_MISMATCH`, or `SHEET_NOT_FOUND` result clears pending state.
 - [ ] A `REPLAY_UNAVAILABLE` result prominently instructs the operator to
-      inspect `簡帳出貨紀錄` and the referenced source row before clearing
-      pending state; no replacement account is silently issued.
+      inspect `簡帳出貨紀錄` and the referenced source row, then clears browser
+      pending state; no replacement account is silently issued and no further
+      fulfillment action is taken before that manual review.
 - [ ] A network failure, HTML response, invalid JSON, unreadable response, or
       `INTERNAL_ERROR` keeps the pending request for replay.
 
