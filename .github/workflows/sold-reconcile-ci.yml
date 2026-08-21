@@ -32,6 +32,9 @@ jobs:
       - name: Run Apps Script reconciliation tests
         run: node tests/apps-script-sold-reconcile.test.js
 
+      - name: Run settings label tests
+        run: node tests/settings-labels.test.js
+
       - name: Run static regression checks
         run: python tests/verify_regressions.py
 
