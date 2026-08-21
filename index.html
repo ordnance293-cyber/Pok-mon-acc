@@ -213,11 +213,17 @@
             setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
         };
 
+        window.showCredentialModal = function(account, password) {
+            document.getElementById('modalAccount').value = account;
+            document.getElementById('modalPassword').value = password;
+            document.getElementById('copyModal').classList.remove('hidden');
+        };
+
         window.showCopyModal = function(accountId) {
             const parts = accountId.split(';');
-            document.getElementById('modalAccount').value = parts[0] ? parts[0].trim() : accountId;
-            document.getElementById('modalPassword').value = parts[1] ? parts[1].trim() : '（無密碼）';
-            document.getElementById('copyModal').classList.remove('hidden');
+            const account = parts[0] ? parts[0].trim() : accountId;
+            const password = parts[1] ? parts[1].trim() : '（無密碼）';
+            window.showCredentialModal(account, password);
         };
 
         window.copyModalField = function(fieldId, btn) {
