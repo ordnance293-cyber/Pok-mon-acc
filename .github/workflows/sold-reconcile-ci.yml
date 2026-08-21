@@ -35,6 +35,12 @@ jobs:
       - name: Run settings label tests
         run: node tests/settings-labels.test.js
 
+      - name: Run Smart Hundo position-first tests
+        run: node tests/smart-hundo-position-first.test.js
+
+      - name: Run Smart Hundo form verifier family tests
+        run: node tests/smart-hundo-form-verifier-all-families.test.js
+
       - name: Run simple-account fulfillment tests
         run: node tests/simple-account-fulfillment.test.js
 
