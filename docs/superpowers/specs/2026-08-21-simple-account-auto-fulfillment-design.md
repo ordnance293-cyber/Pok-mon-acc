@@ -38,7 +38,7 @@ The tabs `全部價格` and `高預算帳號` are explicitly outside this change
 
 The server uses a fixed allowlist. It must not accept an arbitrary tab name supplied by the browser.
 
-### 2.3 Sheet layout
+### 2.3 Sheet layout and color meaning
 
 All five product tabs use the same layout:
 
@@ -46,10 +46,10 @@ All five product tabs use the same layout:
 - Data begins at row 2.
 - Column B contains the account.
 - Column C contains the password.
-- A white credential row is available stock.
-- A yellow row is sold stock.
+- White `#ffffff` credential cells mean available stock.
+- Yellow `#ffff00` rows mean sold stock.
 
-Availability is determined from the credential cells: both B and C must have a white background and both displayed values must be non-empty. Any row with a missing account, missing password, or any non-white credential background is skipped.
+Availability is determined from the credential cells: both B and C must have a case-insensitive `#ffffff` background and both displayed values must be non-empty after trimming. Any row with a missing account, missing password, or any non-white credential background is skipped.
 
 ### 2.4 Selection order
 
@@ -63,7 +63,7 @@ A successful sale performs all of the following:
 
 1. Reserves one eligible row under an Apps Script lock.
 2. Reads the account from column B and password from column C.
-3. Paints the complete source row yellow, from column A through the sheet's current maximum column.
+3. Paints the complete source row `#ffff00`, from column A through `sheet.getMaxColumns()`.
 4. Flushes the spreadsheet mutation before releasing the lock.
 5. Returns the same account and password to the website.
 6. Opens the existing account/password modal.
@@ -105,18 +105,23 @@ Use an independent fulfillment path rather than extending the existing high-budg
 The existing static website gains a third page, `簡帳自動出貨`. It contains:
 
 - A clearly labeled simple-account connection panel.
-- Five product cards or buttons.
+- Five product sale controls.
 - One irreversible-sale confirmation before sending a request.
 - A status area for processing, success, out-of-stock, busy, authentication, configuration, and unknown-result states.
 - A pending-request recovery control when the previous network result is unknown.
 
-The current page 1 and page 2 flows remain intact. Navigation may add a button to open the third page, but must not rename or restructure the existing inventory pages.
+Navigation is explicit:
+
+- Page 1 adds a `⚡ 簡帳自動出貨` button.
+- Page 2 adds a `⚡ 簡帳自動出貨` button.
+- Page 3 adds a `⬅️ 返回建檔區` button.
+- Existing page names, controls, and business flows are not renamed or restructured.
 
 ### 4.2 Apps Script side
 
 The new fulfillment code is packaged under a separate repository directory and is intended for a separate Apps Script project/deployment. It must not share `doPost` routing, configuration, triggers, or Script Properties with the existing high-budget reconciliation deployment.
 
-Suggested repository structure:
+The implementation repository structure is:
 
 - `simple-account-fulfillment-helpers.js`
 - `apps-script/simple-account-fulfillment/Code.gs`
@@ -125,7 +130,7 @@ Suggested repository structure:
 - `tests/simple-account-fulfillment.test.js`
 - `tests/simple-account-fulfillment-ui.test.js`
 
-`Code.gs` is a thin web-app and Spreadsheet adapter. Selection, validation, transaction-state transitions, and response shaping should live in isolated logic that can be exercised without Google services.
+`Code.gs` is a thin web-app and Spreadsheet adapter. Selection, validation, transaction-state transitions, and response shaping live in isolated logic that can be exercised without Google services.
 
 ### 4.3 Configuration
 
@@ -140,9 +145,14 @@ The Apps Script project stores:
 - `SIMPLE_ACCOUNT_SPREADSHEET_ID`
 - `SIMPLE_ACCOUNT_FULFILLMENT_SECRET`
 
-The request spreadsheet ID must exactly match the server-side allowlisted spreadsheet ID. The server always opens the allowlisted ID; it never uses an unchecked arbitrary ID to access a file.
+The request spreadsheet ID must exactly match the server-side allowlisted spreadsheet ID. The server always opens the allowlisted property value; it never uses an unchecked arbitrary ID to access a file.
 
-The web app is deployed as the script owner so it can read and format the spreadsheet. Deployment access and the shared secret are documented in the deployment README. The secret is sent only in the POST body, is never placed in a URL, and is never logged or returned.
+The web app is deployed with:
+
+- Execute as: the script owner.
+- Access: `Anyone`, because the static site does not perform Google OAuth.
+
+The shared secret is the endpoint authorization boundary. It is sent only in the POST body, is never placed in a URL, and is never logged or returned. The deployment README instructs the operator not to share the web-app URL or secret.
 
 ## 5. Request and response contract
 
@@ -163,13 +173,15 @@ The website sends one JSON request containing:
 Requirements:
 
 - `action` must exactly equal `fulfillSimpleAccount`.
-- `requestId` must be a bounded, valid unique identifier.
+- `requestId` must match `^[A-Za-z0-9_-]{20,100}$`.
 - `product` must be one of the five allowlisted values.
 - `spreadsheetId` must match the Apps Script property.
 - `secret` must match the Apps Script property.
 - Invalid requests fail before opening or mutating a spreadsheet.
 
-The browser uses a POST format that the Apps Script web app can parse without placing credentials in query parameters. The release acceptance test must prove that the deployed GitHub Pages origin can read the returned JSON in a real browser; this is not assumed from unit tests.
+The browser sends the JSON string as a `text/plain;charset=UTF-8` POST body. `doPost(e)` parses `e.postData.contents`. This avoids putting the secret in a URL and avoids relying on a custom preflight handler.
+
+The release acceptance test must prove that the deployed GitHub Pages origin can read the returned JSON in the actual target browser. This is not assumed from unit tests.
 
 ### 5.2 Success response
 
@@ -211,6 +223,8 @@ Required error codes:
 - `REPLAY_UNAVAILABLE`
 - `INTERNAL_ERROR`
 
+The Apps Script web app returns `ContentService` JSON output. Business errors are represented by `ok: false`; the client does not depend on custom HTTP status codes. An HTML error page, invalid JSON, or unreadable response is treated as an unknown network/result state.
+
 Responses must not contain stack traces, secrets, or credentials from any row other than the successfully reserved row.
 
 ## 6. Concurrency and idempotency
@@ -219,7 +233,7 @@ Responses must not contain stack traces, secrets, or credentials from any row ot
 
 Every transaction that reads reservation state, chooses a source row, writes the audit record, or paints the row runs while holding one Apps Script script lock.
 
-If the lock cannot be acquired within the configured short timeout, return `BUSY` without changing the spreadsheet.
+The endpoint uses `tryLock(10000)`. If the lock cannot be acquired within 10 seconds, return `BUSY` without changing the spreadsheet.
 
 Call `SpreadsheetApp.flush()` before releasing the lock so pending formatting and audit writes are committed while exclusive access is still held.
 
@@ -248,14 +262,14 @@ Transaction states are:
 Under the lock:
 
 1. Validate request, configuration, and allowlist.
-2. Search the audit sheet for the same request ID.
-3. Recover any earlier reserved transaction as described below.
+2. Search the audit sheet for the same request ID; if found, use the replay path and stop the new-request path.
+3. Recover other earlier reserved transactions as described below.
 4. Read the selected product tab from row 2 downward.
 5. Exclude rows already referenced by an unresolved reservation.
 6. Choose the first eligible white row.
 7. Append a `RESERVED` audit record containing request ID, product, sheet, source row, and account.
 8. Flush the reservation.
-9. Paint the entire source row `#ffff00`.
+9. Paint the entire source row `#ffff00` through `sheet.getMaxColumns()`.
 10. Flush the formatting.
 11. Mark the audit record `COMPLETED` and set `completed_at`.
 12. Flush again, then return the credentials.
@@ -293,10 +307,12 @@ It does not store the account, password, or shared secret in the pending record.
 Rules:
 
 - Retries reuse the same request ID.
-- Clear pending state only after a successful credential response or a confirmed terminal server rejection.
-- A network error or unreadable response leaves the request pending.
+- A successful credential response clears pending state only after the modal fields are populated.
+- `INVALID_REQUEST`, `UNAUTHORIZED`, `CONFIG_MISMATCH`, `SHEET_NOT_FOUND`, `OUT_OF_STOCK`, and `BUSY` are confirmed no-delivery outcomes and clear pending state.
+- `REPLAY_UNAVAILABLE` clears pending state only after showing a prominent instruction to inspect `簡帳出貨紀錄` and the referenced source row manually. The server reservation continues to prevent that row from being selected as new stock.
+- `INTERNAL_ERROR`, a network error, invalid JSON, an HTML error page, or any unreadable response keeps pending state because delivery may already have occurred.
 - When pending state exists, the page displays `上次出貨結果尚未確認` and offers `重新查詢上次出貨`.
-- Until the pending request is resolved, starting a different product sale is blocked. This prevents an unknown first result followed by an accidental second sale.
+- Until the pending request is resolved, starting a different product sale is blocked.
 
 The fetch request uses `cache: "no-store"`, disables all simple-account sale buttons while in flight, and never logs the secret, account, or password.
 
@@ -310,7 +326,7 @@ The simple-account page contains a separate `簡帳連線設定` panel with pers
 - `簡帳出貨 Apps Script 網址` — the independent web-app endpoint.
 - `簡帳出貨密鑰` — authorizes fulfillment and is shown as a password input.
 
-The save control clearly states that it saves the simple-account settings. Existing top-header settings and their storage keys remain unchanged.
+The save control is labeled `💾 儲存簡帳設定`. Existing top-header settings and their storage keys remain unchanged.
 
 ### 8.2 Product controls
 
@@ -340,11 +356,10 @@ This refactor must preserve every existing high-budget modal behavior and must n
 - Missing allowlisted tab: return `SHEET_NOT_FOUND`; do not use another tab.
 - Lock timeout: return `BUSY`; do not reserve or color anything.
 - Authentication or spreadsheet mismatch: return a generic configuration/authentication message and expose no row data.
-- Known server failure before reservation: clear pending state.
 - Network or unknown response after dispatch: keep pending state and guide the operator to replay the same request.
-- Unexpected server exception: return `INTERNAL_ERROR`; do not include exception details in the HTTP response.
+- Unexpected server exception: return `INTERNAL_ERROR`; do not include exception details in the JSON response.
 
-Server logs may contain event type, request ID, product, state, and row number. They must never contain the shared secret or password. Account values should be omitted from console logs even though the hidden audit sheet stores the account for recovery.
+Server logs may contain event type, request ID, product, state, and row number. They must never contain the shared secret or password. Account values are omitted from console logs even though the hidden audit sheet stores the account for recovery.
 
 ## 10. Testing strategy
 
@@ -388,7 +403,7 @@ Verify:
 - Existing settings IDs and localStorage keys remain unchanged.
 - The modal still has separate account/password copy controls and no combined copy control.
 - Pending state reuses the same request ID and blocks another product.
-- Terminal responses clear pending state; network ambiguity preserves it.
+- Each response code follows the exact pending-state rules in section 7.
 - Existing high-budget modal parsing still works.
 
 ### 10.4 Regression and CI
@@ -424,6 +439,7 @@ The repository implementation supplies a dedicated README with exact copy/deploy
 - A separate Apps Script project contains the new fulfillment files.
 - The script properties contain the allowlisted spreadsheet ID and fulfillment secret.
 - The script is authorized to access the second spreadsheet.
+- The web app is deployed as the owner with access set to `Anyone`.
 - A new web-app deployment URL is saved in the website's simple-account settings.
 - The real-browser response smoke test passes.
 - The hidden `簡帳出貨紀錄` sheet is created successfully on first use.
