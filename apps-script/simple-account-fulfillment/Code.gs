@@ -1,35 +1,40 @@
 function doPost(event) {
   var request;
+  var response;
+  var lock = null;
+  var lockAcquired = false;
   try {
-    request = JSON.parse(event && event.postData && event.postData.contents || '');
+    try {
+      request = JSON.parse(event && event.postData && event.postData.contents || '');
+    } catch (error) {
+      response = { ok: false, code: 'INVALID_REQUEST', message: 'Request must be valid JSON.' };
+    }
+    if (!response) {
+      var properties = PropertiesService.getScriptProperties();
+      var config = {
+        configuredSpreadsheetId: properties.getProperty('SIMPLE_ACCOUNT_SPREADSHEET_ID') || '',
+        configuredSecret: properties.getProperty('SIMPLE_ACCOUNT_FULFILLMENT_SECRET') || ''
+      };
+      lock = LockService.getScriptLock();
+      if (!lock.tryLock(10000)) {
+        response = { ok: false, code: 'BUSY', message: 'Service is busy. Please retry.' };
+      } else {
+        lockAcquired = true;
+        var service = SimpleAccountFulfillmentLogic.createTransactionService(
+          createSimpleAccountAdapters_(config)
+        );
+        response = service.fulfill(request, config);
+        logSimpleAccountMetadata_({
+          event: 'simpleAccountFulfillment',
+          requestId: request && request.requestId,
+          product: request && request.product,
+          state: response.ok ? 'COMPLETED' : response.code,
+          rowNumber: response.ok ? response.rowNumber : null
+        });
+      }
+    }
   } catch (error) {
-    return simpleAccountJsonOutput_({ ok: false, code: 'INVALID_REQUEST', message: 'Request must be valid JSON.' });
-  }
-
-  var properties = PropertiesService.getScriptProperties();
-  var config = {
-    configuredSpreadsheetId: properties.getProperty('SIMPLE_ACCOUNT_SPREADSHEET_ID') || '',
-    configuredSecret: properties.getProperty('SIMPLE_ACCOUNT_FULFILLMENT_SECRET') || ''
-  };
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) {
-    return simpleAccountJsonOutput_({ ok: false, code: 'BUSY', message: 'Service is busy. Please retry.' });
-  }
-
-  try {
-    var service = SimpleAccountFulfillmentLogic.createTransactionService(
-      createSimpleAccountAdapters_(config)
-    );
-    var response = service.fulfill(request, config);
-    logSimpleAccountMetadata_({
-      event: 'simpleAccountFulfillment',
-      requestId: request && request.requestId,
-      product: request && request.product,
-      state: response.ok ? 'COMPLETED' : response.code,
-      rowNumber: response.ok ? response.rowNumber : null
-    });
-    return simpleAccountJsonOutput_(response);
-  } catch (error) {
+    response = { ok: false, code: 'INTERNAL_ERROR', message: 'Unable to fulfill the request.' };
     logSimpleAccountMetadata_({
       event: 'simpleAccountFulfillment',
       requestId: request && request.requestId,
@@ -37,11 +42,21 @@ function doPost(event) {
       state: 'INTERNAL_ERROR',
       rowNumber: null
     });
-    return simpleAccountJsonOutput_({ ok: false, code: 'INTERNAL_ERROR', message: 'Unable to fulfill the request.' });
   } finally {
-    SpreadsheetApp.flush();
-    lock.releaseLock();
+    if (lockAcquired) {
+      try {
+        SpreadsheetApp.flush();
+      } catch (error) {}
+      try {
+        lock.releaseLock();
+      } catch (error) {}
+    }
   }
+  return simpleAccountJsonOutput_(response || {
+    ok: false,
+    code: 'INTERNAL_ERROR',
+    message: 'Unable to fulfill the request.'
+  });
 }
 
 function createSimpleAccountAdapters_(config) {
@@ -77,15 +92,15 @@ function createSimpleAccountAdapters_(config) {
       var lastRow = sheet.getLastRow();
       if (lastRow < 2) return [];
       var values = sheet.getRange(2, 1, lastRow - 1, SimpleAccountFulfillmentLogic.AUDIT_HEADERS.length).getValues();
-      return values.filter(function (row) {
-        return String(row[0] || '').trim() !== '';
-      }).map(function (row, index) {
+      return values.reduce(function (records, row, index) {
+        if (String(row[0] || '').trim() === '') return records;
         var record = { auditRowNumber: index + 2 };
         SimpleAccountFulfillmentLogic.AUDIT_HEADERS.forEach(function (header, column) {
           record[header] = row[column];
         });
-        return record;
-      });
+        records.push(record);
+        return records;
+      }, []);
     },
     getProductSheet: function (sheetName) {
       return getSpreadsheet_().getSheetByName(sheetName);

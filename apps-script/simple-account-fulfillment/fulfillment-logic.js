@@ -81,7 +81,7 @@
       if (!config || typeof config !== 'object' || Array.isArray(config) ||
         typeof config.configuredSpreadsheetId !== 'string' || config.configuredSpreadsheetId.trim() === '' ||
         typeof config.configuredSecret !== 'string' || config.configuredSecret === '') {
-        return failure('UNAUTHORIZED', 'Server configuration is unavailable.');
+        return failure('CONFIG_MISMATCH', 'Server configuration does not match.');
       }
       if (request.secret !== config.configuredSecret) {
         return failure('UNAUTHORIZED', 'Authorization failed.');
@@ -128,7 +128,7 @@
         return null;
       }
       const sheet = safeAdapters.getProductSheet(record.source_sheet);
-      if (!sheet) return null;
+      if (!sheet) return { missingSheet: true };
       const row = findRow(safeAdapters.getRows(sheet), record.source_row);
       return sourceMatchesRecord(record, row) ? { sheet, row } : null;
     }
@@ -152,7 +152,7 @@
     return {
       adapters: safeAdapters,
       fulfill(request, config) {
-        const validation = validateRequest(request, config);
+        const validation = validateRequest(request);
         if (!validation.ok) return validation;
         const configurationError = validateConfiguration(request, config);
         if (configurationError) return configurationError;
@@ -170,6 +170,9 @@
               return failure('REPLAY_UNAVAILABLE', 'The original fulfillment cannot be safely replayed.');
             }
             const source = getRecordedSource(existing);
+            if (source && source.missingSheet) {
+              return failure('SHEET_NOT_FOUND', 'Configured product sheet was not found.');
+            }
             if (!source) return failure('REPLAY_UNAVAILABLE', 'The original fulfillment cannot be safely replayed.');
             const completed = existing.state === 'RESERVED'
               ? completeReservation(existing, source)
@@ -187,7 +190,7 @@
             } catch (error) {
               source = null;
             }
-            if (source) {
+            if (source && !source.missingSheet) {
               completeReservation(reservation, source);
             } else if (reservation.source_sheet === validation.sheetName && Number(reservation.source_row) >= 2) {
               unresolvedReservations.add(Number(reservation.source_row));

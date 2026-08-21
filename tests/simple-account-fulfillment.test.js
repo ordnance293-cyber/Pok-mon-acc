@@ -149,8 +149,8 @@ function createTransactionFake(options) {
 function fulfillWithFake(options, request, config) {
   const fake = createTransactionFake(options);
   const response = Logic.createTransactionService(fake.adapters).fulfill(
-    request || { ...VALID_REQUEST },
-    config || { ...VALID_CONFIG }
+    request === undefined ? { ...VALID_REQUEST } : request,
+    config === undefined ? { ...VALID_CONFIG } : config
   );
   return { ...fake, response };
 }
@@ -165,13 +165,27 @@ for (const invalidRequest of [
   assert.equal(result.response.code, 'INVALID_REQUEST');
   assert.deepEqual(result.events, []);
 }
-for (const mismatchedRequest of [
-  { ...VALID_REQUEST, secret: 'wrong-synthetic-secret' },
-  { ...VALID_REQUEST, spreadsheetId: 'wrong-synthetic-spreadsheet-id' }
+const wrongSecret = fulfillWithFake({}, { ...VALID_REQUEST, secret: 'wrong-synthetic-secret' });
+assert.equal(wrongSecret.response.code, 'UNAUTHORIZED');
+assert.deepEqual(wrongSecret.events, []);
+const wrongSpreadsheet = fulfillWithFake({}, {
+  ...VALID_REQUEST,
+  spreadsheetId: 'wrong-synthetic-spreadsheet-id'
+});
+assert.equal(wrongSpreadsheet.response.code, 'CONFIG_MISMATCH');
+assert.deepEqual(wrongSpreadsheet.events, []);
+for (const malformedConfig of [
+  { configuredSpreadsheetId: '', configuredSecret: 'synthetic-secret' },
+  { configuredSpreadsheetId: 'synthetic-spreadsheet-id', configuredSecret: '' },
+  null,
+  []
 ]) {
-  const result = fulfillWithFake({}, mismatchedRequest);
-  assert.equal(result.response.ok, false);
-  assert.ok(['UNAUTHORIZED', 'CONFIG_MISMATCH'].includes(result.response.code));
+  const result = fulfillWithFake({}, { ...VALID_REQUEST }, malformedConfig);
+  assert.deepEqual(result.response, {
+    ok: false,
+    code: 'CONFIG_MISMATCH',
+    message: 'Server configuration does not match.'
+  });
   assert.deepEqual(result.events, []);
 }
 
@@ -247,6 +261,22 @@ const replayUnavailable = fulfillWithFake({
 });
 assert.equal(replayUnavailable.response.code, 'REPLAY_UNAVAILABLE');
 assert.equal(replayUnavailable.events.some(event => event[0] === 'append' || event[0] === 'paint'), false);
+
+const replayMissingSheet = fulfillWithFake({
+  sheets: {},
+  auditRecords: [{
+    request_id: VALID_REQUEST_ID,
+    state: 'COMPLETED',
+    requested_at: 1,
+    completed_at: 2,
+    product: '3百神',
+    source_sheet: '3百神',
+    source_row: 2,
+    account: 'synthetic-account-2'
+  }]
+});
+assert.equal(replayMissingSheet.response.code, 'SHEET_NOT_FOUND');
+assert.equal(replayMissingSheet.events.some(event => event[0] === 'append' || event[0] === 'paint'), false);
 
 const reservationExcluded = fulfillWithFake({
   auditRecords: [{
@@ -364,6 +394,13 @@ function createAppsScriptContext(options) {
   sheets['3百神'] = makeSheet('3百神', [['header', 'account', 'password', '', ''], ...productRows], [
     ['#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], ...productBackgrounds
   ]);
+  if (settings.auditRows) {
+    sheets['簡帳出貨紀錄'] = makeSheet(
+      '簡帳出貨紀錄',
+      settings.auditRows,
+      settings.auditRows.map(row => row.map(() => '#ffffff'))
+    );
+  }
   const spreadsheet = {
     getSheetByName(name) { events.push(['get-sheet', name]); return sheets[name] || null; },
     insertSheet(name) {
@@ -374,16 +411,42 @@ function createAppsScriptContext(options) {
     }
   };
   const lock = {
-    tryLock(milliseconds) { events.push(['try-lock', milliseconds]); return settings.lockAvailable !== false; },
-    releaseLock() { events.push(['release-lock']); }
+    tryLock(milliseconds) {
+      events.push(['try-lock', milliseconds]);
+      if (settings.throwTryLock) throw new Error('synthetic-try-lock-error');
+      return settings.lockAvailable !== false;
+    },
+    releaseLock() {
+      events.push(['release-lock']);
+      if (settings.throwRelease) throw new Error('synthetic-release-error');
+    }
   };
   const context = {
     SimpleAccountFulfillmentLogic: Logic,
-    PropertiesService: { getScriptProperties() { return { getProperty(name) { return properties[name] || ''; } }; } },
-    LockService: { getScriptLock() { events.push(['get-lock']); return lock; } },
+    PropertiesService: {
+      getScriptProperties() {
+        if (settings.throwGetProperties) throw new Error('synthetic-properties-error');
+        return {
+          getProperty(name) {
+            if (settings.throwGetProperty) throw new Error('synthetic-property-error');
+            return properties[name] || '';
+          }
+        };
+      }
+    },
+    LockService: {
+      getScriptLock() {
+        events.push(['get-lock']);
+        if (settings.throwGetLock) throw new Error('synthetic-lock-error');
+        return lock;
+      }
+    },
     SpreadsheetApp: {
       openById(id) { events.push(['open', id]); return spreadsheet; },
-      flush() { events.push(['flush']); }
+      flush() {
+        events.push(['flush']);
+        if (settings.throwFlush) throw new Error('synthetic-flush-error');
+      }
     },
     ContentService: {
       MimeType: { JSON: 'application/json' },
@@ -421,6 +484,22 @@ const busyOutput = lockTimeout.context.doPost({ postData: { contents: JSON.strin
 assert.deepEqual(JSON.parse(busyOutput.getContent()), { ok: false, code: 'BUSY', message: 'Service is busy. Please retry.' });
 assert.equal(lockTimeout.events.some(event => ['open', 'insert-sheet', 'append-row', 'paint', 'set-values'].includes(event[0])), false);
 
+for (const settings of [
+  { throwGetProperties: true, marker: 'synthetic-properties-error' },
+  { throwGetProperty: true, marker: 'synthetic-property-error' },
+  { throwGetLock: true, marker: 'synthetic-lock-error' },
+  { throwTryLock: true, marker: 'synthetic-try-lock-error' }
+]) {
+  const failedSetup = createAppsScriptContext(settings);
+  vm.createContext(failedSetup.context);
+  vm.runInContext(codeSource, failedSetup.context);
+  const output = failedSetup.context.doPost({ postData: { contents: JSON.stringify(VALID_REQUEST) } });
+  const response = JSON.parse(output.getContent());
+  assert.deepEqual(response, { ok: false, code: 'INTERNAL_ERROR', message: 'Unable to fulfill the request.' });
+  assert.equal(JSON.stringify(response).includes(settings.marker), false);
+  assert.equal(JSON.stringify(failedSetup.logs).includes(settings.marker), false);
+}
+
 const appScriptSuccess = createAppsScriptContext();
 vm.createContext(appScriptSuccess.context);
 vm.runInContext(codeSource, appScriptSuccess.context);
@@ -437,5 +516,46 @@ const releaseIndex = appScriptSuccess.events.findIndex(event => event[0] === 're
 assert.equal(appScriptSuccess.events[releaseIndex - 1][0], 'flush');
 assert.equal(JSON.stringify(appScriptSuccess.logs).includes('synthetic-secret'), false);
 assert.equal(JSON.stringify(appScriptSuccess.logs).includes('synthetic-password-2'), false);
+
+const flushFailure = createAppsScriptContext({
+  throwFlush: true,
+  auditRows: [Logic.AUDIT_HEADERS]
+});
+vm.createContext(flushFailure.context);
+vm.runInContext(codeSource, flushFailure.context);
+const flushFailureOutput = flushFailure.context.doPost({ postData: { contents: JSON.stringify(VALID_REQUEST) } });
+assert.deepEqual(JSON.parse(flushFailureOutput.getContent()), {
+  ok: false,
+  code: 'INTERNAL_ERROR',
+  message: 'Unable to fulfill the request.'
+});
+assert.equal(flushFailure.events.some(event => event[0] === 'release-lock'), true);
+assert.equal(flushFailureOutput.getContent().includes('synthetic-flush-error'), false);
+
+const releaseFailure = createAppsScriptContext({ throwRelease: true });
+vm.createContext(releaseFailure.context);
+vm.runInContext(codeSource, releaseFailure.context);
+const releaseFailureOutput = releaseFailure.context.doPost({ postData: { contents: JSON.stringify(VALID_REQUEST) } });
+assert.equal(JSON.parse(releaseFailureOutput.getContent()).ok, true);
+assert.equal(releaseFailureOutput.getContent().includes('synthetic-release-error'), false);
+
+const physicalAuditRow = createAppsScriptContext({
+  auditRows: [
+    Logic.AUDIT_HEADERS,
+    ['', '', '', '', '', '', '', ''],
+    [
+      VALID_REQUEST_ID, 'RESERVED', 1, '', '3百神', '3百神', 2,
+      'synthetic-account-2'
+    ]
+  ]
+});
+vm.createContext(physicalAuditRow.context);
+vm.runInContext(codeSource, physicalAuditRow.context);
+const physicalAuditOutput = physicalAuditRow.context.doPost({ postData: { contents: JSON.stringify(VALID_REQUEST) } });
+assert.equal(JSON.parse(physicalAuditOutput.getContent()).ok, true);
+assert.deepEqual(
+  physicalAuditRow.events.find(event => event[0] === 'set-values'),
+  ['set-values', '簡帳出貨紀錄', 3, 8]
+);
 
 console.log('simple-account fulfillment domain tests: passed');

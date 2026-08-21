@@ -35,6 +35,9 @@ jobs:
       - name: Run settings label tests
         run: node tests/settings-labels.test.js
 
+      - name: Run simple-account fulfillment tests
+        run: node tests/simple-account-fulfillment.test.js
+
       - name: Run static regression checks
         run: python tests/verify_regressions.py
 
