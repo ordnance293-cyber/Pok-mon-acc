@@ -2,7 +2,7 @@
   const logic = factory();
   if (typeof module === 'object' && module.exports) module.exports = logic;
   if (root) root.SimpleAccountFulfillmentLogic = logic;
-})(typeof window !== 'undefined' ? window : undefined, function () {
+})(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function () {
   const PRODUCT_SHEET_MAP = Object.freeze({
     '1百神': '1百神',
     '2百神': '2百神',

@@ -576,6 +576,11 @@ function createAppsScriptContext(options) {
 }
 
 const codeSource = fs.readFileSync('apps-script/simple-account-fulfillment/Code.gs', 'utf8');
+const logicSource = fs.readFileSync('apps-script/simple-account-fulfillment/fulfillment-logic.js', 'utf8');
+const appsScriptLogicContext = { module: undefined, JSON, Object, Array, String, Number, Set, Date };
+vm.createContext(appsScriptLogicContext);
+vm.runInContext(logicSource, appsScriptLogicContext);
+assert.equal(typeof appsScriptLogicContext.SimpleAccountFulfillmentLogic, 'object', 'Apps Script must receive the pure logic API in global scope');
 assert.ok(codeSource.includes("SIMPLE_ACCOUNT_SPREADSHEET_ID"));
 assert.ok(codeSource.includes("SIMPLE_ACCOUNT_FULFILLMENT_SECRET"));
 assert.ok(codeSource.includes('tryLock(10000)'));
