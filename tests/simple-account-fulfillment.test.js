@@ -2,6 +2,110 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const Logic = require('../apps-script/simple-account-fulfillment/fulfillment-logic.js');
+const Helpers = require('../simple-account-fulfillment-helpers.js');
+
+const BROWSER_PRODUCTS = ['1百神', '2百神', '3百神', '無極汰那', 'Mega烈空坐'];
+const BROWSER_REQUEST_ID = 'browser-request-id-1234567890';
+
+assert.deepEqual(Helpers.PRODUCTS, BROWSER_PRODUCTS);
+assert.equal(Helpers.REQUEST_ID_PATTERN.test(BROWSER_REQUEST_ID), true);
+assert.equal(Helpers.REQUEST_ID_PATTERN.test('short'), false);
+
+const uuidCrypto = { randomUUID() { return 'uuid-request-id-123456789012'; } };
+const uuidRequestId = Helpers.createRequestId(uuidCrypto);
+assert.equal(uuidRequestId, 'uuid-request-id-123456789012');
+assert.equal(Helpers.REQUEST_ID_PATTERN.test(uuidRequestId), true);
+
+let fallbackCalls = 0;
+const fallbackCrypto = {
+  randomUUID() { return 'not a valid UUID!'; },
+  getRandomValues(bytes) {
+    fallbackCalls += 1;
+    bytes.set(Array.from({ length: bytes.length }, (_, index) => index + 1));
+    return bytes;
+  }
+};
+const fallbackRequestId = Helpers.createRequestId(fallbackCrypto);
+assert.equal(fallbackCalls, 1);
+assert.equal(Helpers.REQUEST_ID_PATTERN.test(fallbackRequestId), true);
+assert.notEqual(fallbackRequestId, uuidRequestId);
+assert.notEqual(Helpers.createRequestId({ getRandomValues(bytes) { bytes.set(bytes.map((_, index) => index + 11)); return bytes; } }), fallbackRequestId);
+
+assert.deepEqual(
+  Helpers.buildRequestPayload({ spreadsheetId: 'synthetic-browser-sheet', secret: 'synthetic-browser-secret' }, '3百神', BROWSER_REQUEST_ID),
+  {
+    action: 'fulfillSimpleAccount',
+    requestId: BROWSER_REQUEST_ID,
+    spreadsheetId: 'synthetic-browser-sheet',
+    product: '3百神',
+    secret: 'synthetic-browser-secret'
+  }
+);
+assert.throws(() => Helpers.buildRequestPayload({}, '全部價格', BROWSER_REQUEST_ID));
+assert.throws(() => Helpers.buildRequestPayload({}, '3百神', 'short'));
+
+const pending = Helpers.createPendingState('3百神', BROWSER_REQUEST_ID, 1720000000000);
+assert.deepEqual(Object.keys(pending), ['requestId', 'product', 'createdAt']);
+assert.equal(JSON.stringify(pending).includes('synthetic-browser-secret'), false);
+assert.equal(JSON.stringify(pending).includes('synthetic-account'), false);
+assert.equal(JSON.stringify(pending).includes('synthetic-password'), false);
+assert.deepEqual(Helpers.parsePendingState(JSON.stringify({ ...pending, secret: 'synthetic-browser-secret' })), pending);
+assert.equal(Helpers.parsePendingState('{not-json'), null);
+assert.equal(Helpers.parsePendingState(JSON.stringify({ requestId: BROWSER_REQUEST_ID, product: '全部價格', createdAt: 1 })), null);
+assert.equal(Helpers.parsePendingState(JSON.stringify({ requestId: 'short', product: '3百神', createdAt: 1 })), null);
+assert.equal(Helpers.parsePendingState(JSON.stringify({ requestId: BROWSER_REQUEST_ID, product: '3百神', createdAt: 'now' })), null);
+assert.equal(Helpers.parsePendingState(JSON.stringify(pending)).requestId, BROWSER_REQUEST_ID);
+assert.equal(Helpers.pendingBlocksProduct(pending, 'Mega烈空坐'), true);
+assert.equal(Helpers.pendingBlocksProduct(pending, '3百神'), false);
+assert.equal(Helpers.pendingBlocksProduct(null, '3百神'), false);
+
+for (const code of ['INVALID_REQUEST', 'UNAUTHORIZED', 'CONFIG_MISMATCH', 'SHEET_NOT_FOUND', 'OUT_OF_STOCK', 'BUSY']) {
+  assert.equal(Helpers.shouldClearPending(code), true);
+  assert.equal(Helpers.classifyResponse({ ok: false, code }).clearPending, true);
+}
+const replayUnavailable = Helpers.classifyResponse({ ok: false, code: 'REPLAY_UNAVAILABLE' });
+assert.equal(replayUnavailable.code, 'REPLAY_UNAVAILABLE');
+assert.equal(replayUnavailable.clearPending, false);
+assert.equal(replayUnavailable.requiresManualInspection, true);
+for (const unknown of [
+  { ok: false, code: 'INTERNAL_ERROR' },
+  null,
+  '<html>synthetic failure</html>',
+  { html: '<html>synthetic failure</html>' },
+  { ok: true, account: 'synthetic-account' },
+  { ok: true, password: 'synthetic-password' }
+]) {
+  const classified = Helpers.classifyResponse(unknown);
+  assert.equal(classified.clearPending, false);
+  assert.equal(classified.code, 'UNKNOWN_OUTCOME');
+}
+assert.deepEqual(Helpers.classifyResponse({
+  ok: true,
+  account: 'synthetic-account',
+  password: 'synthetic-password',
+  requestId: BROWSER_REQUEST_ID,
+  product: '3百神'
+}), {
+  ok: true,
+  code: 'DELIVERED',
+  clearPending: true,
+  account: 'synthetic-account',
+  password: 'synthetic-password'
+});
+assert.deepEqual(Helpers.classifyNetworkFailure(new Error('synthetic-secret synthetic-password stack trace')), {
+  ok: false,
+  code: 'UNKNOWN_OUTCOME',
+  clearPending: false
+});
+for (const result of [
+  Helpers.classifyNetworkFailure(new Error('synthetic-secret synthetic-password stack trace')),
+  Helpers.classifyResponse({ ok: true, account: 'synthetic-account', password: 'synthetic-password' }),
+  Helpers.classifyResponse({ ok: false, code: 'INTERNAL_ERROR', message: 'synthetic-secret' })
+]) {
+  const message = Helpers.safeUserMessage(result);
+  assert.equal(/synthetic-secret|synthetic-account|synthetic-password|stack/i.test(message), false);
+  assert.equal(/[\u4e00-\u9fff]/.test(message), true);
+}
 
 assert.deepEqual(Logic.PRODUCT_SHEET_MAP, {
   '1百神': '1百神',
