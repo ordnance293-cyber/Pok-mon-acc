@@ -347,7 +347,7 @@
 
                 const result = helpers.classifyResponse(responseBody);
                 if (result.ok) {
-                    window.showCredentialModal(result.account, result.password);
+                    window.showCredentialModal(responseBody.account, responseBody.password);
                     clearSimpleAccountPending();
                     setSimpleAccountStatus(helpers.safeUserMessage(result), 'green');
                     return;
