@@ -1,10 +1,14 @@
 (function (global) {
     'use strict';
 
-    const SOLD_ACCOUNT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+    const SOLD_ACCOUNT_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
     function validTimestamp(value) {
-        const timestamp = Number(value);
+        const timestamp = typeof value === 'number'
+            ? value
+            : typeof value === 'string' && value.trim() !== ''
+                ? Number(value)
+                : NaN;
         return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
     }
 
@@ -13,17 +17,17 @@
         if (currentTime === null) throw new TypeError('now must be a positive finite timestamp');
 
         const expired = [];
-        const needsSoldAt = [];
+        const needsDeleteAt = [];
         for (const item of Array.isArray(items) ? items : []) {
             if (!item || item.status !== 'sold' || !item.uid) continue;
-            const soldAt = validTimestamp(item.soldAt);
-            if (soldAt === null) {
-                needsSoldAt.push(item);
-            } else if (soldAt <= currentTime - SOLD_ACCOUNT_RETENTION_MS) {
+            const deleteAt = validTimestamp(item.deleteAt);
+            if (deleteAt === null) {
+                needsDeleteAt.push(item);
+            } else if (deleteAt <= currentTime) {
                 expired.push(item);
             }
         }
-        return { expired, needsSoldAt };
+        return { expired, needsDeleteAt };
     }
 
     const api = { SOLD_ACCOUNT_RETENTION_MS, planSoldAccountCleanup };
