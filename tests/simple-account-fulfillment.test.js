@@ -133,6 +133,7 @@ assert.equal(Logic.normalizeColor('#ffff00'), '#ffff00');
 
 const eligible = { rowNumber: 2, account: ' synthetic-account ', password: ' synthetic-password ', accountBackground: '#FFFFFF', passwordBackground: '#ffffff' };
 assert.equal(Logic.isEligibleCredentialRow(eligible), true);
+assert.equal(Logic.isEligibleCredentialRow({ ...eligible, account: 123456, password: 7890 }), true);
 assert.equal(Logic.isEligibleCredentialRow({ ...eligible, rowNumber: 1 }), false);
 assert.equal(Logic.isEligibleCredentialRow({ ...eligible, password: '   ' }), false);
 assert.equal(Logic.isEligibleCredentialRow({ ...eligible, accountBackground: '#ffff00' }), false);
@@ -592,6 +593,15 @@ vm.runInContext(codeSource, lockTimeout.context);
 const busyOutput = lockTimeout.context.doPost({ postData: { contents: JSON.stringify(VALID_REQUEST) } });
 assert.deepEqual(JSON.parse(busyOutput.getContent()), { ok: false, code: 'BUSY', message: 'Service is busy. Please retry.' });
 assert.equal(lockTimeout.events.some(event => ['open', 'insert-sheet', 'append-row', 'paint', 'set-values'].includes(event[0])), false);
+
+const malformedAction = createAppsScriptContext();
+vm.createContext(malformedAction.context);
+vm.runInContext(codeSource, malformedAction.context);
+const malformedActionOutput = malformedAction.context.doPost({
+  postData: { contents: JSON.stringify({ ...VALID_REQUEST, action: 'sold' }) }
+});
+assert.equal(JSON.parse(malformedActionOutput.getContent()).code, 'INVALID_REQUEST');
+assert.equal(malformedAction.events.some(event => ['get-lock', 'open', 'flush', 'release-lock'].includes(event[0])), false);
 
 for (const settings of [
   { throwGetProperties: true, marker: 'synthetic-properties-error' },

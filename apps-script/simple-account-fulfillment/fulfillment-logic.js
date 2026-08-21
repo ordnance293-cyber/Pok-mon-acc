@@ -41,10 +41,14 @@
     return typeof value === 'string' ? value.trim().toLowerCase() : '';
   }
 
+  function normalizeCredential(value) {
+    return value === null || value === undefined ? '' : String(value).trim();
+  }
+
   function isEligibleCredentialRow(row) {
     return !!row && Number.isInteger(row.rowNumber) && row.rowNumber >= 2 &&
-      typeof row.account === 'string' && row.account.trim() !== '' &&
-      typeof row.password === 'string' && row.password.trim() !== '' &&
+      normalizeCredential(row.account) !== '' &&
+      normalizeCredential(row.password) !== '' &&
       normalizeColor(row.accountBackground) === '#ffffff' &&
       normalizeColor(row.passwordBackground) === '#ffffff';
   }
@@ -93,7 +97,7 @@
     }
 
     function trimmedCredential(value) {
-      return typeof value === 'string' ? value.trim() : '';
+      return normalizeCredential(value);
     }
 
     function findRow(rows, rowNumber) {
@@ -210,7 +214,7 @@
             product: validation.product,
             sourceSheet: validation.sheetName,
             sourceRow: selected.rowNumber,
-            account: selected.account.trim()
+            account: trimmedCredential(selected.account)
           });
           const savedReservation = safeAdapters.appendAudit(reservation) || reservation;
           safeAdapters.flush();

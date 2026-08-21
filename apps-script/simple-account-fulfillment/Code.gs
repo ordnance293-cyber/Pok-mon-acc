@@ -10,6 +10,10 @@ function doPost(event) {
       response = { ok: false, code: 'INVALID_REQUEST', message: 'Request must be valid JSON.' };
     }
     if (!response) {
+      var requestValidation = SimpleAccountFulfillmentLogic.validateRequest(request);
+      if (!requestValidation.ok) response = requestValidation;
+    }
+    if (!response) {
       var properties = PropertiesService.getScriptProperties();
       var config = {
         configuredSpreadsheetId: properties.getProperty('SIMPLE_ACCOUNT_SPREADSHEET_ID') || '',
