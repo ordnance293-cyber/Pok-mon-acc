@@ -112,7 +112,7 @@ function createSimpleAccountAdapters_(config) {
     getRows: function (sheet) {
       var lastRow = sheet.getLastRow();
       if (lastRow < 1) return [];
-      var values = sheet.getRange(1, 1, lastRow, 3).getValues();
+      var values = sheet.getRange(1, 1, lastRow, 3).getDisplayValues();
       var backgrounds = sheet.getRange(1, 1, lastRow, 3).getBackgrounds();
       return values.map(function (row, index) {
         return {
@@ -152,13 +152,15 @@ function createSimpleAccountAdapters_(config) {
 }
 
 function logSimpleAccountMetadata_(metadata) {
-  Logger.log(JSON.stringify({
-    event: metadata && metadata.event || 'simpleAccountFulfillment',
-    requestId: metadata && metadata.requestId || null,
-    product: metadata && metadata.product || null,
-    state: metadata && metadata.state || null,
-    rowNumber: metadata && metadata.rowNumber || null
-  }));
+  try {
+    Logger.log(JSON.stringify({
+      event: metadata && metadata.event || 'simpleAccountFulfillment',
+      requestId: metadata && metadata.requestId || null,
+      product: metadata && metadata.product || null,
+      state: metadata && metadata.state || null,
+      rowNumber: metadata && metadata.rowNumber || null
+    }));
+  } catch (error) {}
 }
 
 function simpleAccountJsonOutput_(response) {

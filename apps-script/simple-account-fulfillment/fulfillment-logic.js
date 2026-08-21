@@ -150,7 +150,9 @@
     }
 
     function safeLog(metadata) {
-      if (typeof safeAdapters.logSafe === 'function') safeAdapters.logSafe(metadata);
+      try {
+        if (typeof safeAdapters.logSafe === 'function') safeAdapters.logSafe(metadata);
+      } catch (error) {}
     }
 
     return {
