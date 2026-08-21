@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const helperSource = fs.readFileSync(path.join(__dirname, '..', 'simple-account-fulfillment-helpers.js'), 'utf8');
 
 const showCredentialModal = source.match(
   /window\.showCredentialModal\s*=\s*function\s*\(account, password\)\s*\{[\s\S]*?\n\s*\};/
@@ -46,7 +47,9 @@ for (const [id, label] of [
   assert.match(source, new RegExp(`<input[^>]+id=["']${id}["']`));
   assert.match(source, new RegExp(`elementId:\\s*["']${id}["'][\\s\\S]*?storageKey:\\s*["']${id}["']`));
 }
-assert.match(source, /id=["']simpleAccountFulfillmentSecret["'][^>]+type=["']password["']/);
+const secretInput = source.match(/<input\b[^>]*\bid=["']simpleAccountFulfillmentSecret["'][^>]*>/);
+assert.ok(secretInput, 'simple-account secret input must exist');
+assert.match(secretInput[0], /\btype=["']password["']/);
 assert.match(source, /💾 儲存簡帳設定/);
 assert.match(source, /window\.saveSimpleAccountSettings\s*=\s*function/);
 assert.match(source, /DOMContentLoaded[\s\S]*simpleAccountSpreadsheetId/);
@@ -70,9 +73,12 @@ assert.match(source, /確定要售出「\$\{product\}」並取得 1 組帳號嗎
 const fulfillmentFunction = source.match(/window\.fulfillSimpleAccount\s*=\s*async function\s*\(product(?:,\s*button)?\)[\s\S]*?\n\s*\};/);
 assert.ok(fulfillmentFunction, 'simple-account fulfillment request function must exist');
 const fulfillmentSource = fulfillmentFunction[0];
-const dispatchFunction = source.match(/async function dispatchSimpleAccountFulfillment\([\s\S]*?\n\s*\};/);
-assert.ok(dispatchFunction, 'simple-account dispatch function must exist');
-const dispatchSource = dispatchFunction[0];
+const dispatchStart = source.indexOf('        async function dispatchSimpleAccountFulfillment(');
+const dispatchEnd = source.indexOf('        window.fulfillSimpleAccount = async function', dispatchStart);
+assert.ok(dispatchStart >= 0 && dispatchEnd > dispatchStart, 'simple-account dispatch function must have a bounded source span');
+const dispatchSource = source.slice(dispatchStart, dispatchEnd);
+assert.match(dispatchSource, /\n\s*\}\s*$/);
+assert.doesNotMatch(dispatchSource, /window\.fulfillSimpleAccount\s*=\s*async function/);
 const busyFunction = source.match(/function setSimpleAccountButtonsBusy\([\s\S]*?\n\s*\};/);
 assert.ok(busyFunction, 'simple-account buttons must have a shared busy-state helper');
 const busySource = busyFunction[0];
@@ -85,12 +91,38 @@ assert.match(dispatchSource, /["']Content-Type["']\s*:\s*["']text\/plain;charset
 assert.match(dispatchSource, /cache:\s*["']no-store["']/);
 assert.doesNotMatch(dispatchSource, /mode:\s*["']no-cors["']/);
 assert.match(dispatchSource, /window\.showCredentialModal\(responseBody\.account,\s*responseBody\.password\)/);
+assert.match(dispatchSource, /helpers\.buildRequestPayload\(settings,\s*pending\.product,\s*pending\.requestId\)/);
+const modalAssignmentIndex = dispatchSource.indexOf('window.showCredentialModal(responseBody.account, responseBody.password)');
+const clearPendingIndex = dispatchSource.indexOf('clearSimpleAccountPending()');
+assert.ok(modalAssignmentIndex >= 0 && clearPendingIndex > modalAssignmentIndex, 'credentials must be written before pending state is cleared');
 assert.match(fulfillmentSource, /上次出貨結果尚未確認/);
 assert.match(dispatchSource, /簡帳出貨紀錄/);
-assert.match(source, /window\.retrySimpleAccountFulfillment\s*=\s*async function/);
+const retryStart = source.indexOf('        window.retrySimpleAccountFulfillment = async function');
+const retryEnd = source.indexOf('        window.showCopyModal = function', retryStart);
+assert.ok(retryStart >= 0 && retryEnd > retryStart, 'simple-account retry function must have a bounded source span');
+const retrySource = source.slice(retryStart, retryEnd);
+assert.match(retrySource, /const pending\s*=\s*getSimpleAccountPending\(\)/);
+assert.match(retrySource, /dispatchSimpleAccountFulfillment\(pending,\s*selectedButton\)/);
+assert.doesNotMatch(retrySource, /createRequestId/);
 assert.match(source, /pending.*requestId|requestId.*pending/s);
 
 assert.match(source, /function setSimpleAccountPending\(pending\)[\s\S]*localStorage\.setItem\([\s\S]*PENDING_STORAGE_KEY/);
+
+for (const code of [
+  'INVALID_REQUEST', 'UNAUTHORIZED', 'CONFIG_MISMATCH', 'SHEET_NOT_FOUND', 'OUT_OF_STOCK', 'BUSY'
+]) assert.match(helperSource, new RegExp(`['"]${code}['"]`));
+assert.match(dispatchSource, /if \(result\.clearPending\) clearSimpleAccountPending\(\);/);
+assert.match(dispatchSource, /else window\.refreshSimpleAccountPendingState\(\);/);
+assert.match(dispatchSource, /const responseText = await response\.text\(\);/);
+assert.match(dispatchSource, /responseBody = JSON\.parse\(responseText\);/);
+assert.match(dispatchSource, /throw new Error\(['"]UNREADABLE_RESPONSE['"]\)/);
+assert.match(dispatchSource, /const result = helpers\.classifyNetworkFailure\(\);/);
+const networkCatch = dispatchSource.match(/\}\s*catch \(error\) \{\s*const result = helpers\.classifyNetworkFailure\(\);[\s\S]*?\n\s*\} finally/);
+assert.ok(networkCatch, 'network and unreadable-response path must be bounded');
+assert.match(networkCatch[0], /window\.refreshSimpleAccountPendingState\(\);/);
+assert.doesNotMatch(networkCatch[0], /clearSimpleAccountPending/);
+assert.match(helperSource, /UNKNOWN_OUTCOME/);
+assert.match(helperSource, /classifyNetworkFailure/);
 
 for (const [id, key] of [
   ['googleSheetId', 'googleSheetId'],
