@@ -39,6 +39,10 @@ assert.equal(Logic.selectFirstEligibleRow([
   { rowNumber: 4, account: 'first', password: 'synthetic-password', accountBackground: '#FFFFFF', passwordBackground: '#ffffff' }
 ], new Set([3])).rowNumber, 4);
 assert.equal(Logic.selectFirstEligibleRow([{ ...eligible, rowNumber: 2 }], new Set([2])), null);
+assert.equal(Logic.selectFirstEligibleRow([
+  { ...eligible, rowNumber: 8, account: 'synthetic-account-eight' },
+  { ...eligible, rowNumber: 5, account: 'synthetic-account-five' }
+], new Set()).rowNumber, 5);
 
 const audit = Logic.buildAuditRecord({
   requestId: 'request-id-1234567890',
