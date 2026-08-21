@@ -84,7 +84,7 @@
             btn.innerHTML = '✅ 已儲存';
             btn.classList.replace('bg-gray-800', 'bg-green-600');
             setTimeout(() => {
-                btn.innerHTML = '💾 儲存設定';
+                btn.innerHTML = '💾 儲存以上設定';
                 btn.classList.replace('bg-green-600', 'bg-gray-800');
             }, 2000);
         };
@@ -4240,11 +4240,23 @@ ${mappingLines}`;
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
             <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V94 極致旗艦版
         </h1>
-        <div class="flex gap-2 items-center flex-wrap">
-            <input type="text" id="googleSheetId" placeholder="試算表 ID" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
-            <input type="text" id="gasUrl" placeholder="GAS 連結" class="border p-1.5 rounded text-xs w-32 outline-none bg-white">
-            <input type="password" id="openaiApiKey" placeholder="OPENAI_API_KEY" class="border p-1.5 rounded text-xs w-32 bg-yellow-50 outline-none">
-            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm">💾 儲存設定</button>
+        <div class="flex gap-2 items-start flex-wrap" aria-label="系統連線設定">
+            <div class="w-32">
+                <label for="googleSheetId" class="block text-[11px] font-bold text-indigo-800 mb-1">Google 試算表 ID</label>
+                <input type="text" id="googleSheetId" placeholder="例如：1Ng..." class="border p-1.5 rounded text-xs w-full outline-none bg-white">
+                <p class="mt-1 text-[10px] leading-tight text-gray-500">帳號資料同步到哪一份試算表</p>
+            </div>
+            <div class="w-32">
+                <label for="gasUrl" class="block text-[11px] font-bold text-indigo-800 mb-1">Apps Script 同步網址</label>
+                <input type="text" id="gasUrl" placeholder="https://script.google..." class="border p-1.5 rounded text-xs w-full outline-none bg-white">
+                <p class="mt-1 text-[10px] leading-tight text-gray-500">負責新增、售出、刪除與同步</p>
+            </div>
+            <div class="w-32">
+                <label for="openaiApiKey" class="block text-[11px] font-bold text-indigo-800 mb-1">OpenAI API Key</label>
+                <input type="password" id="openaiApiKey" placeholder="sk-..." class="border p-1.5 rounded text-xs w-full bg-yellow-50 outline-none">
+                <p class="mt-1 text-[10px] leading-tight text-gray-500">提供網站內 AI 圖片辨識</p>
+            </div>
+            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm mt-5">💾 儲存以上設定</button>
         </div>
     </header>
 
