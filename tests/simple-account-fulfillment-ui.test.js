@@ -160,7 +160,7 @@ for (const requiredText of [
 
 const manualAcceptance = fs.readFileSync(path.join(__dirname, '..', 'docs', 'manual-tests', 'simple-account-auto-fulfillment.md'), 'utf8');
 assert.match(manualAcceptance, /duplicate\/test spreadsheet/);
-assert.match(manualAcceptance, /actual GitHub Pages origin/);
+assert.match(manualAcceptance, /(?:actual|real) GitHub Pages origin/);
 for (const product of expectedProducts) assert.match(manualAcceptance, new RegExp(product));
 assert.match(manualAcceptance, /全部價格/);
 assert.match(manualAcceptance, /高預算帳號/);
