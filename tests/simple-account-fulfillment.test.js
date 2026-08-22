@@ -364,7 +364,7 @@ assert.deepEqual(replay.response, {
 });
 assert.equal(replay.events.some(event => event[0] === 'append' || event[0] === 'paint'), false);
 
-const replayUnavailable = fulfillWithFake({
+const replaySourceMismatch = fulfillWithFake({
   auditRecords: [{
     request_id: VALID_REQUEST_ID,
     state: 'COMPLETED',
@@ -382,8 +382,8 @@ const replayUnavailable = fulfillWithFake({
     ]
   }
 });
-assert.equal(replayUnavailable.response.code, 'REPLAY_UNAVAILABLE');
-assert.equal(replayUnavailable.events.some(event => event[0] === 'append' || event[0] === 'paint'), false);
+assert.equal(replaySourceMismatch.response.code, 'REPLAY_UNAVAILABLE');
+assert.equal(replaySourceMismatch.events.some(event => event[0] === 'append' || event[0] === 'paint'), false);
 
 const replayMissingSheet = fulfillWithFake({
   sheets: {},
