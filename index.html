@@ -11,6 +11,7 @@
     <script src="smart-hundo-form-verifier.js"></script>
     <script src="trainer-team-helpers.js"></script>
     <script src="sold-account-cleanup.js"></script>
+    <script src="simple-account-fulfillment-helpers.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -36,6 +37,12 @@
             { elementId: 'gasUrl', storageKey: 'gasUrl' },
             { elementId: 'openaiApiKey', storageKey: 'OPENAI_API_KEY', legacyStorageKeys: ['geminiApiKey'] }
         ];
+        const SIMPLE_ACCOUNT_SETTINGS_FIELDS = [
+            { elementId: 'simpleAccountSpreadsheetId', storageKey: 'simpleAccountSpreadsheetId' },
+            { elementId: 'simpleAccountGasUrl', storageKey: 'simpleAccountGasUrl' },
+            { elementId: 'simpleAccountFulfillmentSecret', storageKey: 'simpleAccountFulfillmentSecret' }
+        ];
+        let simpleAccountRequestInFlight = false;
 
         const normalizeTimestamp = (value, fallback = 0) => {
             const parsed = Number(value);
@@ -71,6 +78,13 @@
                 const savedValue = [storageKey, ...legacyStorageKeys].map(key => localStorage.getItem(key)).find(Boolean);
                 if (savedValue) input.value = savedValue;
             });
+            SIMPLE_ACCOUNT_SETTINGS_FIELDS.forEach(({ elementId, storageKey }) => {
+                const input = document.getElementById(elementId);
+                if (!input) return;
+                const savedValue = localStorage.getItem(storageKey);
+                if (savedValue) input.value = savedValue;
+            });
+            window.refreshSimpleAccountPendingState();
         });
 
         window.saveSettings = function() {
@@ -213,11 +227,205 @@
             setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 3000);
         };
 
+        window.showCredentialModal = function(account, password) {
+            document.getElementById('modalAccount').value = account;
+            document.getElementById('modalPassword').value = password;
+            document.getElementById('copyModal').classList.remove('hidden');
+        };
+
+        window.saveSimpleAccountSettings = function() {
+            SIMPLE_ACCOUNT_SETTINGS_FIELDS.forEach(({ elementId, storageKey }) => {
+                const input = document.getElementById(elementId);
+                if (input) localStorage.setItem(storageKey, input.value.trim());
+            });
+            const btn = document.getElementById('saveSimpleAccountSettingsBtn');
+            if (!btn) return;
+            btn.innerHTML = '✅ 已儲存';
+            btn.classList.replace('bg-emerald-700', 'bg-green-600');
+            setTimeout(() => {
+                btn.innerHTML = '💾 儲存簡帳設定';
+                btn.classList.replace('bg-green-600', 'bg-emerald-700');
+            }, 2000);
+        };
+
+        function getSimpleAccountHelpers() {
+            return window.SimpleAccountFulfillmentHelpers || null;
+        }
+
+        function getSimpleAccountPending() {
+            const helpers = getSimpleAccountHelpers();
+            if (!helpers) return null;
+            return helpers.parsePendingState(localStorage.getItem(helpers.PENDING_STORAGE_KEY));
+        }
+
+        function setSimpleAccountPending(pending) {
+            const helpers = getSimpleAccountHelpers();
+            if (!helpers) return;
+            localStorage.setItem(helpers.PENDING_STORAGE_KEY, JSON.stringify(pending));
+            window.refreshSimpleAccountPendingState();
+        }
+
+        function clearSimpleAccountPending() {
+            const helpers = getSimpleAccountHelpers();
+            if (!helpers) return;
+            localStorage.removeItem(helpers.PENDING_STORAGE_KEY);
+            window.refreshSimpleAccountPendingState();
+        }
+
+        function setSimpleAccountStatus(message, tone = 'amber') {
+            const status = document.getElementById('simpleAccountFulfillmentStatus');
+            if (!status) return;
+            const toneClasses = {
+                amber: 'border-amber-300 bg-amber-50 text-amber-800',
+                red: 'border-red-400 bg-red-50 text-red-800',
+                green: 'border-green-300 bg-green-50 text-green-800',
+                blue: 'border-blue-300 bg-blue-50 text-blue-800'
+            };
+            status.className = `rounded-xl border p-3 text-sm font-bold ${toneClasses[tone] || toneClasses.amber}`;
+            status.textContent = message;
+        }
+
+        window.refreshSimpleAccountPendingState = function() {
+            const pending = getSimpleAccountPending();
+            const panel = document.getElementById('simpleAccountPendingPanel');
+            const detail = document.getElementById('simpleAccountPendingDetail');
+            const retry = document.getElementById('retrySimpleAccountFulfillmentBtn');
+            if (!panel || !detail || !retry) return;
+            panel.classList.toggle('hidden', !pending);
+            retry.disabled = simpleAccountRequestInFlight || !pending;
+            detail.textContent = pending
+                ? `上次商品：${pending.product}。重新查詢會沿用原請求編號，不會建立另一筆出貨。`
+                : '';
+        };
+
+        function setSimpleAccountButtonsBusy(selectedButton, busy) {
+            document.querySelectorAll('[data-simple-account-product]').forEach(button => {
+                button.disabled = busy;
+                if (!button.dataset.idleText) button.dataset.idleText = button.textContent.trim();
+                button.textContent = busy && button === selectedButton ? '出貨中' : button.dataset.idleText;
+            });
+            const retry = document.getElementById('retrySimpleAccountFulfillmentBtn');
+            if (retry) retry.disabled = busy || !getSimpleAccountPending();
+        }
+
+        function readSimpleAccountSettings() {
+            return {
+                spreadsheetId: document.getElementById('simpleAccountSpreadsheetId')?.value.trim() || '',
+                gasUrl: document.getElementById('simpleAccountGasUrl')?.value.trim() || '',
+                secret: document.getElementById('simpleAccountFulfillmentSecret')?.value.trim() || ''
+            };
+        }
+
+        async function dispatchSimpleAccountFulfillment(pending, selectedButton) {
+            const helpers = getSimpleAccountHelpers();
+            if (!helpers || simpleAccountRequestInFlight) return;
+            const settings = readSimpleAccountSettings();
+            if (!settings.spreadsheetId || !settings.gasUrl || !settings.secret) {
+                alert('請先完整填寫並儲存簡帳連線設定。');
+                return;
+            }
+
+            simpleAccountRequestInFlight = true;
+            setSimpleAccountButtonsBusy(selectedButton, true);
+            setSimpleAccountStatus(`${pending.product} 出貨中，請勿關閉頁面。`, 'blue');
+
+            try {
+                const payload = helpers.buildRequestPayload(settings, pending.product, pending.requestId);
+                const response = await fetch(settings.gasUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                    cache: 'no-store',
+                    body: JSON.stringify(payload)
+                });
+                const responseText = await response.text();
+                let responseBody;
+                try {
+                    responseBody = JSON.parse(responseText);
+                } catch (error) {
+                    throw new Error('UNREADABLE_RESPONSE');
+                }
+
+                const result = helpers.classifyResponse(responseBody);
+                if (result.ok) {
+                    window.showCredentialModal(responseBody.account, responseBody.password);
+                    clearSimpleAccountPending();
+                    setSimpleAccountStatus(helpers.safeUserMessage(result), 'green');
+                    return;
+                }
+
+                if (result.requiresManualInspection) {
+                    const instruction = `請立即查閱「簡帳出貨紀錄」，以請求編號 ${pending.requestId} 找到記錄中的來源工作表與來源列，人工核對後再處理。系統不會自動發出新帳號。`;
+                    setSimpleAccountStatus(instruction, 'red');
+                    alert(instruction);
+                    clearSimpleAccountPending();
+                    return;
+                }
+
+                if (result.clearPending) clearSimpleAccountPending();
+                else window.refreshSimpleAccountPendingState();
+                const message = helpers.safeUserMessage(result);
+                setSimpleAccountStatus(message, result.clearPending ? 'amber' : 'red');
+                alert(message);
+            } catch (error) {
+                const result = helpers.classifyNetworkFailure();
+                window.refreshSimpleAccountPendingState();
+                const message = helpers.safeUserMessage(result);
+                setSimpleAccountStatus(`上次出貨結果尚未確認。${message}`, 'red');
+                alert(`上次出貨結果尚未確認。${message}`);
+            } finally {
+                simpleAccountRequestInFlight = false;
+                setSimpleAccountButtonsBusy(selectedButton, false);
+                window.refreshSimpleAccountPendingState();
+            }
+        }
+
+        window.fulfillSimpleAccount = async function(product, button) {
+            const helpers = getSimpleAccountHelpers();
+            if (!helpers || simpleAccountRequestInFlight || !helpers.PRODUCTS.includes(product)) return;
+            const existingPending = getSimpleAccountPending();
+            if (existingPending) {
+                setSimpleAccountStatus('上次出貨結果尚未確認。請先使用「重新查詢上次出貨」。', 'red');
+                if (helpers.pendingBlocksProduct(existingPending, product)) {
+                    alert(`上次 ${existingPending.product} 出貨結果尚未確認，不能改售其他商品。`);
+                } else {
+                    alert('上次出貨結果尚未確認，請使用「重新查詢上次出貨」。');
+                }
+                return;
+            }
+            const settings = readSimpleAccountSettings();
+            if (!settings.spreadsheetId || !settings.gasUrl || !settings.secret) {
+                alert('請先完整填寫並儲存簡帳連線設定。');
+                return;
+            }
+            if (!confirm(`確定要售出「${product}」並取得 1 組帳號嗎？`)) return;
+
+            let pending;
+            try {
+                pending = helpers.createPendingState(product, helpers.createRequestId(window.crypto), Date.now());
+            } catch (error) {
+                alert('無法安全建立出貨請求編號，請改用支援安全加密功能的瀏覽器。');
+                return;
+            }
+            setSimpleAccountPending(pending);
+            await dispatchSimpleAccountFulfillment(pending, button);
+        };
+
+        window.retrySimpleAccountFulfillment = async function() {
+            if (simpleAccountRequestInFlight) return;
+            const pending = getSimpleAccountPending();
+            if (!pending) {
+                window.refreshSimpleAccountPendingState();
+                return;
+            }
+            const selectedButton = document.querySelector(`[data-simple-account-product="${pending.product}"]`);
+            await dispatchSimpleAccountFulfillment(pending, selectedButton);
+        };
+
         window.showCopyModal = function(accountId) {
             const parts = accountId.split(';');
-            document.getElementById('modalAccount').value = parts[0] ? parts[0].trim() : accountId;
-            document.getElementById('modalPassword').value = parts[1] ? parts[1].trim() : '（無密碼）';
-            document.getElementById('copyModal').classList.remove('hidden');
+            const account = parts[0] ? parts[0].trim() : accountId;
+            const password = parts[1] ? parts[1].trim() : '（無密碼）';
+            window.showCredentialModal(account, password);
         };
 
         window.copyModalField = function(fieldId, btn) {
@@ -4078,20 +4286,17 @@ ${mappingLines}`;
         window.togglePage = function(pageNumber) {
             const page1 = document.getElementById('mainPage1');
             const page2 = document.getElementById('mainPage2');
-
-            if (pageNumber === 1) {
-                page1.classList.remove('hidden');
-                page2.classList.add('hidden');
-            } else if (pageNumber === 2) {
-                page1.classList.add('hidden');
-                page2.classList.remove('hidden');
-            }
+            const page3 = document.getElementById('simpleAccountPage');
+            page1.classList.toggle('hidden', pageNumber !== 1);
+            page2.classList.toggle('hidden', pageNumber !== 2);
+            page3.classList.toggle('hidden', pageNumber !== 3);
+            if (pageNumber === 3) window.refreshSimpleAccountPendingState();
         };
 
         window.resetForm = function() {
             trainerTeamAiValueOwnership = null;
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
-                if(!['googleSheetId','gasUrl','openaiApiKey', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) { 
+                if(!['googleSheetId','gasUrl','openaiApiKey', 'simpleAccountSpreadsheetId', 'simpleAccountGasUrl', 'simpleAccountFulfillmentSecret', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) {
                     if(el.type === 'checkbox') el.checked = false; 
                     else if(el.tagName === 'SELECT') el.selectedIndex = 0; 
                     else el.value = ''; 
@@ -4266,6 +4471,7 @@ ${mappingLines}`;
             <div class="flex justify-between items-center mb-6 border-b pb-4">
                 <h2 class="text-lg font-bold text-gray-800">快速建檔區</h2>
                 <div class="flex gap-2">
+                    <button type="button" onclick="window.togglePage(3)" class="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-emerald-700 transition transform active:scale-95">⚡ 簡帳自動出貨</button>
                     <button type="button" onclick="window.togglePage(2)" class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95">📋 前往雲端清單</button>
                     <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold transition">🧹 清除</button>
                     <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md transition">取消編輯</button>
@@ -4449,6 +4655,7 @@ ${mappingLines}`;
             <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
                 <div class="flex items-center gap-2">
                     <button type="button" onclick="window.togglePage(1)" class="bg-gray-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md hover:bg-gray-600 transition transform active:scale-95">⬅️ 返回建檔區</button>
+                    <button type="button" onclick="window.togglePage(3)" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md hover:bg-emerald-700 transition transform active:scale-95">⚡ 簡帳自動出貨</button>
                     <span class="text-indigo-900 ml-2"><i class="fas fa-list-ul mr-1"></i> 雲端清單 (<span id="inventoryCount">0</span>)</span>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap mt-2 sm:mt-0">
@@ -4466,6 +4673,58 @@ ${mappingLines}`;
                     <tbody id="inventoryBody"></tbody>
                 </table>
             </div>
+        </div>
+
+        <div id="simpleAccountPage" class="hidden space-y-4 mt-4">
+            <section class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                <div class="p-4 bg-emerald-50 border-b border-emerald-100 flex justify-between items-center flex-wrap gap-3">
+                    <div class="flex items-center gap-3">
+                        <button type="button" onclick="window.togglePage(1)" class="bg-gray-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md hover:bg-gray-600 transition transform active:scale-95">⬅️ 返回建檔區</button>
+                        <h2 class="text-lg font-bold text-emerald-900">⚡ 簡帳自動出貨</h2>
+                    </div>
+                    <p class="text-xs text-emerald-800">每次確認只會取得 1 組帳號</p>
+                </div>
+
+                <div class="p-5 space-y-5">
+                    <section class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4" aria-label="簡帳連線設定">
+                        <h3 class="font-bold text-emerald-900 mb-3">簡帳連線設定</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label for="simpleAccountSpreadsheetId" class="block text-xs font-bold text-emerald-900 mb-1">簡帳試算表 ID</label>
+                                <input type="text" id="simpleAccountSpreadsheetId" autocomplete="off" class="border border-emerald-200 p-2 rounded-lg text-sm w-full outline-none bg-white focus:ring-2 focus:ring-emerald-300">
+                                <p class="mt-1 text-[11px] leading-relaxed text-gray-600">必須與簡帳 Apps Script 的伺服器設定完全相同。</p>
+                            </div>
+                            <div>
+                                <label for="simpleAccountGasUrl" class="block text-xs font-bold text-emerald-900 mb-1">簡帳出貨 Apps Script 網址</label>
+                                <input type="url" id="simpleAccountGasUrl" autocomplete="off" class="border border-emerald-200 p-2 rounded-lg text-sm w-full outline-none bg-white focus:ring-2 focus:ring-emerald-300">
+                                <p class="mt-1 text-[11px] leading-relaxed text-gray-600">使用獨立簡帳出貨部署的網頁應用程式網址。</p>
+                            </div>
+                            <div>
+                                <label for="simpleAccountFulfillmentSecret" class="block text-xs font-bold text-emerald-900 mb-1">簡帳出貨密鑰</label>
+                                <input type="password" id="simpleAccountFulfillmentSecret" autocomplete="off" class="border border-emerald-200 p-2 rounded-lg text-sm w-full outline-none bg-white focus:ring-2 focus:ring-emerald-300">
+                                <p class="mt-1 text-[11px] leading-relaxed text-gray-600">與獨立 Apps Script 共用的長隨機密鑰，只會放在 POST 內容中。</p>
+                            </div>
+                        </div>
+                        <button id="saveSimpleAccountSettingsBtn" type="button" onclick="window.saveSimpleAccountSettings()" class="mt-4 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm hover:bg-emerald-800">💾 儲存簡帳設定</button>
+                    </section>
+
+                    <section id="simpleAccountPendingPanel" class="hidden rounded-xl border-2 border-red-300 bg-red-50 p-4" aria-live="assertive">
+                        <h3 class="font-bold text-red-800">上次出貨結果尚未確認</h3>
+                        <p id="simpleAccountPendingDetail" class="mt-1 text-sm text-red-700"></p>
+                        <button id="retrySimpleAccountFulfillmentBtn" type="button" onclick="window.retrySimpleAccountFulfillment()" class="mt-3 bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-red-800 disabled:opacity-50">重新查詢上次出貨</button>
+                    </section>
+
+                    <div id="simpleAccountFulfillmentStatus" class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-800" aria-live="polite">請先確認簡帳連線設定，再選擇一項商品。</div>
+
+                    <section aria-label="簡帳商品" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        <button type="button" data-simple-account-product="1百神" onclick="window.fulfillSimpleAccount('1百神', this)" class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">1百神</button>
+                        <button type="button" data-simple-account-product="2百神" onclick="window.fulfillSimpleAccount('2百神', this)" class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">2百神</button>
+                        <button type="button" data-simple-account-product="3百神" onclick="window.fulfillSimpleAccount('3百神', this)" class="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">3百神</button>
+                        <button type="button" data-simple-account-product="無極汰那" onclick="window.fulfillSimpleAccount('無極汰那', this)" class="bg-rose-600 hover:bg-rose-700 disabled:bg-gray-400 text-white rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">無極汰那</button>
+                        <button type="button" data-simple-account-product="Mega烈空坐" onclick="window.fulfillSimpleAccount('Mega烈空坐', this)" class="bg-amber-500 hover:bg-amber-600 disabled:bg-gray-400 text-gray-900 rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">Mega烈空坐</button>
+                    </section>
+                </div>
+            </section>
         </div>
     </main>
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
