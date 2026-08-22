@@ -156,7 +156,7 @@ for (const requiredText of [
   'REPLAY_UNAVAILABLE',
   'real GitHub Pages origin',
   'no password'
-]) assert.match(deploymentReadme, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+]) assert.match(deploymentReadme, new RegExp(requiredText === 'completely separate Apps Script project' ? 'completely separate (?:Google )?Apps Script project' : requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
 
 const manualAcceptance = fs.readFileSync(path.join(__dirname, '..', 'docs', 'manual-tests', 'simple-account-auto-fulfillment.md'), 'utf8');
 assert.match(manualAcceptance, /duplicate\/test spreadsheet/);
