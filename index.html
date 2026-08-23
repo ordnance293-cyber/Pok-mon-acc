@@ -751,6 +751,8 @@
 
         const SMART_HUNDO_AI_OWNED_INPUT_IDS = new Set(['g_hundos', 'st_hundo_leg']);
         const smartHundoAiValueOwnership = new Map();
+        const STORAGE_CAPACITY_AI_OWNED_INPUT_IDS = new Set(['st_poke_bag', 'st_item_bag']);
+        const storageCapacityAiValueOwnership = new Map();
         let smartHundoSessionCounter = 0;
         let activeSmartHundoSessionId = 0;
         let autoScanRunCounter = 0;
@@ -761,6 +763,12 @@
         let trainerTeamAiValueOwnership = null;
 
         const beginAutoScanRun = () => {
+            STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
+                const marker = storageCapacityAiValueOwnership.get(inputId);
+                const input = document.getElementById(inputId);
+                if (marker && input && input.value === marker.value) input.value = '';
+            });
+            storageCapacityAiValueOwnership.clear();
             autoScanRunCounter += 1;
             activeAutoScanRunId = autoScanRunCounter;
             return activeAutoScanRunId;
@@ -883,6 +891,12 @@
         SMART_HUNDO_AI_OWNED_INPUT_IDS.forEach(inputId => {
             document.getElementById(inputId)?.addEventListener('input', () => {
                 handleSmartHundoManualEdit(inputId);
+            });
+        });
+
+        STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
+            document.getElementById(inputId)?.addEventListener('input', () => {
+                storageCapacityAiValueOwnership.delete(inputId);
             });
         });
 
@@ -1175,6 +1189,19 @@
                     'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin',
                     'poke_bag', 'item_bag', 'level', 'xp', 'stardust', 'pokemon_list'
                 ]
+            }
+        };
+        const STORAGE_HEADER_JSON_SCHEMA = {
+            name: 'pokemon_go_storage_header_verifier',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    header_type: { type: 'string', enum: ['pokemon', 'item', 'none'] },
+                    storage_text: { type: 'string' }
+                },
+                required: ['header_type', 'storage_text']
             }
         };
 
@@ -1516,6 +1543,16 @@
             return extractSingleNumber(raw);
         };
 
+        // Storage capacity is trustworthy only when both sides and the slash are present.
+        // Unlike XP, a standalone number cannot prove whether it is used or capacity.
+        const extractStorageCapacity = (value) => {
+            if (value === undefined || value === null) return '';
+            const raw = String(value).trim().replace(/,/g, '');
+            if (!raw) return '';
+            const match = raw.match(/^\s*\d+\s*[\/／]\s*(\d+)\s*$/);
+            return match ? match[1] : '';
+        };
+
         const formatWanValue = (value) => {
             const rounded = Math.round(value * 100) / 100;
             return String(rounded).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
@@ -1798,7 +1835,7 @@
 
             AI_NUMERIC_RESULT_FIELDS.forEach(field => {
                 normalized[field] = ['poke_bag', 'item_bag'].includes(field)
-                    ? extractSlashSideNumber(result?.[field], 'right')
+                    ? extractStorageCapacity(result?.[field])
                     : extractSingleNumber(result?.[field]);
             });
             normalized.xp = normalizeWanValue(extractSlashSideNumber(result?.xp, 'left'));
@@ -2119,7 +2156,7 @@ ${outputTemplate}
 - 超極巨化 -> giga
 - 完美 -> perfect
 
-若同一張圖頂部儲存空間標頭清楚顯示「寶可夢」且緊鄰 current/capacity（例如 373/1150），另填 header_type="pokemon" 與 poke_bag="1150"。只取斜線右側；標頭與數字必須屬於同一頂部區域。否則 header_type="none" 且 poke_bag 留空。
+若同一張圖頂部儲存空間標頭清楚顯示「寶可夢」且緊鄰 current/capacity（例如 373/1150），另填 header_type="pokemon" 與 poke_bag="373/1150"。poke_bag 必須回傳包含斜線的完整可見 current/capacity，絕不可只回傳任一側；JavaScript 會取右側容量。標頭與數字必須屬於同一頂部區域。否則 header_type="none" 且 poke_bag 留空。
 
 不能因為你認為其他截圖會補資料就略過。
 除了上述 7 個欄位及符合規則的 poke_bag 外，其餘欄位與 pokemon_list 必須留空字串。`;
@@ -2239,7 +2276,7 @@ ${outputTemplate}
 - 綠票 -> greenpass
 
 【RESOURCE_SCREEN 規則】
-1. 只看頂部同一個儲存空間標頭區域中的標頭與 current/capacity；永遠只取斜線右側數字。
+1. 只看頂部同一個儲存空間標頭區域中的標頭與 current/capacity。poke_bag 與 item_bag 必須回傳包含斜線的完整可見文字，絕不可只回傳任一側。例如畫面是「333 / 800」時回傳「333/800」，不是「800」也不是「333」。不要自行決定最終容量；JavaScript 會取斜線右側。
 2. 若「寶可夢」與 slash 數字明確相連，填 header_type="pokemon" 及 poke_bag，item_bag 留空。
 3. 若「道具」與 slash 數字明確相連，填 header_type="item" 及 item_bag，poke_bag 留空。
 4. 若沒有可信的相符頂部標頭，填 header_type="none"，poke_bag 與 item_bag 都留空。不得用畫面別處的「寶可夢」作證據。
@@ -2974,6 +3011,27 @@ ${mappingLines}`;
             reader.readAsDataURL(file);
         });
 
+        const fileToStorageHeaderDataUrl = (originalDataUrl) => new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('載入儲存空間標頭失敗，請重新選擇圖片。'));
+            img.onload = () => {
+                const width = img.naturalWidth || img.width;
+                const height = img.naturalHeight || img.height;
+                const cropHeight = Math.min(height, Math.max(240, Math.ceil(height * 0.24)));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = cropHeight;
+                const context = canvas.getContext('2d');
+                if (!context) {
+                    reject(new Error('儲存空間標頭裁切失敗'));
+                    return;
+                }
+                context.drawImage(img, 0, 0, width, cropHeight, 0, 0, width, cropHeight);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.src = originalDataUrl;
+        });
+
         const fileToHundoCountRegionDataUrl = (originalDataUrl) => new Promise((resolve, reject) => {
             const img = new Image();
             img.onerror = () => reject(new Error('載入百神數辨識區域失敗，請重新選擇圖片。'));
@@ -3617,6 +3675,55 @@ ${mappingLines}`;
             return normalizeAiClassification(rawResult);
         };
 
+        const STORAGE_HEADER_IMAGE_TYPES = new Set(['RESOURCE_SCREEN', 'CATEGORY_OVERVIEW_SCREEN']);
+        const buildStorageHeaderPrompt = () => `你是 Pokémon GO 頂部儲存空間標頭的嚴格驗證器。
+只檢查此原圖頂部裁切中的單一儲存空間標頭：
+- 看見「寶可夢」且緊鄰完整 current/capacity 時，header_type="pokemon"。
+- 看見「道具」且緊鄰完整 current/capacity 時，header_type="item"。
+- 否則 header_type="none" 且 storage_text=""。
+storage_text 必須逐字回傳完整可見的 current/capacity（包含斜線），絕不可只回傳一側。例如「333 / 800」回傳「333/800」，「400 / 1150」回傳「400/1150」。不要自行抽取容量；JavaScript 會取右側。不得使用裁切中其他位置的「寶可夢」或「道具」推測標頭。只輸出 schema JSON。`;
+
+        const normalizeStorageHeaderResult = (result = {}) => {
+            const rawHeaderType = String(result?.header_type || '').trim();
+            const hasValidHeaderType = ['pokemon', 'item', 'none'].includes(rawHeaderType);
+            const headerType = ['pokemon', 'item'].includes(rawHeaderType) ? rawHeaderType : 'none';
+            const storageText = String(result?.storage_text || '').trim();
+            const capacity = extractStorageCapacity(storageText);
+            const structurallyComplete = hasValidHeaderType
+                && typeof result?.storage_text === 'string'
+                && (headerType === 'none' ? storageText === '' : capacity !== '');
+            return {
+                header_type: capacity ? headerType : 'none',
+                storage_text: capacity ? storageText : '',
+                poke_bag: capacity && headerType === 'pokemon' ? capacity : '',
+                item_bag: capacity && headerType === 'item' ? capacity : '',
+                structurally_complete: structurallyComplete
+            };
+        };
+
+        const requestStorageHeaderVerification = async (apiKey, headerDataUrl, statusUpdater) => {
+            const raw = await requestOpenAiJsonSchema(
+                apiKey,
+                buildStorageHeaderPrompt(),
+                headerDataUrl,
+                STORAGE_HEADER_JSON_SCHEMA,
+                statusUpdater,
+                { imageDetail: 'high', maxRetries: 1 }
+            );
+            return normalizeStorageHeaderResult(raw);
+        };
+
+        const verifyStorageHeader = async ({ apiKey, file, classification, statusUpdater }) => {
+            if (!STORAGE_HEADER_IMAGE_TYPES.has(classification?.image_type)) return normalizeStorageHeaderResult({});
+            const originalDataUrl = await fileToOriginalDataUrl(file);
+            const headerDataUrl = await fileToStorageHeaderDataUrl(originalDataUrl);
+            let result = await requestStorageHeaderVerification(apiKey, headerDataUrl, statusUpdater);
+            if (!result.structurally_complete) {
+                result = await requestStorageHeaderVerification(apiKey, headerDataUrl, statusUpdater);
+            }
+            return result;
+        };
+
         const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = []) => {
             const rawResult = await requestOpenAiJsonSchema(
                 apiKey,
@@ -3641,6 +3748,9 @@ ${mappingLines}`;
                 const normalizedValue = String(value || '').trim();
                 if (!normalizedValue) return;
                 document.getElementById(id).value = normalizedValue;
+                if (STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.has(id)) {
+                    storageCapacityAiValueOwnership.set(id, { value: normalizedValue });
+                }
                 highlightInput(id);
             };
 
@@ -3909,11 +4019,30 @@ ${mappingLines}`;
                 const normalDataUrls = normalJobs.map(job => job.classificationDataUrl);
                 const normalClassifications = normalJobs.map(job => job.classification);
                 const normalTask = (async () => {
-                    const taskResults = await quickScan({
-                        apiKey,
-                        dataUrls: normalDataUrls,
-                        classifications: normalClassifications,
-                        statusWriter: writeBatchStatus
+                    const [taskResults, storageSettlements] = await Promise.all([
+                        quickScan({
+                            apiKey,
+                            dataUrls: normalDataUrls,
+                            classifications: normalClassifications,
+                            statusWriter: writeBatchStatus
+                        }),
+                        Promise.allSettled(normalJobs.map(job => verifyStorageHeader({
+                            apiKey,
+                            file: job.file,
+                            classification: job.classification,
+                            statusUpdater: null
+                        })))
+                    ]);
+                    storageSettlements.forEach((settlement, index) => {
+                        if (!STORAGE_HEADER_IMAGE_TYPES.has(normalClassifications[index]?.image_type)) return;
+                        const verified = settlement.status === 'fulfilled'
+                            ? settlement.value
+                            : normalizeStorageHeaderResult({});
+                        const imageResult = taskResults.find(result => result.imageIndex === index)?.imageResult;
+                        if (!imageResult) return;
+                        imageResult.header_type = verified.header_type;
+                        imageResult.poke_bag = verified.poke_bag;
+                        imageResult.item_bag = verified.item_bag;
                     });
                     if (!isCurrentAutoScanRun(scanRunId)) return null;
                     const validationResult = await runRequiredFieldValidation({
