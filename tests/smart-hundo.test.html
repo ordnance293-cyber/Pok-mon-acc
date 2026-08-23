@@ -2925,7 +2925,6 @@
         const allowedOpenAiSchemas = new Set([
           'pokemon_go_image_classifier',
           'pokemon_go_forced_field_extractor',
-          'pokemon_go_storage_header_verifier',
           'pokemon_go_hundo_count_extractor',
           'pokemon_go_hundo_smart_extractor_v2',
           'pokemon_go_smart_hundo_form_verifier_v2',
@@ -3156,7 +3155,6 @@
             buildHundoCountPrompt,
             fileToOriginalDataUrl,
             fileToResizedDataUrl,
-            fileToStorageHeaderDataUrl: typeof fileToStorageHeaderDataUrl === 'undefined' ? undefined : fileToStorageHeaderDataUrl,
             fileToHundoCountRegionDataUrl,
             loadSmartHundoOriginalImage: typeof loadSmartHundoOriginalImage === 'undefined' ? undefined : loadSmartHundoOriginalImage,
             createSmartHundoPokemonCrop: typeof createSmartHundoPokemonCrop === 'undefined' ? undefined : createSmartHundoPokemonCrop,
@@ -3172,12 +3170,6 @@
             formatSmartHundoStatus,
             normalizeAiClassification,
             normalizeAiExtraction,
-            extractStorageCapacity: typeof extractStorageCapacity === 'undefined' ? undefined : extractStorageCapacity,
-            normalizeStorageHeaderResult: typeof normalizeStorageHeaderResult === 'undefined' ? undefined : normalizeStorageHeaderResult,
-            buildStorageHeaderPrompt: typeof buildStorageHeaderPrompt === 'undefined' ? undefined : buildStorageHeaderPrompt,
-            requestStorageHeaderVerification: typeof requestStorageHeaderVerification === 'undefined' ? undefined : requestStorageHeaderVerification,
-            beginAutoScanRun,
-            applyAiResultToForm,
             mergeAiResults,
             getRetryableMissingFields,
             beginSmartHundoScanSession,
@@ -4346,59 +4338,6 @@
           }, { poke_bag: '1150', item_bag: '2675' });
         });
 
-        test('requires complete slash-pair evidence for storage capacities', () => {
-          const parse = globalThis.extractStorageCapacity;
-          equal(typeof parse, 'function', 'storage capacity has a dedicated parser');
-          [
-            ['333/800', '800'], ['333 / 800', '800'], ['333／800', '800'],
-            ['2,576/2,675', '2675'], ['333', ''], ['800', ''],
-            ['333-800', ''], ['333 800', ''], ['', ''], [null, ''], [undefined, '']
-          ].forEach(([input, expected]) => equal(parse(input), expected, String(input)));
-        });
-
-        test('rejects one-sided item and pokemon storage model output', () => {
-          const resource = { image_type: 'RESOURCE_SCREEN', search_query: '' };
-          const category = { image_type: 'CATEGORY_OVERVIEW_SCREEN', search_query: '' };
-          equal(normalizeAiExtraction(ordinaryModelResult({ header_type: 'item', item_bag: '333' }), resource).item_bag, '');
-          equal(normalizeAiExtraction(ordinaryModelResult({ header_type: 'item', item_bag: '800' }), resource).item_bag, '');
-          equal(normalizeAiExtraction(ordinaryModelResult({ header_type: 'item', item_bag: '333/800', rarecandy: '49' }), resource).item_bag, '800');
-          equal(normalizeAiExtraction(ordinaryModelResult({ header_type: 'pokemon', poke_bag: '400' }), category).poke_bag, '');
-          equal(normalizeAiExtraction(ordinaryModelResult({ header_type: 'pokemon', poke_bag: '400/1150' }), category).poke_bag, '1150');
-        });
-
-        test('clears stale AI-owned capacities but preserves manual edits', () => {
-          for (const id of ['st_item_bag', 'st_poke_bag']) {
-            document.getElementById(id).value = '';
-          }
-          beginAutoScanRun();
-          applyAiResultToForm({ item_bag: '800', poke_bag: '1150' });
-          equal(document.getElementById('st_item_bag').value, '800');
-          equal(document.getElementById('st_poke_bag').value, '1150');
-          beginAutoScanRun();
-          equal(document.getElementById('st_item_bag').value, '');
-          equal(document.getElementById('st_poke_bag').value, '');
-
-          applyAiResultToForm({ item_bag: '800', poke_bag: '1150' });
-          document.getElementById('st_item_bag').value = '900';
-          document.getElementById('st_poke_bag').value = '1250';
-          beginAutoScanRun();
-          equal(document.getElementById('st_item_bag').value, '900');
-          equal(document.getElementById('st_poke_bag').value, '1250');
-        });
-
-        test('builds the storage verifier from an original-image lossless top crop', async () => {
-          const source = 'data:image/png;base64,STORAGE_ORIGINAL';
-          imageDimensionsBySource.set(source, { width: 1200, height: 2400 });
-          const crop = await fileToStorageHeaderDataUrl(source);
-          equal(crop.startsWith('data:image/png;base64,'), true);
-          deepEqual(canvasRecords.at(-1), {
-            width: 1200, height: 576, source,
-            drawArguments: [0, 0, 1200, 576, 0, 0, 1200, 576],
-            type: 'image/png', quality: undefined
-          });
-          equal(buildStorageHeaderPrompt().includes('完整可見的 current/capacity'), true);
-        });
-
         test('retries a capacity only for the matching visible header', () => {
           equal(getRetryableMissingFields({ header_type: 'pokemon', poke_bag: '', item_bag: '' }, ['poke_bag', 'item_bag']).join(','), 'poke_bag');
           equal(getRetryableMissingFields({ header_type: 'item', poke_bag: '', item_bag: '' }, ['poke_bag', 'item_bag']).join(','), 'item_bag');
@@ -4682,7 +4621,7 @@
           if (prompt.includes('image_type = SHINY_LEGENDARY_SCREEN')) return ordinaryModelResult({ shiny_leg: '12' });
           if (prompt.includes('image_type = OLD_POKEMON_SCREEN')) return ordinaryModelResult({ old_poke: '42' });
           if (prompt.includes('image_type = RESOURCE_SCREEN')) {
-            return ordinaryModelResult({ header_type: 'item', coin: '123', item_bag: '333/800', rarecandy: '45', greenpass: '6', masterball: '2' });
+            return ordinaryModelResult({ header_type: 'item', coin: '123', item_bag: '6800', rarecandy: '45', greenpass: '6', masterball: '2' });
           }
           fail(`unexpected ordinary extraction prompt: ${prompt.slice(0, 120)}`);
         };
@@ -4833,17 +4772,6 @@
             }
             return openAiResponse(
               trainerTeamResultByImage.get(identity) || trainerTeamEvidence('yellow'),
-              () => requestStageEvents.push({ event: 'finish', schemaName })
-            );
-          }
-          if (schemaName === 'pokemon_go_storage_header_verifier') {
-            equal(detail, 'high', 'storage header request always uses high detail');
-            equal(imageUrl.startsWith('data:image/png;base64,'), true, 'storage header request uses PNG');
-            const isResource = imageUrl.includes('RESOURCE');
-            return openAiResponse(
-              isResource
-                ? { header_type: 'item', storage_text: '333/800' }
-                : { header_type: 'none', storage_text: '' },
               () => requestStageEvents.push({ event: 'finish', schemaName })
             );
           }
