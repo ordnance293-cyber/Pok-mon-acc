@@ -30,8 +30,8 @@ MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-fo
 FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-crop-form-verifier-v2.md"
 CLASSIFICATION_PROMPT_HASH = "506a97e67e8505912b261e82410ef7696f9e7ba0ced045af2971d5e90fc76740"
 CLASSIFICATION_PROMPT_LENGTH = 2728
-EXTRACTION_PROMPT_HASH = "3f0fb62a1461ff5b3997c06a8c76cca22bbdccf3bf4dc6aa89b56ecf4211b99e"
-EXTRACTION_PROMPT_LENGTH = 5080
+EXTRACTION_PROMPT_HASH = "6aff9a35b61fb79fbc31bf9f0fcc697b3693a35f0a5fe9c8a0891b329d057de5"
+EXTRACTION_PROMPT_LENGTH = 5254
 RESIZED_IMAGE_FUNCTION_HASH = "c4baf69d9b7a67771b356642bf549806254fe48a676952986150eb616a93daf4"
 RESIZED_IMAGE_FUNCTION_LENGTH = 1276
 SAVE_ACCOUNT_HASH = "5d7342d0dd9f5d07d16c1049de37279bf91e9abd66f076d0bb0866e168163ca0"
@@ -684,6 +684,16 @@ def main() -> int:
             require_fragment(extraction_prompt, "你現在只能做第二階段抽值，禁止重新分類", "extraction prompt"),
             require_fragment(extraction_prompt, "case 'TRAINER_PROFILE_SCREEN':", "profile extraction path"),
             require_fragment(extraction_prompt, "case 'RESOURCE_SCREEN':", "resource extraction path"),
+        ]),
+        ("storage capacities require original PNG slash-pair evidence", lambda: [
+            require_fragment(source, "const extractStorageCapacity = (value) =>", "strict storage parser"),
+            require_fragment(source, "raw.match(/^\\s*\\d+\\s*[\\/／]\\s*(\\d+)\\s*$/)", "anchored slash pair"),
+            require_fragment(source, "const fileToStorageHeaderDataUrl = (originalDataUrl)", "storage header crop"),
+            require_fragment(source, "resolve(canvas.toDataURL('image/png'))", "lossless storage crop"),
+            require_fragment(source, "const requestStorageHeaderVerification = async", "dedicated storage request"),
+            require_fragment(source, "{ imageDetail: 'high', maxRetries: 1 }", "bounded high-detail request"),
+            require_fragment(source, "STORAGE_CAPACITY_AI_OWNED_INPUT_IDS", "storage AI ownership"),
+            require_fragment(extraction_prompt, "絕不可只回傳任一側", "full-expression extraction contract"),
         ]),
         ("trainer-team strict schema and fixed-UI prompt contracts exist", lambda: [
             require_fragment(source, "const TRAINER_TEAM_SCHEMA = {", "trainer-team schema"),
