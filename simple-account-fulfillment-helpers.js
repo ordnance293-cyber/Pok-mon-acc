@@ -132,3 +132,20 @@
     safeUserMessage
   });
 }));
+
+(function loadModernAdminUI() {
+  if (typeof document === 'undefined') return;
+  if (document.querySelector('script[data-modern-admin-ui-loader]')) return;
+
+  const loader = document.createElement('script');
+  loader.setAttribute('data-modern-admin-ui-loader', 'true');
+  const currentScript = document.currentScript;
+  const baseUrl = currentScript && currentScript.src ? currentScript.src : document.baseURI;
+  try {
+    loader.src = new URL('modern-admin-ui.js', baseUrl).href;
+  } catch (error) {
+    loader.src = 'modern-admin-ui.js';
+  }
+  loader.async = false;
+  document.head.appendChild(loader);
+}());
