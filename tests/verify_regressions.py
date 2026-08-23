@@ -768,7 +768,7 @@ def main() -> int:
             source_span(
                 source,
                 "        const AI_REQUIRED_VALIDATION_FIELDS = [",
-                "\n        const AI_REQUIRED_VALIDATION_PASSES =",
+                "\n        // Capacity values are owned",
                 "ordinary required-field coverage",
                 include_end=False,
             ),
