@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script src="smart-hundo-helpers.js"></script>
-    <script src="ai-scan-scheduler.js"></script>
     <script src="smart-hundo-form-verifier.js"></script>
     <script src="trainer-team-helpers.js"></script>
     <script src="sold-account-cleanup.js"></script>
@@ -792,9 +791,7 @@
                 ordinaryExtraction: { label: '一般欄位掃描', current: 0, total: 0, state: 'pending', priority: 30 },
                 ordinaryRecovery: { label: '缺漏欄位補掃', current: 0, total: 0, state: 'pending', priority: 40 },
                 storageVerification: { label: '背包容量驗證', current: 0, total: 0, state: 'pending', priority: 50 },
-                smartHundo: { label: '百神辨識中', current: 0, total: 0, state: 'pending', priority: 80 },
-                smartHundoQualityRetry: { label: '百神品質重掃', current: 0, total: 0, state: 'pending', priority: 85 },
-                smartHundoMerge: { label: '百神結果合併', current: 0, total: 0, state: 'pending', priority: 75 },
+                smartHundo: { label: '百神辨識中', current: 0, total: 0, state: 'pending', priority: 70 },
                 smartHundoFormVerification: { label: '特殊型態複核中', current: 0, total: 0, state: 'pending', priority: 80 },
                 trainerTeam: { label: '訓練家隊伍驗證', current: 0, total: 0, state: 'pending', priority: 60 },
                 finalMerge: { label: '最終資料統整中', current: 0, total: 0, state: 'pending', priority: 90 }
@@ -829,15 +826,6 @@
 
         const createAiScanDiagnostics = totalFiles => ({
             total_files: totalFiles,
-            classification_concurrency: AI_CLASSIFICATION_CONCURRENCY,
-            smart_hundo_concurrency: SMART_HUNDO_CONCURRENCY,
-            ordinary_extraction_concurrency: ORDINARY_EXTRACTION_CONCURRENCY,
-            storage_verification_concurrency: STORAGE_VERIFICATION_CONCURRENCY,
-            trainer_team_concurrency: TRAINER_TEAM_CONCURRENCY,
-            smart_hundo_file_count: 0,
-            smart_hundo_accepted_file_count: 0,
-            smart_hundo_failed_file_count: 0,
-            smart_hundo_quality_retry_count: 0,
             classified_files: 0,
             normal_files: 0,
             smart_hundo_files: 0,
@@ -853,8 +841,6 @@
                 ordinary_recovery: 0,
                 storage_verification: 0,
                 smart_hundo: 0,
-                smart_hundo_queue: 0,
-                smart_hundo_merge: 0,
                 trainer_team: 0,
                 final_merge: 0
             },
@@ -1049,15 +1035,6 @@
         const AI_JPEG_QUALITY = 0.7;
         const AI_IMAGE_DETAIL = 'auto';
         const HUNDO_SMART_IMAGE_DETAIL = 'high';
-        const AI_CLASSIFICATION_CONCURRENCY = 3;
-        const SMART_HUNDO_CONCURRENCY = 1;
-        const ORDINARY_EXTRACTION_CONCURRENCY = 3;
-        const STORAGE_VERIFICATION_CONCURRENCY = 2;
-        const TRAINER_TEAM_CONCURRENCY = 1;
-        const SMART_HUNDO_MAX_QUALITY_RETRIES = 1;
-        const SMART_HUNDO_QUALITY_MIN_SAMPLE_CARDS = 4;
-        const SMART_HUNDO_MIN_RECOGNIZED_SPECIES_RATIO = 0.60;
-        const SMART_HUNDO_MIN_RESOLVED_DISPLAY_RATIO = 0.40;
         const AI_SUCCESS_LABEL = '合併完成';
         const AI_IMAGE_TYPES = new Set([
             'CATEGORY_OVERVIEW_SCREEN',
@@ -3538,91 +3515,143 @@ ${mappingLines}`;
             return { cards: finalCards, metrics, stale: false };
         };
 
-        const runSmartHundoCountOperation = async ({ apiKey, originalDataUrl, classification, statusUpdater }) => {
+        const smartHundoScan = async ({
+            apiKey,
+            originalDataUrl,
+            imageIndex,
+            classification,
+            statusUpdater,
+            isCurrentRun = () => true
+        } = {}) => {
             const helpers = globalThis.SmartHundoHelpers;
-            const countRegionDataUrl = await fileToHundoCountRegionDataUrl(originalDataUrl);
-            const response = await requestHundoCountExtraction(
-                apiKey,
-                countRegionDataUrl,
-                (attempt, maxRetries) => statusUpdater?.('count', attempt, maxRetries)
-            );
-            const normalized = helpers.normalizeHundoCountResult(response?.result);
-            return {
-                ...helpers.validateHundoCountEvidence(response?.result, classification),
-                count_source: normalized.count_source
-            };
-        };
+            if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
 
-        const runSmartHundoCardPipeline = async ({
-            apiKey, originalDataUrl, imageIndex, statusUpdater, isCurrentRun
-        }) => {
-            const helpers = globalThis.SmartHundoHelpers;
-            const extraction = await requestSmartHundoWithStructuralRetry({
-                apiKey, originalDataUrl, imageIndex,
+            const countOperation = (async () => {
+                const countRegionDataUrl = await fileToHundoCountRegionDataUrl(originalDataUrl);
+                const response = await requestHundoCountExtraction(
+                    apiKey,
+                    countRegionDataUrl,
+                    (attempt, maxRetries) => statusUpdater?.('count', attempt, maxRetries)
+                );
+                const normalized = helpers.normalizeHundoCountResult(response?.result);
+                return {
+                    ...helpers.validateHundoCountEvidence(response?.result, classification),
+                    count_source: normalized.count_source
+                };
+            })();
+            const cardOperation = requestSmartHundoWithStructuralRetry({
+                apiKey,
+                originalDataUrl,
+                imageIndex,
                 statusUpdater: (attempt, maxRetries) => statusUpdater?.('cards', attempt, maxRetries)
             });
-            const cardResult = extraction.result;
+            const [countSettlement, cardSettlement] = await Promise.allSettled([
+                countOperation,
+                cardOperation
+            ]);
+            const requestFailures = [];
+            if (countSettlement.status === 'rejected') {
+                const summary = safeSmartHundoErrorSummary(
+                    countSettlement.reason,
+                    'hundo_count',
+                    'smart_hundo_request_failed'
+                );
+                requestFailures.push(summary);
+                if (isCurrentRun()) console.warn('Smart hundo operation failed', summary);
+            }
+            if (cardSettlement.status === 'rejected') {
+                const summary = safeSmartHundoErrorSummary(
+                    cardSettlement.reason,
+                    'hundo_cards',
+                    'smart_hundo_model_request_failed'
+                );
+                requestFailures.push(summary);
+                if (isCurrentRun()) console.warn('Smart hundo operation failed', summary);
+            }
+
+            const count = countSettlement.status === 'fulfilled'
+                ? countSettlement.value
+                : {
+                    hundo_leg: '',
+                    confidence: 0,
+                    valid: false,
+                    raw_count_text: '',
+                    count_source: 'uncertain',
+                    manual_review_reasons: ['hundo_count_uncertain']
+                };
+            const cardExtraction = cardSettlement.status === 'fulfilled'
+                ? cardSettlement.value
+                : null;
+            const cardResult = cardExtraction?.result || {
+                detected_card_count: 0,
+                scan_complete: false,
+                bottom_edge_checked: false,
+                enumeration_confidence: 0,
+                cards: []
+            };
             const validatedCards = cardResult.cards.map(card => helpers.validateHundoCardStates(
                 helpers.validateHundoPokemonForm(card, normalizePokemonBaseName)
             ));
-            const formVerification = await runSmartHundoFormVerification({
-                apiKey, originalDataUrl, imageIndex, cards: validatedCards,
-                statusUpdater: (attempt, maxRetries) => statusUpdater?.('form_verifier', attempt, maxRetries),
-                isCurrentRun
-            });
+            const formVerification = cardSettlement.status === 'fulfilled'
+                ? await runSmartHundoFormVerification({
+                    apiKey,
+                    originalDataUrl,
+                    imageIndex,
+                    cards: validatedCards,
+                    statusUpdater: (attempt, maxRetries) => statusUpdater?.('form_verifier', attempt, maxRetries),
+                    isCurrentRun
+                })
+                : {
+                    cards: validatedCards,
+                    stale: false,
+                    metrics: {
+                        target_candidate_count: 0,
+                        target_verified_count: 0,
+                        target_review_card_count: 0,
+                        contact_sheet_count: 0,
+                        verifier_request_count: 0,
+                                form_verify_model: HUNDO_FORM_VERIFY_MODEL
+                    }
+                };
+            const manualReviewReasons = [];
+            if (
+                cardExtraction
+                && (
+                    !cardExtraction.structure.structurally_complete
+                    || cardResult.enumeration_confidence < helpers.ENUMERATION_CONFIDENCE_THRESHOLD
+                )
+            ) {
+                manualReviewReasons.push('incomplete_card_enumeration');
+            }
+            if (cardSettlement.status === 'rejected') {
+                manualReviewReasons.push('smart_hundo_model_request_failed');
+            } else if (requestFailures.length > 0) {
+                manualReviewReasons.push('smart_hundo_request_failed');
+            }
+
             return {
-                extraction,
-                card_result: { ...cardResult, cards: formVerification.cards },
+                imageIndex,
+                classification,
+                normalized_search_query: normalizeSearchQuery(classification?.search_query),
+                count,
+                card_operation_succeeded: cardSettlement.status === 'fulfilled',
+                card_result: {
+                    ...cardResult,
+                    cards: formVerification.cards
+                },
+                finish_reason: cardExtraction?.finish_reason || '',
+                classification_model: OPENAI_MODEL,
+                hundo_count_model: HUNDO_COUNT_MODEL,
+                smart_hundo_requested_model: HUNDO_SMART_MODEL,
+                smart_hundo_returned_model: cardExtraction?.returned_model || '',
+                smart_hundo_reasoning_effort: HUNDO_SMART_REASONING_EFFORT,
+                structure: cardExtraction?.structure || helpers.validateSmartHundoStructure(cardResult, ''),
+                structural_retry_used: cardExtraction?.structural_retry_used === true,
+                structural_retry_reason: cardExtraction?.structural_retry_reason || [],
+                request_failures: requestFailures,
+                manual_review_reasons: manualReviewReasons,
                 ...formVerification.metrics
             };
-        };
-
-        const smartHundoScan = async ({
-            apiKey, originalDataUrl, imageIndex, smartQueueIndex, classification,
-            statusUpdater, qualityRetryUpdater, isCurrentRun = () => true
-        } = {}) => {
-            const helpers = globalThis.SmartHundoHelpers;
-            const emptyCount = { hundo_leg: '', confidence: 0, valid: false, raw_count_text: '', count_source: 'uncertain', manual_review_reasons: ['hundo_count_uncertain'] };
-            const emptyCards = { detected_card_count: 0, scan_complete: false, bottom_edge_checked: false, enumeration_confidence: 0, cards: [] };
-            return globalThis.AiScanScheduler.runSmartHundoJobWithQualityRetry({
-                helpers,
-                runCount: () => runSmartHundoCountOperation({ apiKey, originalDataUrl, classification, statusUpdater }),
-                runCards: () => runSmartHundoCardPipeline({ apiKey, originalDataUrl, imageIndex, statusUpdater, isCurrentRun }),
-                onQualityRetry: qualityRetryUpdater,
-                combine: (countSettlement, cardSettlement) => {
-                    const count = countSettlement.status === 'fulfilled' ? countSettlement.value : emptyCount;
-                    const pipeline = cardSettlement.status === 'fulfilled' ? cardSettlement.value : null;
-                    const extraction = pipeline?.extraction;
-                    const cardResult = pipeline?.card_result || emptyCards;
-                    const requestFailures = [];
-                    if (countSettlement.status === 'rejected') requestFailures.push(safeSmartHundoErrorSummary(countSettlement.reason, 'hundo_count', 'smart_hundo_request_failed'));
-                    if (cardSettlement.status === 'rejected') requestFailures.push(safeSmartHundoErrorSummary(cardSettlement.reason, 'hundo_cards', 'smart_hundo_model_request_failed'));
-                    return {
-                        imageIndex, smartQueueIndex, classification,
-                        normalized_search_query: normalizeSearchQuery(classification?.search_query),
-                        count,
-                        card_operation_succeeded: cardSettlement.status === 'fulfilled',
-                        card_result: cardResult,
-                        finish_reason: extraction?.finish_reason || '',
-                        classification_model: OPENAI_MODEL,
-                        hundo_count_model: HUNDO_COUNT_MODEL,
-                        smart_hundo_requested_model: HUNDO_SMART_MODEL,
-                        smart_hundo_returned_model: extraction?.returned_model || '',
-                        smart_hundo_reasoning_effort: HUNDO_SMART_REASONING_EFFORT,
-                        structure: extraction?.structure || helpers.validateSmartHundoStructure(cardResult, ''),
-                        structural_retry_used: extraction?.structural_retry_used === true,
-                        structural_retry_reason: extraction?.structural_retry_reason || [],
-                        request_failures: requestFailures,
-                        manual_review_reasons: requestFailures.map(failure => failure.reasonCode),
-                        target_candidate_count: pipeline?.target_candidate_count || 0,
-                        target_verified_count: pipeline?.target_verified_count || 0,
-                        target_review_card_count: pipeline?.target_review_card_count || 0,
-                        contact_sheet_count: pipeline?.contact_sheet_count || 0,
-                        verifier_request_count: pipeline?.verifier_request_count || 0,
-                        form_verify_model: HUNDO_FORM_VERIFY_MODEL
-                    };
-                }
-            });
         };
 
         const formatSmartHundoStatus = ({
@@ -3883,7 +3912,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
             const validationTargets = buildOrdinaryRecoveryTargets(primaryCoverage.missingWithScreens);
             let completedCount = 0;
             const totalTargets = validationTargets.length;
-            const settlements = await globalThis.AiScanScheduler.settleMapWithConcurrency(validationTargets, ORDINARY_EXTRACTION_CONCURRENCY, (target, progressIndex) =>
+            const settlements = await Promise.allSettled(validationTargets.map((target, progressIndex) =>
                     extractSingleAiImage({
                         apiKey,
                         dataUrl: dataUrls[target.index],
@@ -3904,7 +3933,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         );
                         return result;
                     })
-                );
+                ));
 
             const validationTaskResults = settlements
                 .filter(settlement => settlement.status === 'fulfilled')
@@ -3934,7 +3963,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
             const totalTargets = targetIndexes.length;
             const mergeLabel = '快速掃描統整中';
 
-            const settlements = await globalThis.AiScanScheduler.settleMapWithConcurrency(targetIndexes, ORDINARY_EXTRACTION_CONCURRENCY, (targetIndex, progressIndex) =>
+            const settlements = await Promise.allSettled(targetIndexes.map((targetIndex, progressIndex) =>
                 extractSingleAiImage({
                     apiKey,
                     dataUrl: dataUrls[targetIndex],
@@ -3954,7 +3983,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     );
                     return result;
                 })
-            );
+            ));
             const results = settlements
                 .filter(settlement => settlement.status === 'fulfilled')
                 .map(settlement => settlement.value);
@@ -4020,7 +4049,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} ${message}｜已分類 ${classifiedCount}/${totalFiles}`
                     );
                 };
-                const classificationSettlements = await globalThis.AiScanScheduler.settleMapWithConcurrency(jobs, AI_CLASSIFICATION_CONCURRENCY, job =>
+                const classificationSettlements = await Promise.allSettled(jobs.map(job =>
                     classifySingleAiImage({
                         apiKey,
                         dataUrl: job.classificationDataUrl,
@@ -4032,7 +4061,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         progress.update('classification', classifiedCount, totalFiles);
                         return { ...job, classification };
                     })
-                , { shouldContinue: () => isCurrentAutoScanRun(scanRunId) });
+                ));
                 const classifiedJobs = classificationSettlements
                     .filter(settlement => settlement.status === 'fulfilled')
                     .map(settlement => settlement.value);
@@ -4045,7 +4074,6 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 const { normalJobs, smartHundoJobs } = helpers.partitionImageJobs(classifiedJobs);
                 diagnostics.normal_files = normalJobs.length;
                 diagnostics.smart_hundo_files = smartHundoJobs.length;
-                diagnostics.smart_hundo_file_count = smartHundoJobs.length;
                 if (smartHundoJobs.length > 0) {
                     writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 已偵測 ${smartHundoJobs.length} 張百神截圖，將分開掃描；其餘 ${normalJobs.length} 張進行數字辨識`);
                 }
@@ -4067,7 +4095,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     classification => STORAGE_HEADER_IMAGE_TYPES.has(classification.image_type)
                 ).length;
                 diagnostics.storage_candidate_file_count = storageCandidateCount;
-                const runNormalTask = async () => {
+                const normalTask = (async () => {
                     const primaryStartedAt = aiScanNow();
                     progress.update('ordinaryExtraction', 0, ordinaryPrimaryRequestCount);
                     if (storageCandidateCount > 0) progress.update('storageVerification', 0, storageCandidateCount);
@@ -4084,7 +4112,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                                 ordinaryPrimaryRequestCount
                             )
                         }),
-                        globalThis.AiScanScheduler.settleMapWithConcurrency(normalJobs, STORAGE_VERIFICATION_CONCURRENCY, (job, normalIndex) => verifyStorageHeader({
+                        Promise.allSettled(normalJobs.map((job, normalIndex) => verifyStorageHeader({
                             apiKey,
                             file: job.file,
                             classification: job.classification,
@@ -4099,7 +4127,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                                 progress.update('storageVerification', storageCompletedCount, storageCandidateCount);
                             }
                             return { normalIndex, result };
-                        }))
+                        })))
                     ]);
                     storageSettlements.forEach((settlement, normalIndex) => {
                         if (!STORAGE_HEADER_IMAGE_TYPES.has(normalClassifications[normalIndex]?.image_type)) return;
@@ -4133,55 +4161,52 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         ...validationResult,
                         failedJobCount: Number(taskResults.failedJobCount || 0)
                     };
-                };
-                const smartQueueStartedAt = aiScanNow();
+                })();
+                const parallelTasksStartedAt = aiScanNow();
                 if (smartHundoJobs.length > 0) progress.update('smartHundo', 0, smartHundoJobs.length);
-                let smartCompletedCount = 0;
-                const smartSettlements = await globalThis.AiScanScheduler.settleMapWithConcurrency(
-                    smartHundoJobs,
-                    SMART_HUNDO_CONCURRENCY,
-                    async (job, smartQueueIndex) => {
-                        const originalDataUrl = await fileToOriginalDataUrl(job.file);
-                        const result = await smartHundoScan({
-                            apiKey, originalDataUrl, imageIndex: job.index, smartQueueIndex,
-                            classification: job.classification,
-                            isCurrentRun: () => isCurrentAutoScanRun(scanRunId),
-                            qualityRetryUpdater: () => {
-                                diagnostics.smart_hundo_quality_retry_count += 1;
-                                progress.update('smartHundoQualityRetry', diagnostics.smart_hundo_quality_retry_count, diagnostics.smart_hundo_quality_retry_count);
-                            },
-                            statusUpdater: stage => progress.update(
+                if (trainerTeamJobs.length > 0) progress.update('trainerTeam', 0, trainerTeamJobs.length);
+                const smartTasks = smartHundoJobs.map(job => (async () => {
+                    const originalDataUrl = await fileToOriginalDataUrl(job.file);
+                    if (!isCurrentAutoScanRun(scanRunId)) return null;
+                    return smartHundoScan({
+                        apiKey,
+                        originalDataUrl,
+                        imageIndex: job.index,
+                        classification: job.classification,
+                        isCurrentRun: () => isCurrentAutoScanRun(scanRunId),
+                        statusUpdater: stage => {
+                            if (!isCurrentAutoScanRun(scanRunId)) return;
+                            progress.update(
                                 stage === 'form_verifier' ? 'smartHundoFormVerification' : 'smartHundo',
-                                smartCompletedCount, smartHundoJobs.length
-                            )
-                        });
-                        smartCompletedCount += 1;
-                        progress.update('smartHundo', smartCompletedCount, smartHundoJobs.length);
-                        return result;
-                    },
-                    { shouldContinue: () => isCurrentAutoScanRun(scanRunId) }
-                );
-                diagnostics.stage_duration_ms.smart_hundo_queue = aiScanNow() - smartQueueStartedAt;
-                progress.complete('smartHundoQualityRetry');
+                                0,
+                                smartHundoJobs.length
+                            );
+                        }
+                    });
+                })());
+                const trainerTeamTasks = trainerTeamJobs.map(job => runTrainerTeamScan({
+                    apiKey,
+                    file: job.file,
+                    screenshotIndex: job.index,
+                    statusUpdater: null
+                }));
+                const settlements = await Promise.allSettled([
+                    normalTask,
+                    ...smartTasks,
+                    ...trainerTeamTasks
+                ]);
+                diagnostics.stage_duration_ms.smart_hundo = smartHundoJobs.length > 0
+                    ? aiScanNow() - parallelTasksStartedAt
+                    : 0;
+                diagnostics.stage_duration_ms.trainer_team = trainerTeamJobs.length > 0
+                    ? aiScanNow() - parallelTasksStartedAt
+                    : 0;
                 progress.complete('smartHundoFormVerification');
                 progress.complete('smartHundo');
-                if (!isCurrentAutoScanRun(scanRunId)) return;
-
-                const remainingStartedAt = aiScanNow();
-                if (trainerTeamJobs.length > 0) progress.update('trainerTeam', 0, trainerTeamJobs.length);
-                const [normalSettlement, trainerTeamSettlements] = await Promise.all([
-                    Promise.resolve().then(runNormalTask).then(
-                        value => ({ status: 'fulfilled', value }), reason => ({ status: 'rejected', reason })
-                    ),
-                    globalThis.AiScanScheduler.settleMapWithConcurrency(
-                        trainerTeamJobs,
-                        TRAINER_TEAM_CONCURRENCY,
-                        job => runTrainerTeamScan({ apiKey, file: job.file, screenshotIndex: job.index, statusUpdater: null }),
-                        { shouldContinue: () => isCurrentAutoScanRun(scanRunId) }
-                    )
-                ]);
-                diagnostics.stage_duration_ms.trainer_team = trainerTeamJobs.length ? aiScanNow() - remainingStartedAt : 0;
                 progress.complete('trainerTeam');
+                const normalSettlement = settlements[0];
+                const smartSettlements = settlements.slice(1, 1 + smartTasks.length);
+                const trainerTeamSettlements = settlements.slice(1 + smartTasks.length);
                 if (!isCurrentAutoScanRun(scanRunId)) return;
                 const normalFailureCount = normalSettlement.status === 'rejected'
                     ? normalJobs.length
@@ -4205,16 +4230,6 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     };
                     return {
                         imageIndex: job.index,
-                        smartQueueIndex: index,
-                        quality_attempt_count: 1,
-                        quality_retry_used: false,
-                        quality_passed: false,
-                        quality_reasons: ['card_operation_failed'],
-                        recognized_species_count: 0,
-                        recognized_species_ratio: 0,
-                        resolved_display_count: 0,
-                        resolved_display_ratio: 0,
-                        accepted_for_merge: false,
                         classification: job.classification,
                         normalized_search_query: normalizeSearchQuery(job.classification.search_query),
                         count: {
@@ -4316,30 +4331,19 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     const countMerge = helpers.mergeHundoCountResults(
                         smartResults.map(result => result.count)
                     );
-                    const acceptedSmartResults = smartResults.filter(result => (
-                        result.card_operation_succeeded === true
-                        && result.quality_passed === true
-                        && result.accepted_for_merge === true
-                    ));
-                    const acceptedCardScreenshots = acceptedSmartResults.map(result => ({
-                        index: result.imageIndex,
-                        smartQueueIndex: result.smartQueueIndex,
-                        cards: result.card_result.cards
-                    }));
-                    progress.update('smartHundoMerge', 0, acceptedCardScreenshots.length);
-                    const smartMergeStartedAt = aiScanNow();
-                    const overlapMerge = globalThis.AiScanScheduler.mergeSmartHundoScreenshotsAdjacent(acceptedCardScreenshots, helpers);
-                    diagnostics.stage_duration_ms.smart_hundo_merge = aiScanNow() - smartMergeStartedAt;
-                    progress.complete('smartHundoMerge');
+                    const successfulCardScreenshots = smartResults
+                        .filter(result => result.card_operation_succeeded)
+                        .map(result => ({
+                            index: result.imageIndex,
+                            cards: result.card_result.cards
+                        }));
+                    const overlapMerge = helpers.mergeSmartHundoScreenshots(successfulCardScreenshots);
                     const conversion = helpers.smartHundoCardsToPokemonList(overlapMerge.cards);
-                    const failedSmartResults = smartResults.filter(result => !acceptedSmartResults.includes(result));
-                    diagnostics.smart_hundo_accepted_file_count = acceptedSmartResults.length;
-                    diagnostics.smart_hundo_failed_file_count = failedSmartResults.length;
+                    const allCardOperationsSucceeded = smartResults.every(result => result.card_operation_succeeded);
                     const hasCompleteConfidentEmptyCardExtraction = (
                         smartResults.length > 0
                         && smartResults.every(result => (
-                            result.accepted_for_merge === true
-                            && result.card_operation_succeeded
+                            result.card_operation_succeeded
                             && result.structure?.structurally_complete === true
                             && Number(result.card_result.enumeration_confidence || 0) >= helpers.ENUMERATION_CONFIDENCE_THRESHOLD
                             && result.card_result.cards.length === 0
@@ -4382,8 +4386,8 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         && !hasContradictoryEmptyCardExtraction
                     );
                     const shouldReplaceSmartList = (
-                        acceptedSmartResults.length > 0
-                        && (Boolean(conversion.pokemon_list) || (failedSmartResults.length === 0 && hasValidatedEmptyCardList))
+                        allCardOperationsSucceeded
+                        && (Boolean(conversion.pokemon_list) || hasValidatedEmptyCardList)
                     );
                     const coverageResult = {
                         ...normalMergedResult,
@@ -4414,16 +4418,6 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         scan_session_id: String(smartSessionId),
                         screenshots: smartResults.map(result => ({
                             index: result.imageIndex,
-                            smart_queue_index: result.smartQueueIndex,
-                            quality_attempt_count: result.quality_attempt_count,
-                            quality_retry_used: result.quality_retry_used,
-                            quality_passed: result.quality_passed,
-                            quality_reasons: result.quality_reasons,
-                            recognized_species_count: result.recognized_species_count,
-                            recognized_species_ratio: result.recognized_species_ratio,
-                            resolved_display_count: result.resolved_display_count,
-                            resolved_display_ratio: result.resolved_display_ratio,
-                            accepted_for_merge: result.accepted_for_merge,
                             classification: result.classification,
                             normalized_search_query: result.normalized_search_query,
                             raw_count_text: result.count.raw_count_text,
@@ -4459,9 +4453,6 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                                 () => reason
                             )),
                         pokemon_list: conversion.pokemon_list,
-                        accepted_screenshot_indexes: acceptedSmartResults.map(result => result.imageIndex),
-                        failed_screenshot_indexes: failedSmartResults.map(result => result.imageIndex),
-                        partial_result: failedSmartResults.length > 0 && acceptedSmartResults.length > 0,
                         ...formVerificationMetrics
                     });
                     if (!isCurrentSmartRun()) return;
@@ -4485,9 +4476,6 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         reviewSummary,
                         formVerificationMetrics
                     }));
-                    if (failedSmartResults.length > 0 && acceptedSmartResults.length > 0) {
-                        setSmartHundoStatus(smartSessionId, `百神辨識完成：成功 ${acceptedSmartResults.length}/${smartResults.length} 張；${failedSmartResults.length} 張未通過品質檢查，清單為部分結果`);
-                    }
                 }
 
                 if (!isCurrentAutoScanRun(scanRunId)) return;
@@ -4510,7 +4498,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     console.warn('AI required field validation result:', finalCoverage);
                     alert(`以下欄位已逐一驗證，但本次仍未能自動填入：\n${missingMessages.join('\n')}`);
                 }
-                const smartFailureCount = smartResults.filter(result => result.accepted_for_merge !== true).length;
+                const smartFailureCount = smartSettlements.filter(settlement => settlement.status === 'rejected').length;
                 const totalFailureCount = classificationFailureCount + normalFailureCount + smartFailureCount;
                 diagnostics.stage_duration_ms.final_merge = aiScanNow() - finalMergeStartedAt;
                 diagnostics.total_duration_ms = aiScanNow() - scanStartedAt;

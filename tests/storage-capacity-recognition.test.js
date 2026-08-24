@@ -62,7 +62,7 @@ assert(recoveryBuilder.includes('!DEDICATED_VERIFICATION_FIELDS.has(field)'));
 const verifier = source.slice(source.indexOf('const verifyStorageHeader = async'), source.indexOf('const requestSingleImageClassification = async'));
 assert.strictEqual((verifier.match(/requestStorageHeaderVerification\(/g) || []).length, 2, 'one primary plus at most one structural retry');
 assert(verifier.includes('if (!result.structurally_complete)'), 'truthful none must not retry');
-const orchestration = source.slice(source.indexOf('const runNormalTask = async () =>'), source.indexOf('const smartQueueStartedAt'));
+const orchestration = source.slice(source.indexOf('const normalTask = (async () =>'), source.indexOf('const parallelTasksStartedAt'));
 assert(orchestration.includes('Promise.all(['), 'ordinary extraction and verifier must run in parallel');
 assert(orchestration.includes('normalIndex'), 'storage merge must preserve explicit screenshot index');
 assert(orchestration.includes('imageResult.header_type = verified.header_type'));
