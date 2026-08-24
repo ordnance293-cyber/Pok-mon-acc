@@ -1112,10 +1112,29 @@
         verifier_request_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_request_count')),
         form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-5.6-sol' ? 'gpt-5.6-sol' : ''
     });
+    const SMART_HUNDO_QUALITY_REASON_VALUES = new Set([
+        'card_operation_failed', 'structurally_incomplete', 'low_enumeration_confidence',
+        'finish_reason_truncated', 'detected_card_count_mismatch',
+        'invalid_or_duplicate_card_coordinates', 'nonzero_count_without_cards',
+        'low_recognized_species_ratio', 'low_resolved_display_ratio', 'small_sample_unrecognized'
+    ]);
+    const diagnosticQualityReasons = reasons => diagnosticStrings(reasons)
+        .filter(reason => SMART_HUNDO_QUALITY_REASON_VALUES.has(reason));
+
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),
         screenshots: (Array.isArray(session?.screenshots) ? session.screenshots : []).map(screenshot => ({
             index: diagnosticNonnegativeInteger(screenshot?.index),
+            smart_queue_index: diagnosticNonnegativeInteger(screenshot?.smart_queue_index),
+            quality_attempt_count: diagnosticNonnegativeInteger(screenshot?.quality_attempt_count),
+            quality_retry_used: screenshot?.quality_retry_used === true,
+            quality_passed: screenshot?.quality_passed === true,
+            quality_reasons: diagnosticQualityReasons(screenshot?.quality_reasons),
+            recognized_species_count: diagnosticNonnegativeInteger(screenshot?.recognized_species_count),
+            recognized_species_ratio: clampConfidence(screenshot?.recognized_species_ratio),
+            resolved_display_count: diagnosticNonnegativeInteger(screenshot?.resolved_display_count),
+            resolved_display_ratio: clampConfidence(screenshot?.resolved_display_ratio),
+            accepted_for_merge: screenshot?.accepted_for_merge === true,
             classification: {
                 image_type: diagnosticString(screenshot?.classification?.image_type),
                 search_query: diagnosticString(screenshot?.classification?.search_query)
@@ -1158,6 +1177,9 @@
             .map(diagnosticOverlapDecision),
         manual_review_reasons: diagnosticReviewReasons(session?.manual_review_reasons),
         pokemon_list: diagnosticString(session?.pokemon_list),
+        accepted_screenshot_indexes: (Array.isArray(session?.accepted_screenshot_indexes) ? session.accepted_screenshot_indexes : []).map(diagnosticNonnegativeInteger),
+        failed_screenshot_indexes: (Array.isArray(session?.failed_screenshot_indexes) ? session.failed_screenshot_indexes : []).map(diagnosticNonnegativeInteger),
+        partial_result: session?.partial_result === true,
         ...diagnosticFormVerificationMetrics(session)
     });
 
