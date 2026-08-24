@@ -53,6 +53,11 @@ assert.match(secretInput[0], /\btype=["']password["']/);
 assert.match(source, /💾 儲存簡帳設定/);
 assert.match(source, /window\.saveSimpleAccountSettings\s*=\s*function/);
 assert.match(source, /DOMContentLoaded[\s\S]*simpleAccountSpreadsheetId/);
+assert.match(
+  source,
+  /<details(?![^>]*\bopen\b)[^>]*aria-label=["']簡帳連線設定["'][^>]*>[\s\S]*?<summary[^>]*>[\s\S]*?⚙️ 簡帳連線設定[\s\S]*?<\/summary>/,
+  'simple-account settings must be collapsed by default behind its connection settings control'
+);
 
 assert.match(source, /id=["']simpleAccountPage["']/);
 assert.match(source, /簡帳自動出貨/);
