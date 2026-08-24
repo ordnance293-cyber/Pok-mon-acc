@@ -829,6 +829,11 @@
             classified_files: 0,
             normal_files: 0,
             smart_hundo_files: 0,
+            classification_batch_size: AI_CLASSIFICATION_BATCH_SIZE,
+            classification_batches_completed: 0,
+            smart_hundo_priority_trigger_count: 0,
+            smart_hundo_priority_processed_count: 0,
+            smart_hundo_priority_indexes: [],
             ordinary_primary_request_count: 0,
             ordinary_recovery_request_count: 0,
             storage_candidate_file_count: 0,
@@ -1031,6 +1036,7 @@
         const AI_SCAN_STATUS_LABEL = 'AI自動掃描';
         const AI_ACTION_BUTTON_ID = 'aiAutoBtn';
         const AI_ACTION_STATUS_ID = 'aiAutoStatus';
+        const AI_CLASSIFICATION_BATCH_SIZE = 2;
         const AI_MAX_IMAGE_SIZE = 1000;
         const AI_JPEG_QUALITY = 0.7;
         const AI_IMAGE_DETAIL = 'auto';
@@ -4049,40 +4055,97 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} ${message}｜已分類 ${classifiedCount}/${totalFiles}`
                     );
                 };
-                const classificationSettlements = await Promise.allSettled(jobs.map(job =>
-                    classifySingleAiImage({
-                        apiKey,
-                        dataUrl: job.classificationDataUrl,
-                        imageIndex: job.index,
-                        totalFiles,
-                        updateStatus: updateClassificationStatus
-                    }).then(classification => {
-                        classifiedCount += 1;
-                        progress.update('classification', classifiedCount, totalFiles);
-                        return { ...job, classification };
-                    })
-                ));
+                const classificationSettlements = [];
+                const discoveredSmartHundoJobs = [];
+                const smartSettlements = [];
+                const processedSmartIndexes = new Set();
+                let smartHundoDurationMs = 0;
+                for (let start = 0; start < jobs.length; start += AI_CLASSIFICATION_BATCH_SIZE) {
+                    const batch = jobs.slice(start, start + AI_CLASSIFICATION_BATCH_SIZE);
+                    const batchSettlements = await Promise.allSettled(batch.map(job =>
+                        classifySingleAiImage({
+                            apiKey,
+                            dataUrl: job.classificationDataUrl,
+                            imageIndex: job.index,
+                            totalFiles,
+                            updateStatus: updateClassificationStatus
+                        }).then(classification => {
+                            classifiedCount += 1;
+                            progress.update('classification', classifiedCount, totalFiles);
+                            return { ...job, classification };
+                        })
+                    ));
+                    classificationSettlements.push(...batchSettlements);
+                    diagnostics.classification_batches_completed += 1;
+                    if (!isCurrentAutoScanRun(scanRunId)) return;
+
+                    const batchSmartJobs = batchSettlements
+                        .filter(settlement => settlement.status === 'fulfilled')
+                        .map(settlement => settlement.value)
+                        .filter(job => helpers.isSmartHundoClassification(job.classification))
+                        .sort((left, right) => left.index - right.index);
+                    if (batchSmartJobs.length === 0) continue;
+
+                    diagnostics.smart_hundo_priority_trigger_count += 1;
+                    if (!smartSessionId) smartSessionId = beginSmartHundoScanSession();
+                    for (const job of batchSmartJobs) {
+                        discoveredSmartHundoJobs.push(job);
+                        processedSmartIndexes.add(job.index);
+                        diagnostics.smart_hundo_priority_indexes.push(job.index);
+                        writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 已偵測百神截圖，優先辨識中 ${discoveredSmartHundoJobs.length}/${discoveredSmartHundoJobs.length}`);
+                        const smartStartedAt = aiScanNow();
+                        try {
+                            const originalDataUrl = await fileToOriginalDataUrl(job.file);
+                            if (!isCurrentAutoScanRun(scanRunId)) return;
+                            const value = await smartHundoScan({
+                                apiKey,
+                                originalDataUrl,
+                                imageIndex: job.index,
+                                classification: job.classification,
+                                isCurrentRun: isCurrentSmartRun,
+                                statusUpdater: () => {}
+                            });
+                            smartSettlements.push({ status: 'fulfilled', value });
+                        } catch (reason) {
+                            smartSettlements.push({ status: 'rejected', reason });
+                        } finally {
+                            smartHundoDurationMs += aiScanNow() - smartStartedAt;
+                            diagnostics.smart_hundo_priority_processed_count += 1;
+                        }
+                    }
+                    writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 百神辨識完成，繼續分類 ${classifiedCount}/${totalFiles}`);
+                }
                 const classifiedJobs = classificationSettlements
                     .filter(settlement => settlement.status === 'fulfilled')
                     .map(settlement => settlement.value);
                 const classificationFailureCount = classificationSettlements.length - classifiedJobs.length;
                 diagnostics.classified_files = classifiedJobs.length;
-                diagnostics.stage_duration_ms.classification = aiScanNow() - classificationStartedAt;
+                diagnostics.stage_duration_ms.classification = aiScanNow() - classificationStartedAt - smartHundoDurationMs;
+                diagnostics.stage_duration_ms.smart_hundo = smartHundoDurationMs;
                 progress.complete('classification');
                 if (!isCurrentAutoScanRun(scanRunId)) return;
 
                 const { normalJobs, smartHundoJobs } = helpers.partitionImageJobs(classifiedJobs);
+                const finalSmartIndexes = smartHundoJobs.map(job => job.index);
+                const smartInvariantHolds = (
+                    finalSmartIndexes.length === discoveredSmartHundoJobs.length
+                    && finalSmartIndexes.every(index => processedSmartIndexes.has(index))
+                    && processedSmartIndexes.size === finalSmartIndexes.length
+                );
+                if (!smartInvariantHolds) {
+                    console.warn('Smart hundo priority invariant failed', {
+                        classified_smart_count: finalSmartIndexes.length,
+                        processed_smart_count: processedSmartIndexes.size
+                    });
+                    throw new Error('百神優先辨識狀態不一致，已停止以避免重複請求。');
+                }
                 diagnostics.normal_files = normalJobs.length;
                 diagnostics.smart_hundo_files = smartHundoJobs.length;
-                if (smartHundoJobs.length > 0) {
-                    writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 已偵測 ${smartHundoJobs.length} 張百神截圖，將分開掃描；其餘 ${normalJobs.length} 張進行數字辨識`);
-                }
                 const trainerTeamJobs = activeTrainerTeamScanId === trainerTeamContextIdAtStart
                     ? normalJobs.filter(
                         job => job.classification.image_type === 'TRAINER_PROFILE_SCREEN'
                     )
                     : [];
-                if (smartHundoJobs.length > 0) smartSessionId = beginSmartHundoScanSession();
                 if (trainerTeamJobs.length > 0) {
                     trainerTeamScanId = beginTrainerTeamScan();
                 }
@@ -4163,27 +4226,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     };
                 })();
                 const parallelTasksStartedAt = aiScanNow();
-                if (smartHundoJobs.length > 0) progress.update('smartHundo', 0, smartHundoJobs.length);
                 if (trainerTeamJobs.length > 0) progress.update('trainerTeam', 0, trainerTeamJobs.length);
-                const smartTasks = smartHundoJobs.map(job => (async () => {
-                    const originalDataUrl = await fileToOriginalDataUrl(job.file);
-                    if (!isCurrentAutoScanRun(scanRunId)) return null;
-                    return smartHundoScan({
-                        apiKey,
-                        originalDataUrl,
-                        imageIndex: job.index,
-                        classification: job.classification,
-                        isCurrentRun: () => isCurrentAutoScanRun(scanRunId),
-                        statusUpdater: stage => {
-                            if (!isCurrentAutoScanRun(scanRunId)) return;
-                            progress.update(
-                                stage === 'form_verifier' ? 'smartHundoFormVerification' : 'smartHundo',
-                                0,
-                                smartHundoJobs.length
-                            );
-                        }
-                    });
-                })());
                 const trainerTeamTasks = trainerTeamJobs.map(job => runTrainerTeamScan({
                     apiKey,
                     file: job.file,
@@ -4192,12 +4235,8 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 }));
                 const settlements = await Promise.allSettled([
                     normalTask,
-                    ...smartTasks,
                     ...trainerTeamTasks
                 ]);
-                diagnostics.stage_duration_ms.smart_hundo = smartHundoJobs.length > 0
-                    ? aiScanNow() - parallelTasksStartedAt
-                    : 0;
                 diagnostics.stage_duration_ms.trainer_team = trainerTeamJobs.length > 0
                     ? aiScanNow() - parallelTasksStartedAt
                     : 0;
@@ -4205,8 +4244,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 progress.complete('smartHundo');
                 progress.complete('trainerTeam');
                 const normalSettlement = settlements[0];
-                const smartSettlements = settlements.slice(1, 1 + smartTasks.length);
-                const trainerTeamSettlements = settlements.slice(1 + smartTasks.length);
+                const trainerTeamSettlements = settlements.slice(1);
                 if (!isCurrentAutoScanRun(scanRunId)) return;
                 const normalFailureCount = normalSettlement.status === 'rejected'
                     ? normalJobs.length
