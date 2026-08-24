@@ -21,6 +21,7 @@ assert(!extraction.includes('retriedResult'), 'missing fields must not trigger a
 
 const targetBuilder = span('const buildOrdinaryRecoveryTargets =', 'const runOrdinaryRecoveryBatch = async');
 assert(targetBuilder.includes('buildValidationTargets'), 'recovery fields must be grouped by screenshot');
+assert(targetBuilder.includes('DEDICATED_VERIFICATION_FIELDS'), 'dedicated storage fields must be excluded from recovery');
 
 const recovery = span('const runOrdinaryRecoveryBatch = async', 'const runAiExtractionBatch = async');
 assert(recovery.includes('overrideFields: target.fields'), 'one recovery request must include every missing field');
@@ -44,7 +45,7 @@ for (const fragment of [
 
 const progress = span('const createAiScanProgress =', 'const createAiScanDiagnostics =');
 for (const label of ['準備圖片', '圖片分類', '一般欄位掃描', '缺漏欄位補掃', '百神辨識中',
-  '特殊型態複核中', '訓練家隊伍驗證', '最終資料統整中']) {
+  '背包容量驗證', '特殊型態複核中', '訓練家隊伍驗證', '最終資料統整中']) {
   assert(progress.includes(label), `progress phase missing: ${label}`);
 }
 assert(progress.includes('isCurrentAutoScanRun(runId)'), 'stale scan progress must be rejected');
@@ -54,6 +55,7 @@ assert(!source.includes('欄位複檢 1/2') && !source.includes('欄位複檢 2/
 for (const key of [
   'total_files', 'classified_files', 'normal_files', 'smart_hundo_files',
   'ordinary_primary_request_count', 'ordinary_recovery_request_count',
+  'storage_candidate_file_count', 'storage_verification_request_count', 'storage_structural_retry_count',
   'stage_duration_ms', 'total_duration_ms'
 ]) assert(source.includes(key), `diagnostic key missing: ${key}`);
 assert(source.includes('window.lastAiScanDiagnostics'), 'run diagnostics must be published');
