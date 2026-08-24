@@ -770,6 +770,70 @@
             runId === activeAutoScanRunId && activeAutoScanRunId > 0
         );
 
+        const aiScanNow = () => (
+            typeof performance !== 'undefined' && typeof performance.now === 'function'
+                ? performance.now()
+                : Date.now()
+        );
+
+        const createAiScanProgress = (runId, statusWriter) => {
+            const phases = {
+                preparation: { label: '準備圖片', current: 0, total: 0, state: 'pending', priority: 10 },
+                classification: { label: '圖片分類', current: 0, total: 0, state: 'pending', priority: 20 },
+                ordinaryExtraction: { label: '一般欄位掃描', current: 0, total: 0, state: 'pending', priority: 30 },
+                ordinaryRecovery: { label: '缺漏欄位補掃', current: 0, total: 0, state: 'pending', priority: 40 },
+                smartHundo: { label: '百神辨識中', current: 0, total: 0, state: 'pending', priority: 70 },
+                smartHundoFormVerification: { label: '特殊型態複核中', current: 0, total: 0, state: 'pending', priority: 80 },
+                trainerTeam: { label: '訓練家隊伍驗證', current: 0, total: 0, state: 'pending', priority: 60 },
+                finalMerge: { label: '最終資料統整中', current: 0, total: 0, state: 'pending', priority: 90 }
+            };
+            const render = () => {
+                if (!isCurrentAutoScanRun(runId)) return false;
+                const activePhase = Object.values(phases)
+                    .filter(phase => phase.state === 'active')
+                    .sort((left, right) => right.priority - left.priority)[0];
+                if (!activePhase) return false;
+                const count = activePhase.total > 0 ? ` ${activePhase.current}/${activePhase.total}` : '';
+                statusWriter(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} ${activePhase.label}${count}`);
+                return true;
+            };
+            return {
+                phases,
+                update(phaseName, current, total) {
+                    if (!isCurrentAutoScanRun(runId) || !phases[phaseName]) return false;
+                    Object.assign(phases[phaseName], { current, total, state: 'active' });
+                    return render();
+                },
+                complete(phaseName) {
+                    if (!isCurrentAutoScanRun(runId) || !phases[phaseName]) return false;
+                    Object.assign(phases[phaseName], {
+                        state: 'complete',
+                        current: phases[phaseName].total
+                    });
+                    return render();
+                }
+            };
+        };
+
+        const createAiScanDiagnostics = totalFiles => ({
+            total_files: totalFiles,
+            classified_files: 0,
+            normal_files: 0,
+            smart_hundo_files: 0,
+            ordinary_primary_request_count: 0,
+            ordinary_recovery_request_count: 0,
+            stage_duration_ms: {
+                preparation: 0,
+                classification: 0,
+                ordinary_primary: 0,
+                ordinary_recovery: 0,
+                smart_hundo: 0,
+                trainer_team: 0,
+                final_merge: 0
+            },
+            total_duration_ms: 0
+        });
+
         const isCurrentSmartHundoSession = (sessionId) => (
             sessionId === activeSmartHundoSessionId && activeSmartHundoSessionId > 0
         );
@@ -1096,7 +1160,6 @@
             'old_poke', 'old_leg', 'coin', 'poke_bag', 'item_bag', 'rarecandy', 'greenpass', 'masterball',
             'level', 'xp', 'stardust'
         ];
-        const AI_REQUIRED_VALIDATION_PASSES = 2;
         const AI_FIELD_TO_IMAGE_TYPES = Object.entries(AI_IMAGE_TYPE_ALLOWED_FIELDS).reduce((acc, [imageType, fields]) => {
             fields.forEach(field => {
                 if (!acc[field]) acc[field] = [];
@@ -3692,18 +3755,9 @@ ${mappingLines}`;
             const phaseLabels = getAiExtractionPhaseLabels();
             const progressLabel = `${progressIndex + 1}/${totalFiles}`;
             updateStatus(`${phaseLabels.extracting} ${progressLabel}`);
-            let imageResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
+            const imageResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
                 updateStatus(`${phaseLabels.extracting} ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
             });
-
-            const retryableMissingFields = getRetryableMissingFields(imageResult, extractionFields);
-            if (retryableMissingFields.length > 0) {
-                updateStatus(`${phaseLabels.retrying} ${progressLabel}`);
-                const retriedResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
-                    updateStatus(`${phaseLabels.retrying} ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
-                }, retryableMissingFields);
-                imageResult = mergeSingleImageAttempts(imageResult, retriedResult, extractionFields);
-            }
 
             console.log({
                 imageIndex: imageIndex + 1,
@@ -3713,27 +3767,31 @@ ${mappingLines}`;
                 extracted_fields: getExtractedFieldsForLog(imageResult, extractionFields)
             });
 
-            return { imageIndex, imageResult, expectedFields: extractionFields };
+            return {
+                imageIndex,
+                imageResult,
+                expectedFields: extractionFields,
+                missingFields: getRetryableMissingFields(imageResult, extractionFields)
+            };
         };
 
-        const runRequiredFieldValidation = async ({
+        const buildOrdinaryRecoveryTargets = (missingWithScreens = []) => (
+            buildValidationTargets(missingWithScreens)
+        );
+
+        const runOrdinaryRecoveryBatch = async ({
             apiKey,
             dataUrls,
             classifications,
             taskResults = [],
             statusWriter = setAiActionButtonStatus
         }) => {
-            let mergedResult = mergeTaskResultsIntoAiResult(taskResults);
-            let coverage = evaluateRequiredFieldCoverage(mergedResult, classifications, taskResults);
-            const validationTaskResults = [];
-
-            for (let pass = 0; pass < AI_REQUIRED_VALIDATION_PASSES && coverage.missingWithScreens.length > 0; pass += 1) {
-                const validationTargets = buildValidationTargets(coverage.missingWithScreens);
-                if (validationTargets.length === 0) break;
-
-                let completedCount = 0;
-                const totalTargets = validationTargets.length;
-                const passSettlements = await Promise.allSettled(validationTargets.map((target, progressIndex) =>
+            const primaryMergedResult = mergeTaskResultsIntoAiResult(taskResults);
+            const primaryCoverage = evaluateRequiredFieldCoverage(primaryMergedResult, classifications, taskResults);
+            const validationTargets = buildOrdinaryRecoveryTargets(primaryCoverage.missingWithScreens);
+            let completedCount = 0;
+            const totalTargets = validationTargets.length;
+            const settlements = await Promise.allSettled(validationTargets.map((target, progressIndex) =>
                     extractSingleAiImage({
                         apiKey,
                         dataUrl: dataUrls[target.index],
@@ -3743,35 +3801,31 @@ ${mappingLines}`;
                         totalFiles: totalTargets,
                         updateStatus: (message) => {
                             statusWriter(
-                                `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 欄位複檢 ${pass + 1}/${AI_REQUIRED_VALIDATION_PASSES} ${message}｜已完成 ${completedCount}/${totalTargets}`
+                                `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 缺漏欄位補掃 ${completedCount}/${totalTargets}｜${message}`
                             );
                         },
                         overrideFields: target.fields
                     }).then(result => {
                         completedCount += 1;
                         statusWriter(
-                            `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 欄位複檢 ${pass + 1}/${AI_REQUIRED_VALIDATION_PASSES} 統整中｜已完成 ${completedCount}/${totalTargets}`
+                            `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 缺漏欄位補掃 ${completedCount}/${totalTargets}`
                         );
                         return result;
                     })
                 ));
 
-                const passResults = passSettlements
-                    .filter(settlement => settlement.status === 'fulfilled')
-                    .map(settlement => settlement.value);
-                validationTaskResults.push(...passResults);
-                mergedResult = mergeTaskResultsIntoAiResult([...taskResults, ...validationTaskResults]);
-                coverage = evaluateRequiredFieldCoverage(
-                    mergedResult,
-                    classifications,
-                    [...taskResults, ...validationTaskResults]
-                );
-            }
+            const validationTaskResults = settlements
+                .filter(settlement => settlement.status === 'fulfilled')
+                .map(settlement => settlement.value);
+            const allResults = [...taskResults, ...validationTaskResults];
+            const mergedResult = mergeTaskResultsIntoAiResult(allResults);
+            const coverage = evaluateRequiredFieldCoverage(mergedResult, classifications, allResults);
 
             return {
                 mergedResult,
                 coverage,
-                validationTaskResults
+                validationTaskResults,
+                recoveryTargetCount: totalTargets
             };
         };
 
@@ -3831,6 +3885,8 @@ ${mappingLines}`;
             if(files.length === 0) return;
             const scanRunId = beginAutoScanRun();
             const totalFiles = files.length;
+            const scanStartedAt = aiScanNow();
+            const diagnostics = createAiScanDiagnostics(totalFiles);
             let smartSessionId = 0;
             let trainerTeamScanId = 0;
             const trainerTeamContextIdAtStart = activeTrainerTeamScanId;
@@ -3840,6 +3896,7 @@ ${mappingLines}`;
                 setAiActionButtonStatus(statusHtml);
                 return true;
             };
+            const progress = createAiScanProgress(scanRunId, writeRunStatus);
             const isCurrentSmartRun = () => (
                 isCurrentAutoScanRun(scanRunId)
                 && isCurrentSmartHundoSession(smartSessionId)
@@ -3850,16 +3907,22 @@ ${mappingLines}`;
                 const helpers = globalThis.SmartHundoHelpers;
                 if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
                 let preparedCount = 0;
+                const preparationStartedAt = aiScanNow();
+                progress.update('preparation', 0, totalFiles);
                 const jobs = await Promise.all(Array.from(files).map((file, index) =>
                     fileToResizedDataUrl(file).then(classificationDataUrl => {
                         preparedCount += 1;
-                        writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 ${preparedCount}/${totalFiles}`);
+                        progress.update('preparation', preparedCount, totalFiles);
                         return { index, file, classificationDataUrl };
                     })
                 ));
+                diagnostics.stage_duration_ms.preparation = aiScanNow() - preparationStartedAt;
+                progress.complete('preparation');
                 if (!isCurrentAutoScanRun(scanRunId)) return;
 
                 let classifiedCount = 0;
+                const classificationStartedAt = aiScanNow();
+                progress.update('classification', 0, totalFiles);
                 const updateClassificationStatus = (message) => {
                     writeRunStatus(
                         `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} ${message}｜已分類 ${classifiedCount}/${totalFiles}`
@@ -3874,9 +3937,7 @@ ${mappingLines}`;
                         updateStatus: updateClassificationStatus
                     }).then(classification => {
                         classifiedCount += 1;
-                        writeRunStatus(
-                            `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 類型分析完成｜已分類 ${classifiedCount}/${totalFiles}`
-                        );
+                        progress.update('classification', classifiedCount, totalFiles);
                         return { ...job, classification };
                     })
                 ));
@@ -3884,9 +3945,14 @@ ${mappingLines}`;
                     .filter(settlement => settlement.status === 'fulfilled')
                     .map(settlement => settlement.value);
                 const classificationFailureCount = classificationSettlements.length - classifiedJobs.length;
+                diagnostics.classified_files = classifiedJobs.length;
+                diagnostics.stage_duration_ms.classification = aiScanNow() - classificationStartedAt;
+                progress.complete('classification');
                 if (!isCurrentAutoScanRun(scanRunId)) return;
 
                 const { normalJobs, smartHundoJobs } = helpers.partitionImageJobs(classifiedJobs);
+                diagnostics.normal_files = normalJobs.length;
+                diagnostics.smart_hundo_files = smartHundoJobs.length;
                 if (smartHundoJobs.length > 0) {
                     writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 已偵測 ${smartHundoJobs.length} 張百神截圖，將分開掃描；其餘 ${normalJobs.length} 張進行數字辨識`);
                 }
@@ -3899,35 +3965,47 @@ ${mappingLines}`;
                 if (trainerTeamJobs.length > 0) {
                     trainerTeamScanId = beginTrainerTeamScan();
                 }
-                const writeBatchStatus = smartSessionId
-                    ? statusHtml => (
-                        isCurrentAutoScanRun(scanRunId)
-                        && setSmartHundoStatus(smartSessionId, statusHtml)
-                    )
-                    : writeRunStatus;
-
                 const normalDataUrls = normalJobs.map(job => job.classificationDataUrl);
                 const normalClassifications = normalJobs.map(job => job.classification);
+                const ordinaryPrimaryRequestCount = normalClassifications.filter(
+                    classification => getAiExtractionFields(classification).length > 0
+                ).length;
                 const normalTask = (async () => {
+                    const primaryStartedAt = aiScanNow();
+                    progress.update('ordinaryExtraction', 0, ordinaryPrimaryRequestCount);
                     const taskResults = await quickScan({
                         apiKey,
                         dataUrls: normalDataUrls,
                         classifications: normalClassifications,
-                        statusWriter: writeBatchStatus
+                        statusWriter: () => progress.update(
+                            'ordinaryExtraction',
+                            0,
+                            ordinaryPrimaryRequestCount
+                        )
                     });
+                    diagnostics.ordinary_primary_request_count = ordinaryPrimaryRequestCount;
+                    diagnostics.stage_duration_ms.ordinary_primary = aiScanNow() - primaryStartedAt;
+                    progress.complete('ordinaryExtraction');
                     if (!isCurrentAutoScanRun(scanRunId)) return null;
-                    const validationResult = await runRequiredFieldValidation({
+                    const recoveryStartedAt = aiScanNow();
+                    const validationResult = await runOrdinaryRecoveryBatch({
                         apiKey,
                         dataUrls: normalDataUrls,
                         classifications: normalClassifications,
                         taskResults,
-                        statusWriter: writeBatchStatus
+                        statusWriter: () => progress.update('ordinaryRecovery', 0, normalJobs.length)
                     });
+                    diagnostics.ordinary_recovery_request_count = validationResult.recoveryTargetCount;
+                    diagnostics.stage_duration_ms.ordinary_recovery = aiScanNow() - recoveryStartedAt;
+                    progress.complete('ordinaryRecovery');
                     return {
                         ...validationResult,
                         failedJobCount: Number(taskResults.failedJobCount || 0)
                     };
                 })();
+                const parallelTasksStartedAt = aiScanNow();
+                if (smartHundoJobs.length > 0) progress.update('smartHundo', 0, smartHundoJobs.length);
+                if (trainerTeamJobs.length > 0) progress.update('trainerTeam', 0, trainerTeamJobs.length);
                 const smartTasks = smartHundoJobs.map(job => (async () => {
                     const originalDataUrl = await fileToOriginalDataUrl(job.file);
                     if (!isCurrentAutoScanRun(scanRunId)) return null;
@@ -3937,11 +4015,12 @@ ${mappingLines}`;
                         imageIndex: job.index,
                         classification: job.classification,
                         isCurrentRun: () => isCurrentAutoScanRun(scanRunId),
-                        statusUpdater: (stage, attempt, maxRetries) => {
+                        statusUpdater: stage => {
                             if (!isCurrentAutoScanRun(scanRunId)) return;
-                            setSmartHundoStatus(
-                                smartSessionId,
-                                `<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 百神${stage === 'count' ? '總數' : '卡片'}辨識中（API 重試 ${attempt}/${maxRetries}）`
+                            progress.update(
+                                stage === 'form_verifier' ? 'smartHundoFormVerification' : 'smartHundo',
+                                0,
+                                smartHundoJobs.length
                             );
                         }
                     });
@@ -3957,6 +4036,15 @@ ${mappingLines}`;
                     ...smartTasks,
                     ...trainerTeamTasks
                 ]);
+                diagnostics.stage_duration_ms.smart_hundo = smartHundoJobs.length > 0
+                    ? aiScanNow() - parallelTasksStartedAt
+                    : 0;
+                diagnostics.stage_duration_ms.trainer_team = trainerTeamJobs.length > 0
+                    ? aiScanNow() - parallelTasksStartedAt
+                    : 0;
+                progress.complete('smartHundoFormVerification');
+                progress.complete('smartHundo');
+                progress.complete('trainerTeam');
                 const normalSettlement = settlements[0];
                 const smartSettlements = settlements.slice(1, 1 + smartTasks.length);
                 const trainerTeamSettlements = settlements.slice(1 + smartTasks.length);
@@ -4018,6 +4106,8 @@ ${mappingLines}`;
                 } = normalOutcome;
                 let finalCoverage = ordinaryCoverage;
                 if (!isCurrentAutoScanRun(scanRunId)) return;
+                const finalMergeStartedAt = aiScanNow();
+                progress.update('finalMerge', 0, 0);
                 applyAiResultToForm(normalMergedResult);
 
                 if (trainerTeamJobs.length > 0) {
@@ -4251,10 +4341,13 @@ ${mappingLines}`;
                 }
                 const smartFailureCount = smartSettlements.filter(settlement => settlement.status === 'rejected').length;
                 const totalFailureCount = classificationFailureCount + normalFailureCount + smartFailureCount;
+                diagnostics.stage_duration_ms.final_merge = aiScanNow() - finalMergeStartedAt;
+                diagnostics.total_duration_ms = aiScanNow() - scanStartedAt;
+                if (isCurrentAutoScanRun(scanRunId)) window.lastAiScanDiagnostics = diagnostics;
                 if (totalFailureCount > 0) {
                     writeRunStatus(`<i class="fas fa-exclamation-triangle text-amber-600"></i> 掃描完成，但有 ${totalFailureCount} 張失敗；成功結果已保留`);
                 } else if (smartHundoJobs.length === 0) {
-                    writeRunStatus(AI_SUCCESS_LABEL);
+                    writeRunStatus(`AI掃描完成｜${totalFiles}張圖片｜補掃${diagnostics.ordinary_recovery_request_count}張｜${(diagnostics.total_duration_ms / 1000).toFixed(1)}秒`);
                 }
             } catch (error) {
                 if (!isCurrentAutoScanRun(scanRunId)) return;

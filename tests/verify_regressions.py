@@ -758,7 +758,7 @@ def main() -> int:
             source_span(
                 source,
                 "        const AI_REQUIRED_VALIDATION_FIELDS = [",
-                "\n        const AI_REQUIRED_VALIDATION_PASSES =",
+                "\n        const AI_FIELD_TO_IMAGE_TYPES =",
                 "ordinary required-field coverage",
                 include_end=False,
             ),
