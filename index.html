@@ -4383,27 +4383,7 @@ ${mappingLines}`;
             page1.classList.toggle('hidden', pageNumber !== 1);
             page2.classList.toggle('hidden', pageNumber !== 2);
             page3.classList.toggle('hidden', pageNumber !== 3);
-            const titles = { 1: '快速建檔', 2: '雲端清單', 3: '簡帳自動出貨' };
-            const title = document.getElementById('appPageTitle');
-            if (title) title.textContent = titles[pageNumber] || titles[1];
-            document.querySelectorAll('[data-nav-page]').forEach(button => {
-                button.classList.toggle('active', Number(button.dataset.navPage) === pageNumber);
-            });
             if (pageNumber === 3) window.refreshSimpleAccountPendingState();
-        };
-
-        window.togglePanel = function(panelId, trigger) {
-            const panel = document.getElementById(panelId);
-            if (!panel) return;
-            const willOpen = panel.classList.contains('hidden');
-            panel.classList.toggle('hidden', !willOpen);
-            if (trigger) trigger.setAttribute('aria-expanded', String(willOpen));
-        };
-
-        window.closePanel = function(panelId) {
-            const panel = document.getElementById(panelId);
-            if (panel) panel.classList.add('hidden');
-            document.querySelectorAll(`[onclick*="${panelId}"]`).forEach(button => button.setAttribute('aria-expanded', 'false'));
         };
 
         window.resetForm = function() {
@@ -4553,87 +4533,293 @@ ${mappingLines}`;
         };
     </script>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen">
-<style>
-  :root{color-scheme:light} body{overflow-x:hidden} .ui-card{background:#fff;border:1px solid #e2e8f0;border-radius:1rem;box-shadow:0 1px 2px rgba(15,23,42,.04)}
-  .ui-input{width:100%;border:1px solid #cbd5e1;border-radius:.65rem;background:#fff;padding:.65rem .75rem;outline:none;transition:.15s}
-  .ui-input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.13)} .ui-label{display:block;margin-bottom:.4rem;font-size:.75rem;font-weight:600;color:#475569}
-  .ui-btn{min-height:42px;border-radius:.65rem;padding:.6rem 1rem;font-size:.875rem;font-weight:600;transition:.15s} .ui-btn:focus-visible{outline:3px solid rgba(99,102,241,.3);outline-offset:2px}
-  .ui-primary{background:#4f46e5!important;color:white!important}.ui-primary:hover{background:#4338ca!important}.ui-secondary{border:1px solid #cbd5e1;background:#fff;color:#334155}.ui-secondary:hover{background:#f8fafc}
-  .metric-card{border:1px solid #e2e8f0;border-radius:.65rem;background:#f8fafc;padding:.55rem}.metric-card input{width:100%;border:1px solid #cbd5e1;border-radius:.5rem;background:#fff;padding:.4rem .5rem;font-size:1rem;font-weight:700;color:#0f172a;outline:none}
-  .quick-card{border:1px solid #e2e8f0;border-radius:.9rem;background:#fff;padding:1rem;box-shadow:0 1px 2px rgba(15,23,42,.04)}
-  .quick-title{margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;font-size:.95rem;font-weight:700;color:#1e293b}
-  .quick-check{display:flex;min-height:36px;align-items:center;gap:.5rem;border:1px solid #e2e8f0;border-radius:.6rem;padding:.4rem .6rem;font-size:.8rem}
-  details.ui-card>summary{cursor:pointer;list-style:none;padding:1rem 1.25rem;font-weight:600} details.ui-card>summary::-webkit-details-marker{display:none} details.ui-card>summary:after{content:'＋';float:right;color:#64748b} details.ui-card[open]>summary:after{content:'−'}
-  .nav-btn.active{background:#eef2ff;color:#4338ca}.app-page{min-width:0} #submitBtn{background:#4f46e5!important} #submitBtn:hover{background:#4338ca!important}
-  @media(min-width:1024px){.app-shell{padding-left:232px}.app-sidebar{display:flex}.mobile-nav{display:none}.page-area{padding:1.25rem 1.5rem}.metric-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
-  @media(max-width:1023px){.app-sidebar{display:none}.mobile-nav{display:flex}.page-area{padding:1rem}.metric-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
-  @media(max-width:639px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.page-area{padding:.75rem}.ui-card{border-radius:.8rem} details.ui-card>summary{padding:.9rem 1rem}}
-</style>
-<div class="app-shell min-h-screen">
-  <aside class="app-sidebar fixed inset-y-0 left-0 z-40 w-[232px] flex-col border-r border-slate-200 bg-white p-5">
-    <div class="mb-8 flex items-center gap-3"><span class="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 text-white"><i class="fas fa-boxes-stacked"></i></span><div><strong class="block text-slate-900">Pokémon V94</strong><span class="text-xs text-slate-500">進銷存管理</span></div></div>
-    <nav class="space-y-2" aria-label="主要導覽">
-      <button data-nav-page="1" onclick="window.togglePage(1)" aria-label="返回建檔區" class="nav-btn active ui-btn w-full text-left text-slate-600"><i class="fas fa-wand-magic-sparkles mr-3 w-4"></i>快速建檔</button>
-      <button data-nav-page="2" onclick="window.togglePage(2)" class="nav-btn ui-btn w-full text-left text-slate-600"><i class="fas fa-list mr-3 w-4"></i>雲端清單</button>
-      <button data-nav-page="3" onclick="window.togglePage(3)" class="nav-btn ui-btn w-full text-left text-slate-600"><i class="fas fa-bolt mr-3 w-4"></i>簡帳出貨</button>
-    </nav>
-  </aside>
-  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-    <div class="flex min-h-16 items-center justify-between gap-3 px-4 lg:px-8"><div><h1 id="appPageTitle" class="text-lg font-semibold text-slate-900">快速建檔</h1><p class="hidden text-xs text-slate-500 sm:block">Pokémon 帳號庫管理後台</p></div><button type="button" onclick="window.togglePanel('systemSettingsPanel',this)" aria-expanded="false" class="ui-btn ui-secondary"><i class="fas fa-gear mr-2"></i>系統設定</button></div>
-    <nav class="mobile-nav gap-1 overflow-x-auto border-t border-slate-100 px-3 py-2" aria-label="行動版主要導覽"><button data-nav-page="1" onclick="window.togglePage(1)" class="nav-btn active ui-btn whitespace-nowrap">快速建檔</button><button data-nav-page="2" onclick="window.togglePage(2)" class="nav-btn ui-btn whitespace-nowrap">雲端清單</button><button data-nav-page="3" onclick="window.togglePage(3)" class="nav-btn ui-btn whitespace-nowrap">簡帳出貨</button></nav>
-  </header>
-  <div id="systemSettingsPanel" class="hidden fixed inset-0 z-[100] bg-slate-950/40 p-3 sm:p-6" onclick="if(event.target===this)window.closePanel('systemSettingsPanel')"><section aria-label="系統連線設定" class="ml-auto flex h-full w-full max-w-md flex-col bg-white p-5 shadow-2xl sm:rounded-2xl"><div class="mb-6 flex items-center justify-between"><div><h2 class="text-lg font-semibold">系統設定</h2><p class="text-sm text-slate-500">同步與 AI 辨識連線</p></div><button type="button" onclick="window.closePanel('systemSettingsPanel')" class="ui-btn ui-secondary" aria-label="關閉系統設定">✕</button></div><div class="space-y-4"><div><label for="googleSheetId" class="ui-label">Google 試算表 ID</label><input type="text" id="googleSheetId" placeholder="例如：1Ng..." class="ui-input"><p class="mt-1 text-xs text-slate-500">帳號資料同步到哪一份試算表</p></div><div><label for="gasUrl" class="ui-label">Apps Script 同步網址</label><input type="text" id="gasUrl" placeholder="https://script.google..." class="ui-input"><p class="mt-1 text-xs text-slate-500">負責新增、售出、刪除與同步</p></div><div><label for="openaiApiKey" class="ui-label">OpenAI API Key</label><input type="password" id="openaiApiKey" placeholder="sk-..." class="ui-input"><p class="mt-1 text-xs text-slate-500">提供網站內 AI 圖片辨識</p></div><button id="saveBtn" onclick="window.saveSettings()" class="ui-btn ui-primary w-full">💾 儲存以上設定</button></div></section></div>
-  <main class="page-area mx-auto max-w-[1500px]">
-    <div id="mainPage1" class="app-page space-y-5">
-      <div class="flex items-end justify-between gap-3"><div><h2 class="text-2xl font-semibold text-slate-900">快速建檔</h2><p class="mt-1 text-sm text-slate-500">集中檢視帳號資源、AI 結果與上架資料。</p></div><button type="button" onclick="window.resetForm()" class="ui-btn ui-secondary">清除表單</button></div>
-      <form id="pokeInputForm" class="space-y-4">
-        <section class="quick-card">
-          <label for="g_id" class="ui-label">帳號代碼</label>
-          <input type="text" id="g_id" placeholder="例如：AB1234" class="ui-input text-base font-semibold" oninput="this.value = this.value.replace(/\s+/g, ';')">
-          <div class="mt-2 flex flex-wrap gap-2" aria-label="快速複製 Pokémon GO 搜尋條件">
-            <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="ui-btn ui-secondary !min-h-0 !px-3 !py-1.5 text-xs">神獸總數</button><button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="ui-btn ui-secondary !min-h-0 !px-3 !py-1.5 text-xs">完美神獸</button><button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="ui-btn ui-secondary !min-h-0 !px-3 !py-1.5 text-xs">色違神獸</button><button type="button" onclick="window.copySimpleText('年16-20', this)" class="ui-btn ui-secondary !min-h-0 !px-3 !py-1.5 text-xs">年16-20</button><button type="button" onclick="window.copySimpleText('年16-20&傳說的寶可夢,幻,究極異獸', this)" class="ui-btn ui-secondary !min-h-0 !px-3 !py-1.5 text-xs">16-20神獸</button>
-          </div>
-        </section>
-        <div class="grid items-stretch gap-4 lg:grid-cols-[48fr_52fr]">
-          <section id="quickResourceSection" class="quick-card">
-            <h3 class="quick-title"><span aria-hidden="true">📦</span>資源資料</h3>
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-4">
-              <div><label for="st_old_poke" class="ui-label">16-20怪</label><input type="number" id="st_old_poke" class="ui-input"></div><div><label for="st_old_leg" class="ui-label">16-20神</label><input type="number" id="st_old_leg" class="ui-input"></div><div><label for="st_masterball" class="ui-label">大師球</label><input type="number" id="st_masterball" class="ui-input"></div><div><label for="st_greenpass" class="ui-label">綠票/卷</label><input type="number" id="st_greenpass" class="ui-input"></div><div><label for="st_rarecandy" class="ui-label">神奇糖果</label><input type="number" id="st_rarecandy" class="ui-input"></div><div><label for="st_coin" class="ui-label">寶可幣</label><input type="number" id="st_coin" class="ui-input"></div><div><label for="st_poke_bag" class="ui-label">寶可夢包</label><input type="number" id="st_poke_bag" class="ui-input"></div><div><label for="st_item_bag" class="ui-label">道具背包</label><input type="number" id="st_item_bag" class="ui-input"></div>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+    <header class="bg-white border-b p-4 sticky top-0 z-50 shadow-sm flex justify-between items-center flex-wrap gap-2">
+        <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-800">
+            <i class="fas fa-shield-alt"></i> 寶可夢進銷存 V94 極致旗艦版
+        </h1>
+        <div class="flex gap-2 items-start flex-wrap" aria-label="系統連線設定">
+            <div class="w-32">
+                <label for="googleSheetId" class="block text-[11px] font-bold text-indigo-800 mb-1">Google 試算表 ID</label>
+                <input type="text" id="googleSheetId" placeholder="例如：1Ng..." class="border p-1.5 rounded text-xs w-full outline-none bg-white">
+                <p class="mt-1 text-[10px] leading-tight text-gray-500">帳號資料同步到哪一份試算表</p>
             </div>
-          </section>
-          <section id="quickAiSection" class="quick-card">
-            <h3 class="quick-title"><span aria-hidden="true">🤖</span>AI 解析清單</h3>
-            <div class="rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 p-3 text-center">
-              <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)"><label for="imageInput" class="inline-flex cursor-pointer items-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-indigo-700 shadow-sm ring-1 ring-indigo-200"><i class="fas fa-plus mr-2"></i>選擇截圖</label>
-              <div id="imagePreviewContainer" class="mt-2 flex flex-wrap justify-center gap-2"></div><div id="aiActionButtons" class="hidden mx-auto mt-2 max-w-xl"><button type="button" id="aiAutoBtn" onclick="autoScan()" class="ui-btn ui-primary w-full"><i class="fas fa-wand-magic-sparkles mr-2"></i>AI自動掃描</button><p id="aiAutoStatus" class="mt-2 min-h-5 text-sm font-medium text-indigo-700" aria-live="polite"></p></div>
+            <div class="w-32">
+                <label for="gasUrl" class="block text-[11px] font-bold text-indigo-800 mb-1">Apps Script 同步網址</label>
+                <input type="text" id="gasUrl" placeholder="https://script.google..." class="border p-1.5 rounded text-xs w-full outline-none bg-white">
+                <p class="mt-1 text-[10px] leading-tight text-gray-500">負責新增、售出、刪除與同步</p>
             </div>
-            <div class="mt-3 grid gap-3 sm:grid-cols-2"><div><label for="g_rare_list" class="ui-label">稀有寶可夢備註</label><textarea id="g_rare_list" placeholder="稀有怪..." class="ui-input min-h-20"></textarea></div><div><label for="g_hundos" class="ui-label">百神清單</label><textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="百神清單..." class="ui-input min-h-28"></textarea></div></div>
-            <div class="metric-grid mt-3 grid grid-cols-2 gap-2"><div class="metric-card"><label for="st_hundo_leg" class="ui-label">百神數</label><input type="number" id="st_hundo_leg"></div><div class="metric-card"><label for="st_legend" class="ui-label">神獸總</label><input type="number" id="st_legend"></div><div class="metric-card"><label for="st_shiny" class="ui-label">色違總</label><input type="number" id="st_shiny"></div><div class="metric-card"><label for="st_shiny_leg" class="ui-label">色違神</label><input type="number" id="st_shiny_leg"></div><div class="metric-card"><label for="st_costume" class="ui-label">活動總</label><input type="number" id="st_costume"></div><div class="metric-card"><label for="st_bg_comm" class="ui-label">紀念卡</label><input type="number" id="st_bg_comm"></div><div class="metric-card"><label for="st_bg_special" class="ui-label">特別卡</label><input type="number" id="st_bg_special"></div><div class="metric-card"><label for="st_dyna" class="ui-label">極巨化</label><input type="number" id="st_dyna"></div><div class="metric-card"><label for="st_giga" class="ui-label">超極巨</label><input type="number" id="st_giga"></div><div class="metric-card"><label for="st_perfect" class="ui-label">完美數</label><input type="number" id="st_perfect"></div></div>
-          </section>
+            <div class="w-32">
+                <label for="openaiApiKey" class="block text-[11px] font-bold text-indigo-800 mb-1">OpenAI API Key</label>
+                <input type="password" id="openaiApiKey" placeholder="sk-..." class="border p-1.5 rounded text-xs w-full bg-yellow-50 outline-none">
+                <p class="mt-1 text-[10px] leading-tight text-gray-500">提供網站內 AI 圖片辨識</p>
+            </div>
+            <button id="saveBtn" onclick="window.saveSettings()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-xs font-bold transition-all shadow-sm mt-5">💾 儲存以上設定</button>
         </div>
-        <div class="grid items-start gap-4 lg:grid-cols-2">
-          <section id="quickResearchSection" class="quick-card"><h3 class="quick-title"><span aria-hidden="true">🔥</span>特殊調查</h3><div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-3">
-            <label class="quick-check"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label><label class="quick-check"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label><label class="quick-check"><input type="checkbox" id="chk_sp_3" value="凱路迪歐">凱路迪歐</label><label class="quick-check"><input type="checkbox" id="chk_sp_4" value="至尊鳳王">至尊鳳王</label><label class="quick-check"><input type="checkbox" id="chk_sp_5" value="至尊洛奇亞">至尊洛奇亞</label><label class="quick-check"><input type="checkbox" id="chk_sp_6" value="瑪夏多">瑪夏多</label><label class="quick-check"><input type="checkbox" id="chk_sp_7" value="色違基拉祈">色違基拉祈</label><label class="quick-check"><input type="checkbox" id="chk_sp_8" value="色違謝米">色違謝米</label><label class="quick-check"><input type="checkbox" id="chk_sp_9" value="波爾凱尼恩">波爾凱尼恩</label><label class="quick-check"><input type="checkbox" id="chk_sp_10" value="薩戮德">薩戮德</label><label class="quick-check"><input type="checkbox" id="chk_sp_11" value="凱路迪歐,瑪夏多">凱路迪歐,瑪夏多</label><label class="quick-check"><input type="checkbox" id="chk_sp_12" value="捷拉奧拉">捷拉奧拉</label><label class="quick-check"><input type="checkbox" id="chk_sp_13" value="色違蒂安希">色違蒂安希</label><label class="quick-check"><input type="checkbox" id="chk_sp_14" value="蒂安希">蒂安希</label><label class="quick-check"><input type="checkbox" id="chk_sp_15" value="色違凱路迪歐">色違凱路迪歐</label>
-          </div></section>
-          <section id="quickFusionSection" class="quick-card"><h3 class="quick-title"><span aria-hidden="true">🧬</span>合體與 Mega</h3><div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            <div><label class="quick-check"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label><select id="sel_kyurem" class="dynamic-select ui-input mt-1 hidden"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select></div>
-            <div><label class="quick-check"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label><select id="sel_dogs" class="dynamic-select ui-input mt-1 hidden"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select></div>
-            <div><label class="quick-check"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪</label><select id="sel_necrozma" class="dynamic-select ui-input mt-1 hidden"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select></div>
-            <div><label class="quick-check"><input type="checkbox" id="chk_mewtwo" onchange="document.getElementById('sel_mewtwo').classList.toggle('hidden', !this.checked)">超夢</label><select id="sel_mewtwo" class="dynamic-select ui-input mt-1 hidden"><option value="⭐️Mega超夢雙型態⭐️">Mega超夢雙型態</option><option value="⭐️Mega超夢X⭐️">Mega超夢X</option><option value="⭐️Mega超夢Y⭐️">Mega超夢Y</option></select></div>
-            <div><label class="quick-check"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label><select id="sel_lati" class="dynamic-select ui-input mt-1 hidden"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select></div>
-            <div><label class="quick-check"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label><select id="sel_hoenn" class="dynamic-select ui-input mt-1 hidden"><option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option><option value="⭐️豐原雙神可 Mega⭐️">豐原雙神可 Mega</option><option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option><option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option><option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option></select></div>
-            <label class="quick-check"><input type="checkbox" id="chk_dyna">可打極巨化</label><label class="quick-check"><input type="checkbox" id="chk_groudon">固拉多斷崖之劍</label><label class="quick-check"><input type="checkbox" id="chk_kyogre">蓋歐卡根源波動</label><label class="quick-check"><input type="checkbox" id="chk_rayquaza">烈空坐畫龍點睛</label>
-          </div></section>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-4 py-8">
+
+        <div id="mainPage1" class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 class="text-lg font-bold text-gray-800">快速建檔區</h2>
+                <div class="flex gap-2">
+                    <button type="button" onclick="window.togglePage(3)" class="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-emerald-700 transition transform active:scale-95">⚡ 簡帳自動出貨</button>
+                    <button type="button" onclick="window.togglePage(2)" class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95">📋 前往雲端清單</button>
+                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold transition">🧹 清除</button>
+                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md transition">取消編輯</button>
+                    <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
+                </div>
+            </div>
+
+            <form id="pokeInputForm" class="space-y-5">
+
+                <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100 shadow-sm">
+                    <label class="text-sm font-bold text-blue-800 border-b border-blue-200 block pb-2 mb-3">
+                        <i class="fas fa-id-card"></i> 帳號代碼
+                    </label>
+                    <input type="text" id="g_id" placeholder="例如：AB1234" class="w-full p-3 border border-blue-200 rounded-lg font-bold text-base outline-none focus:ring-2 focus:ring-blue-400 shadow-inner" oninput="this.value = this.value.replace(/\s+/g, ';')">
+                </div>
+
+                <div class="flex flex-wrap gap-2 items-center text-[11px] bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-sm">
+                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
+                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
+                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
+                    <button type="button" onclick="window.copySimpleText('年16-20', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">年16-20</button>
+                    <button type="button" onclick="window.copySimpleText('年16-20&傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">16-20神獸</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 md:gap-4">
+
+                    <div class="flex flex-col gap-3 bg-green-50/30 p-3 md:p-4 rounded-xl border border-green-100 shadow-sm h-full">
+                        <label class="text-xs md:text-sm font-bold text-green-800 border-b border-green-200 block pb-1 md:pb-2 truncate"><i class="fas fa-box-open text-green-600"></i> 資源數據</label>
+                        <div class="grid grid-cols-1 lg:grid-cols-4 gap-1 md:gap-3 text-[10px] md:text-[11px]">
+                            <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">16-20怪</label><input type="number" id="st_old_poke" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
+                            <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">16-20神</label><input type="number" id="st_old_leg" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
+                            <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">大師球</label><input type="number" id="st_masterball" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
+                            <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">綠票/卷</label><input type="number" id="st_greenpass" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
+                            <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">神奇糖果</label><input type="number" id="st_rarecandy" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
+                            <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">寶可幣</label><input type="number" id="st_coin" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
+                            <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">寶可夢包</label><input type="number" id="st_poke_bag" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
+                            <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">道具背包</label><input type="number" id="st_item_bag" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-3 bg-gray-50/80 p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm h-full">
+                        <label class="text-xs md:text-sm font-bold text-gray-700 border-b block pb-1 md:pb-2 truncate"><i class="fas fa-robot text-gray-500"></i> AI 解析清單</label>
+
+                        <div class="bg-white p-2 md:p-3 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
+                            <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
+                            <label for="imageInput" class="cursor-pointer bg-white border px-2 py-1.5 md:px-4 md:py-2 rounded shadow-sm text-[11px] md:text-sm font-bold hover:bg-gray-50 transition text-center w-full">選截圖</label>
+                            <div id="imagePreviewContainer" class="flex flex-wrap gap-1 md:gap-2 w-full py-1 md:py-2 justify-center"></div>
+                            <div id="aiActionButtons" class="hidden w-full mt-1 space-y-1">
+                                <button type="button" id="aiAutoBtn" onclick="autoScan()" class="w-full bg-indigo-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-indigo-700 transition">🤖 AI自動掃描</button>
+                                <p id="aiAutoStatus" class="px-1 text-[10px] text-indigo-600 min-h-[1rem] leading-relaxed"></p>
+                                <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；只有命中「傳說的寶可夢,幻,究極異獸&amp;4*」的圖片才會辨識百神清單，其餘圖片只讀對應欄位，最後統一回填。</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 md:space-y-3">
+                            <textarea id="g_rare_list" placeholder="稀有怪..." class="w-full p-1.5 border border-gray-200 rounded-lg text-[10px] md:text-xs h-12 md:h-16 bg-white outline-none focus:ring-2 focus:ring-gray-300"></textarea>
+                            <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="百神清單..." class="w-full p-1.5 border border-blue-200 bg-blue-50/30 rounded-lg text-[10px] md:text-xs h-16 md:h-20 font-bold outline-none focus:ring-2 focus:ring-blue-300"></textarea>
+
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-1 md:gap-2 text-[10px] mt-1">
+                                <div><label class="block text-gray-500 mb-0.5 text-center">百神數</label><input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">神獸總</label><input type="number" id="st_legend" class="w-full p-1 border rounded outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">色違總</label><input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">色違神</label><input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">活動總</label><input type="number" id="st_costume" class="w-full p-1 border rounded outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">紀念卡</label><input type="number" id="st_bg_comm" class="w-full p-1 border rounded outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">特別卡</label><input type="number" id="st_bg_special" class="w-full p-1 border rounded outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">極巨化</label><input type="number" id="st_dyna" class="w-full p-1 border rounded outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">超極巨</label><input type="number" id="st_giga" class="w-full p-1 border rounded outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">完美數</label><input type="number" id="st_perfect" class="w-full p-1 border rounded outline-none text-center"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 md:gap-4">
+
+                    <div class="bg-red-50/30 p-3 md:p-4 rounded-xl border border-red-100 space-y-3 shadow-sm">
+                        <label class="text-xs md:text-sm font-bold text-red-800 border-b border-red-200 block pb-1 truncate"><i class="fas fa-fire"></i> 特殊調查</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 text-[10px] md:text-[11px]">
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_1" value="色違美洛耶塔">色違美洛耶塔</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_2" value="色違夢幻">色違夢幻</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_3" value="凱路迪歐">凱路迪歐</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_4" value="至尊鳳王">至尊鳳王</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_5" value="至尊洛奇亞">至尊洛奇亞</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_6" value="瑪夏多">瑪夏多</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_7" value="色違基拉祈">色違基拉祈</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_8" value="色違謝米">色違謝米</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_9" value="波爾凱尼恩">波爾凱尼恩</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_10" value="薩戮德">薩戮德</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_11" value="凱路迪歐,瑪夏多">凱路迪歐,瑪夏多</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_12" value="捷拉奧拉">捷拉奧拉</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_13" value="色違蒂安希">色違蒂安希</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_14" value="蒂安希">蒂安希</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="chk_sp_15" value="色違凱路迪歐">色違凱路迪歐</label>
+                        </div>
+                    </div>
+
+                    <div class="bg-purple-50/30 p-3 md:p-4 rounded-xl border border-purple-100 space-y-3 shadow-sm">
+                        <label class="text-xs md:text-sm font-bold text-purple-800 border-b border-purple-200 block pb-1 truncate"><i class="fas fa-dna"></i> 合體與 Mega</label>
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-x-2 gap-y-2 text-[10px] md:text-[11px]">
+                            <div class="space-y-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyurem" onchange="document.getElementById('sel_kyurem').classList.toggle('hidden', !this.checked)">酋雷姆合體</label>
+                                <select id="sel_kyurem" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️酋雷姆雙型態合體‼️">雙型態合體</option><option value="‼️闇黑酋雷姆合體‼️">闇黑型態合體</option><option value="‼️焰白酋雷姆合體‼️">焰白型態合體</option></select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_zamazenta" onchange="document.getElementById('sel_dogs').classList.toggle('hidden', !this.checked)">雙狗劍盾</label>
+                                <select id="sel_dogs" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️雙狗劍盾型態‼️">雙狗劍盾</option><option value="‼️蒼響劍盾型態‼️">蒼響劍盾</option><option value="‼️藏瑪然特劍盾型態‼️">藏瑪然特</option></select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_necrozma" onchange="document.getElementById('sel_necrozma').classList.toggle('hidden', !this.checked)">奈克洛茲瑪</label>
+                                <select id="sel_necrozma" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="‼️奈克洛茲瑪雙型態合體‼️">雙型態合體</option><option value="‼️奈克洛茲瑪日獅型態合體‼️">日獅型態</option><option value="‼️奈克洛茲瑪月亮型態合體‼️">月亮型態</option></select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_mewtwo" onchange="document.getElementById('sel_mewtwo').classList.toggle('hidden', !this.checked)">超夢</label>
+                                <select id="sel_mewtwo" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️Mega超夢雙型態⭐️">Mega超夢雙型態</option><option value="⭐️Mega超夢X⭐️">Mega超夢X</option><option value="⭐️Mega超夢Y⭐️">Mega超夢Y</option></select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_lati" onchange="document.getElementById('sel_lati').classList.toggle('hidden', !this.checked)">飛機兄妹 Mega</label>
+                                <select id="sel_lati" class="dynamic-select hidden w-full p-1 border rounded bg-white"><option value="⭐️飛機兄妹可Mega⭐️">飛機兄妹可Mega</option><option value="⭐️拉帝歐斯可Mega⭐️">拉帝歐斯可Mega</option><option value="⭐️拉帝亞斯可Mega⭐️">拉帝亞斯可Mega</option></select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
+                                <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white">
+                                    <option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option>
+                                    <option value="⭐️豐原雙神可 Mega⭐️">豐原雙神可 Mega</option>
+                                    <option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option>
+                                    <option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option>
+                                    <option value="⭐️烈空坐能量夠Mega⭐️">烈空坐能量夠Mega</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-col gap-2 pt-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_dyna">可打極巨化</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_groudon">固拉多斷崖之劍</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_kyogre">蓋歐卡根源波動</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" id="chk_rayquaza">烈空坐畫龍點睛</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <label class="text-sm font-bold text-gray-700 border-b block pb-2"><i class="fas fa-info-circle text-gray-500"></i> 基本細節</label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div>
+                            <label class="block text-[11px] text-gray-500 mb-1 font-bold">等級</label>
+                            <input type="number" id="g_level" class="w-full p-2 border border-gray-200 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-gray-500 mb-1 font-bold">隊伍</label>
+                            <select id="g_team" class="w-full p-2 border border-gray-200 rounded-md text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400">
+                                <option value="">請手動確認</option><option>藍隊</option><option>紅隊</option><option>黃隊</option>
+                            </select>
+                            <p id="trainerTeamStatus" class="mt-1 text-[10px] text-amber-700"></p>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-gray-500 mb-1 font-bold">經驗 (萬)</label>
+                            <input type="number" id="g_xp" class="w-full p-2 border border-gray-200 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-gray-500 mb-1 font-bold">星塵 (萬)</label>
+                            <input type="text" id="g_stardust" class="w-full p-2 border border-gray-200 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-gray-500 mb-1 font-bold">價格</label>
+                            <input type="number" id="g_price" class="w-full p-2 border-yellow-400 bg-yellow-50 font-bold rounded-md text-sm outline-none focus:ring-2 focus:ring-yellow-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-gray-500 mb-1 font-bold">狀態</label>
+                            <select id="g_item_status" class="w-full p-2 border border-green-300 bg-green-50 font-bold rounded-md text-sm text-green-700 outline-none focus:ring-2 focus:ring-green-500">
+                                <option value="active">🟢 現貨</option>
+                                <option value="sold">🔴 售出</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+            </form>
         </div>
-        <section id="quickListingSection" class="quick-card"><h3 class="quick-title">基本細節 / 上架資訊</h3><div class="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6"><div><label for="g_level" class="ui-label">等級</label><input type="number" id="g_level" class="ui-input"></div><div><label for="g_team" class="ui-label">隊伍</label><select id="g_team" class="ui-input"><option value="">請手動確認</option><option>藍隊</option><option>紅隊</option><option>黃隊</option></select><p id="trainerTeamStatus" class="mt-1 text-xs text-amber-700"></p></div><div><label for="g_xp" class="ui-label">經驗 (萬)</label><input type="number" id="g_xp" class="ui-input"></div><div><label for="g_stardust" class="ui-label">星塵 (萬)</label><input type="text" id="g_stardust" class="ui-input"></div><div><label for="g_price" class="ui-label">價格</label><input type="number" id="g_price" class="ui-input font-semibold"></div><div><label for="g_item_status" class="ui-label">狀態</label><select id="g_item_status" class="ui-input"><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select></div></div></section>
-        <div class="sticky bottom-3 z-20 flex flex-wrap justify-end gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur"><button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="ui-btn ui-secondary hidden">取消編輯</button><button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="ui-btn ui-primary px-6"><i class="fas fa-cloud-arrow-up mr-2"></i>同步至雲端列表</button></div>
-      </form>
-    </div>
-    <div id="mainPage2" class="app-page hidden space-y-5"><div><h2 class="text-2xl font-semibold text-slate-900">雲端清單 <span class="text-base font-normal text-slate-500">(<span id="inventoryCount">0</span>)</span></h2><p class="mt-1 text-sm text-slate-500">搜尋、排序與管理雲端帳號庫。</p></div><section class="ui-card p-4 sm:p-5"><div class="grid gap-3 md:grid-cols-[minmax(220px,1fr)_160px_160px]"><div><label for="searchInput" class="ui-label">搜尋帳號</label><input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="ui-input"></div><div><label for="filterStatus" class="ui-label">狀態</label><select id="filterStatus" onchange="renderInventory()" class="ui-input"><option value="all">全部</option><option value="active">現貨</option><option value="sold">售出</option></select></div><div><label for="sortMode" class="ui-label">排序</label><select id="sortMode" onchange="renderInventory()" class="ui-input"><option value="priceDesc">價格高 → 低</option><option value="priceAsc">價格低 → 高</option><option value="newest">最新</option></select></div></div><div class="mt-4 flex flex-wrap gap-2"><button type="button" onclick="bulkUpdateAccountIds()" class="ui-btn ui-secondary">批量修復舊代碼</button><button type="button" onclick="window.bulkMarkAsSold(this)" class="ui-btn border border-amber-300 bg-amber-50 text-amber-800">一鍵補塗全部</button><button type="button" onclick="syncAllToSheets(this)" class="ui-btn ui-primary">鏡像同步目前排序</button></div></section><section class="ui-card overflow-hidden"><div class="overflow-x-auto"><table class="w-full min-w-[720px] text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-5 py-3 border-b">代碼</th><th class="px-5 py-3 border-b">資訊</th><th class="px-5 py-3 border-b">售價</th><th class="px-5 py-3 border-b text-center">操作</th><th class="px-5 py-3 border-b text-center">刪除</th></tr></thead><tbody id="inventoryBody" class="divide-y divide-slate-100"></tbody></table></div></section></div>
-    <div id="simpleAccountPage" class="app-page hidden space-y-5"><div class="flex items-end justify-between gap-3"><div><h2 class="text-2xl font-semibold text-slate-900">簡帳自動出貨</h2><p class="mt-1 text-sm text-slate-500">選擇商品，每次確認取得 1 組帳號。</p></div><button type="button" onclick="window.togglePanel('simpleAccountSettingsPanel',this)" aria-expanded="false" class="ui-btn ui-secondary"><i class="fas fa-gear mr-2"></i>連線設定</button></div><section id="simpleAccountSettingsPanel" class="ui-card hidden p-4 sm:p-6" aria-label="簡帳連線設定"><div class="mb-4 flex justify-between"><h3 class="font-semibold">簡帳連線設定</h3><button type="button" onclick="window.closePanel('simpleAccountSettingsPanel')" class="text-slate-500" aria-label="關閉連線設定">✕</button></div><div class="grid gap-4 md:grid-cols-3"><div><label for="simpleAccountSpreadsheetId" class="ui-label">簡帳試算表 ID</label><input type="text" id="simpleAccountSpreadsheetId" autocomplete="off" class="ui-input"><p class="mt-1 text-xs text-slate-500">必須與 Apps Script 伺服器設定相同。</p></div><div><label for="simpleAccountGasUrl" class="ui-label">簡帳出貨 Apps Script 網址</label><input type="url" id="simpleAccountGasUrl" autocomplete="off" class="ui-input"><p class="mt-1 text-xs text-slate-500">使用獨立簡帳出貨部署網址。</p></div><div><label for="simpleAccountFulfillmentSecret" class="ui-label">簡帳出貨密鑰</label><input type="password" id="simpleAccountFulfillmentSecret" autocomplete="off" class="ui-input"><p class="mt-1 text-xs text-slate-500">只會放在 POST 內容中。</p></div></div><button id="saveSimpleAccountSettingsBtn" type="button" onclick="window.saveSimpleAccountSettings()" class="ui-btn ui-primary mt-4">💾 儲存簡帳設定</button></section><section id="simpleAccountPendingPanel" class="hidden rounded-xl border-2 border-red-300 bg-red-50 p-4" aria-live="assertive"><h3 class="font-semibold text-red-800">上次出貨結果尚未確認</h3><p id="simpleAccountPendingDetail" class="mt-1 text-sm text-red-700"></p><button id="retrySimpleAccountFulfillmentBtn" type="button" onclick="window.retrySimpleAccountFulfillment()" class="ui-btn mt-3 bg-red-700 text-white disabled:opacity-50">重新查詢上次出貨</button></section><div id="simpleAccountFulfillmentStatus" class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-800" aria-live="polite">請先確認簡帳連線設定，再選擇一項商品。</div><section><h3 class="mb-3 font-semibold">選擇商品</h3><div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"><button type="button" data-simple-account-product="1百神" onclick="window.fulfillSimpleAccount('1百神', this)" class="group flex min-h-36 flex-col items-start justify-between rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md disabled:bg-slate-100"><span class="text-lg font-semibold text-slate-900">1百神</span><span class="font-semibold text-indigo-600">立即出貨 <i class="fas fa-arrow-right ml-1"></i></span></button><button type="button" data-simple-account-product="2百神" onclick="window.fulfillSimpleAccount('2百神', this)" class="group flex min-h-36 flex-col items-start justify-between rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md disabled:bg-slate-100"><span class="text-lg font-semibold text-slate-900">2百神</span><span class="font-semibold text-indigo-600">立即出貨 <i class="fas fa-arrow-right ml-1"></i></span></button><button type="button" data-simple-account-product="3百神" onclick="window.fulfillSimpleAccount('3百神', this)" class="group flex min-h-36 flex-col items-start justify-between rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md disabled:bg-slate-100"><span class="text-lg font-semibold text-slate-900">3百神</span><span class="font-semibold text-indigo-600">立即出貨 <i class="fas fa-arrow-right ml-1"></i></span></button><button type="button" data-simple-account-product="無極汰那" onclick="window.fulfillSimpleAccount('無極汰那', this)" class="group flex min-h-36 flex-col items-start justify-between rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md disabled:bg-slate-100"><span class="text-lg font-semibold text-slate-900">無極汰那</span><span class="font-semibold text-indigo-600">立即出貨 <i class="fas fa-arrow-right ml-1"></i></span></button><button type="button" data-simple-account-product="Mega烈空坐" onclick="window.fulfillSimpleAccount('Mega烈空坐', this)" class="group flex min-h-36 flex-col items-start justify-between rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md disabled:bg-slate-100"><span class="text-lg font-semibold text-slate-900">Mega烈空坐</span><span class="font-semibold text-indigo-600">立即出貨 <i class="fas fa-arrow-right ml-1"></i></span></button></div></section></div>
-  </main>
-</div>
+
+        <div id="mainPage2" class="hidden bg-white rounded-2xl shadow-sm border overflow-hidden mt-4">
+            <div class="p-4 bg-gray-50 border-b font-bold flex justify-between items-center flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="window.togglePage(1)" class="bg-gray-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md hover:bg-gray-600 transition transform active:scale-95">⬅️ 返回建檔區</button>
+                    <button type="button" onclick="window.togglePage(3)" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md hover:bg-emerald-700 transition transform active:scale-95">⚡ 簡帳自動出貨</button>
+                    <span class="text-indigo-900 ml-2"><i class="fas fa-list-ul mr-1"></i> 雲端清單 (<span id="inventoryCount">0</span>)</span>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap mt-2 sm:mt-0">
+                    <input type="text" id="searchInput" oninput="renderInventory()" placeholder="搜尋代碼..." class="border p-1.5 rounded text-xs w-32 outline-none">
+                    <button type="button" onclick="bulkUpdateAccountIds()" class="bg-orange-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🛠️ 批量修復舊代碼空白</button>
+                    <button type="button" onclick="window.bulkMarkAsSold(this)" class="bg-amber-400 text-gray-900 px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🟡 一鍵補塗全部</button>
+                    <button type="button" onclick="syncAllToSheets(this)" class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition transform active:scale-95">🔄 鏡像同步目前排序</button>
+                    <select id="filterStatus" onchange="renderInventory()" class="border p-1.5 rounded text-xs text-indigo-700 bg-indigo-50 outline-none"><option value="all">📦 全部</option><option value="active">🟢 現貨</option><option value="sold">🔴 售出</option></select>
+                    <select id="sortMode" onchange="renderInventory()" class="border p-1.5 rounded text-xs outline-none"><option value="priceDesc">💰 高 ➔ 低</option><option value="priceAsc">💰 低 ➔ 高</option><option value="newest">🆕 最新</option></select>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-100/50"><tr><th class="px-4 py-3 border-b">代碼</th><th class="px-4 py-3 border-b">資訊</th><th class="px-4 py-3 border-b">售價</th><th class="px-4 py-3 border-b text-center">操作</th><th class="px-4 py-3 border-b text-center">刪除</th></tr></thead>
+                    <tbody id="inventoryBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="simpleAccountPage" class="hidden space-y-4 mt-4">
+            <section class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                <div class="p-4 bg-emerald-50 border-b border-emerald-100 flex justify-between items-center flex-wrap gap-3">
+                    <div class="flex items-center gap-3">
+                        <button type="button" onclick="window.togglePage(1)" class="bg-gray-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md hover:bg-gray-600 transition transform active:scale-95">⬅️ 返回建檔區</button>
+                        <h2 class="text-lg font-bold text-emerald-900">⚡ 簡帳自動出貨</h2>
+                    </div>
+                    <p class="text-xs text-emerald-800">每次確認只會取得 1 組帳號</p>
+                </div>
+
+                <div class="p-5 space-y-5">
+                    <section class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4" aria-label="簡帳連線設定">
+                        <h3 class="font-bold text-emerald-900 mb-3">簡帳連線設定</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label for="simpleAccountSpreadsheetId" class="block text-xs font-bold text-emerald-900 mb-1">簡帳試算表 ID</label>
+                                <input type="text" id="simpleAccountSpreadsheetId" autocomplete="off" class="border border-emerald-200 p-2 rounded-lg text-sm w-full outline-none bg-white focus:ring-2 focus:ring-emerald-300">
+                                <p class="mt-1 text-[11px] leading-relaxed text-gray-600">必須與簡帳 Apps Script 的伺服器設定完全相同。</p>
+                            </div>
+                            <div>
+                                <label for="simpleAccountGasUrl" class="block text-xs font-bold text-emerald-900 mb-1">簡帳出貨 Apps Script 網址</label>
+                                <input type="url" id="simpleAccountGasUrl" autocomplete="off" class="border border-emerald-200 p-2 rounded-lg text-sm w-full outline-none bg-white focus:ring-2 focus:ring-emerald-300">
+                                <p class="mt-1 text-[11px] leading-relaxed text-gray-600">使用獨立簡帳出貨部署的網頁應用程式網址。</p>
+                            </div>
+                            <div>
+                                <label for="simpleAccountFulfillmentSecret" class="block text-xs font-bold text-emerald-900 mb-1">簡帳出貨密鑰</label>
+                                <input type="password" id="simpleAccountFulfillmentSecret" autocomplete="off" class="border border-emerald-200 p-2 rounded-lg text-sm w-full outline-none bg-white focus:ring-2 focus:ring-emerald-300">
+                                <p class="mt-1 text-[11px] leading-relaxed text-gray-600">與獨立 Apps Script 共用的長隨機密鑰，只會放在 POST 內容中。</p>
+                            </div>
+                        </div>
+                        <button id="saveSimpleAccountSettingsBtn" type="button" onclick="window.saveSimpleAccountSettings()" class="mt-4 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm hover:bg-emerald-800">💾 儲存簡帳設定</button>
+                    </section>
+
+                    <section id="simpleAccountPendingPanel" class="hidden rounded-xl border-2 border-red-300 bg-red-50 p-4" aria-live="assertive">
+                        <h3 class="font-bold text-red-800">上次出貨結果尚未確認</h3>
+                        <p id="simpleAccountPendingDetail" class="mt-1 text-sm text-red-700"></p>
+                        <button id="retrySimpleAccountFulfillmentBtn" type="button" onclick="window.retrySimpleAccountFulfillment()" class="mt-3 bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-red-800 disabled:opacity-50">重新查詢上次出貨</button>
+                    </section>
+
+                    <div id="simpleAccountFulfillmentStatus" class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-800" aria-live="polite">請先確認簡帳連線設定，再選擇一項商品。</div>
+
+                    <section aria-label="簡帳商品" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        <button type="button" data-simple-account-product="1百神" onclick="window.fulfillSimpleAccount('1百神', this)" class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">1百神</button>
+                        <button type="button" data-simple-account-product="2百神" onclick="window.fulfillSimpleAccount('2百神', this)" class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">2百神</button>
+                        <button type="button" data-simple-account-product="3百神" onclick="window.fulfillSimpleAccount('3百神', this)" class="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">3百神</button>
+                        <button type="button" data-simple-account-product="無極汰那" onclick="window.fulfillSimpleAccount('無極汰那', this)" class="bg-rose-600 hover:bg-rose-700 disabled:bg-gray-400 text-white rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">無極汰那</button>
+                        <button type="button" data-simple-account-product="Mega烈空坐" onclick="window.fulfillSimpleAccount('Mega烈空坐', this)" class="bg-amber-500 hover:bg-amber-600 disabled:bg-gray-400 text-gray-900 rounded-xl px-4 py-5 font-bold shadow-md transition transform active:scale-95">Mega烈空坐</button>
+                    </section>
+                </div>
+            </section>
+        </div>
+    </main>
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
 
     <!-- 帳號密碼複製 Modal -->
