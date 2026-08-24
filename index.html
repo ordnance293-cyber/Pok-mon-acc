@@ -751,6 +751,8 @@
 
         const SMART_HUNDO_AI_OWNED_INPUT_IDS = new Set(['g_hundos', 'st_hundo_leg']);
         const smartHundoAiValueOwnership = new Map();
+        const STORAGE_CAPACITY_AI_OWNED_INPUT_IDS = new Set(['st_poke_bag', 'st_item_bag']);
+        const storageCapacityAiValueOwnership = new Map();
         let smartHundoSessionCounter = 0;
         let activeSmartHundoSessionId = 0;
         let autoScanRunCounter = 0;
@@ -761,6 +763,12 @@
         let trainerTeamAiValueOwnership = null;
 
         const beginAutoScanRun = () => {
+            STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
+                const marker = storageCapacityAiValueOwnership.get(inputId);
+                const input = document.getElementById(inputId);
+                if (marker && input && input.value === marker.value) input.value = '';
+            });
+            storageCapacityAiValueOwnership.clear();
             autoScanRunCounter += 1;
             activeAutoScanRunId = autoScanRunCounter;
             return activeAutoScanRunId;
@@ -782,6 +790,7 @@
                 classification: { label: '圖片分類', current: 0, total: 0, state: 'pending', priority: 20 },
                 ordinaryExtraction: { label: '一般欄位掃描', current: 0, total: 0, state: 'pending', priority: 30 },
                 ordinaryRecovery: { label: '缺漏欄位補掃', current: 0, total: 0, state: 'pending', priority: 40 },
+                storageVerification: { label: '背包容量驗證', current: 0, total: 0, state: 'pending', priority: 50 },
                 smartHundo: { label: '百神辨識中', current: 0, total: 0, state: 'pending', priority: 70 },
                 smartHundoFormVerification: { label: '特殊型態複核中', current: 0, total: 0, state: 'pending', priority: 80 },
                 trainerTeam: { label: '訓練家隊伍驗證', current: 0, total: 0, state: 'pending', priority: 60 },
@@ -822,11 +831,15 @@
             smart_hundo_files: 0,
             ordinary_primary_request_count: 0,
             ordinary_recovery_request_count: 0,
+            storage_candidate_file_count: 0,
+            storage_verification_request_count: 0,
+            storage_structural_retry_count: 0,
             stage_duration_ms: {
                 preparation: 0,
                 classification: 0,
                 ordinary_primary: 0,
                 ordinary_recovery: 0,
+                storage_verification: 0,
                 smart_hundo: 0,
                 trainer_team: 0,
                 final_merge: 0
@@ -895,6 +908,11 @@
 
         document.getElementById('g_team')?.addEventListener('change', handleTrainerTeamManualEdit);
         document.getElementById('imageInput')?.addEventListener('change', invalidateTrainerTeamScan);
+        STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
+            document.getElementById(inputId)?.addEventListener('input', () => {
+                storageCapacityAiValueOwnership.delete(inputId);
+            });
+        });
 
         const publishTrainerTeamDiagnostics = (scanId, diagnostics) => {
             if (!isCurrentTrainerTeamScan(scanId)) return false;
@@ -1240,6 +1258,19 @@
                 ]
             }
         };
+        const STORAGE_HEADER_JSON_SCHEMA = {
+            name: 'pokemon_go_storage_header_verifier',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    header_type: { type: 'string', enum: ['pokemon', 'item', 'none'] },
+                    storage_text: { type: 'string' }
+                },
+                required: ['header_type', 'storage_text']
+            }
+        };
 
         const TRAINER_TEAM_COLOR_VALUES = ['yellow', 'blue', 'red', 'uncertain'];
         const TRAINER_TEAM_VISIBILITY_VALUES = ['clear', 'partial', 'hidden', 'uncertain'];
@@ -1579,6 +1610,17 @@
             return extractSingleNumber(raw);
         };
 
+        // Capacity is trustworthy only when the complete current/capacity evidence is present.
+        const extractStorageCapacity = (value) => {
+            if (value === undefined || value === null) return '';
+            const raw = String(value).trim()
+                .replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xFF10))
+                .replace(/[，,]/g, '');
+            if (!raw) return '';
+            const match = raw.match(/^\s*\d+\s*[\/／]\s*(\d+)\s*$/);
+            return match ? match[1] : '';
+        };
+
         const formatWanValue = (value) => {
             const rounded = Math.round(value * 100) / 100;
             return String(rounded).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
@@ -1861,7 +1903,7 @@
 
             AI_NUMERIC_RESULT_FIELDS.forEach(field => {
                 normalized[field] = ['poke_bag', 'item_bag'].includes(field)
-                    ? extractSlashSideNumber(result?.[field], 'right')
+                    ? extractStorageCapacity(result?.[field])
                     : extractSingleNumber(result?.[field]);
             });
             normalized.xp = normalizeWanValue(extractSlashSideNumber(result?.xp, 'left'));
@@ -1977,8 +2019,10 @@
             return classifications.reduce((indexes, classification, index) => {
                 if (!candidateTypes.has(classification.image_type)) return indexes;
                 const headerType = resultsByIndex.get(index)?.header_type;
-                if (field === 'poke_bag' && headerType !== 'pokemon') return indexes;
-                if (field === 'item_bag' && headerType !== 'item') return indexes;
+                if (!DEDICATED_VERIFICATION_FIELDS.has(field)) {
+                    if (field === 'poke_bag' && headerType !== 'pokemon') return indexes;
+                    if (field === 'item_bag' && headerType !== 'item') return indexes;
+                }
                 indexes.push(index);
                 return indexes;
             }, []);
@@ -2011,6 +2055,7 @@
                 fields: [...fieldSet]
             }));
         };
+        const DEDICATED_VERIFICATION_FIELDS = new Set(['poke_bag', 'item_bag']);
         const mergeTaskResultsIntoAiResult = (taskResults = []) => mergeAiResults(taskResults.map(task => task.imageResult));
 
         const buildAiClassificationPrompt = () => `你是寶可夢 GO 截圖分類器。這次只會收到 1 張圖片，你只能做第一階段分類，禁止抽取數字，禁止假設其他圖片存在，禁止跨圖合併。
@@ -2182,7 +2227,7 @@ ${outputTemplate}
 - 超極巨化 -> giga
 - 完美 -> perfect
 
-若同一張圖頂部儲存空間標頭清楚顯示「寶可夢」且緊鄰 current/capacity（例如 373/1150），另填 header_type="pokemon" 與 poke_bag="1150"。只取斜線右側；標頭與數字必須屬於同一頂部區域。否則 header_type="none" 且 poke_bag 留空。
+若同一張圖頂部儲存空間標頭清楚顯示「寶可夢」且緊鄰完整 current/capacity（例如 373/1150），另填 header_type="pokemon" 與 poke_bag="373/1150"。必須回傳兩個數字與斜線，絕不可只回傳左側或右側，不得計算或推論容量；標頭與數對必須屬於同一頂部區域，不得使用畫面其他「寶可夢」或「道具」。JavaScript 會擷取右側容量。否則 header_type="none" 且 poke_bag 留空。
 
 不能因為你認為其他截圖會補資料就略過。
 除了上述 7 個欄位及符合規則的 poke_bag 外，其餘欄位與 pokemon_list 必須留空字串。`;
@@ -2302,9 +2347,9 @@ ${outputTemplate}
 - 綠票 -> greenpass
 
 【RESOURCE_SCREEN 規則】
-1. 只看頂部同一個儲存空間標頭區域中的標頭與 current/capacity；永遠只取斜線右側數字。
-2. 若「寶可夢」與 slash 數字明確相連，填 header_type="pokemon" 及 poke_bag，item_bag 留空。
-3. 若「道具」與 slash 數字明確相連，填 header_type="item" 及 item_bag，poke_bag 留空。
+1. 只看頂部同一個儲存空間標頭區域中的標頭與完整 current/capacity。必須回傳兩個數字與斜線，絕不可只回傳左側或右側，不得計算或推論容量；JavaScript 會擷取右側容量。
+2. 若「寶可夢」與 slash 數對明確相連，填 header_type="pokemon" 及完整 poke_bag（例如 "258/500"），item_bag 留空。
+3. 若「道具」與 slash 數對明確相連，填 header_type="item" 及完整 item_bag（例如 "391/875"），poke_bag 留空。不得使用其他位置的道具圖示、寶可夢圖示、藥品、寶可夢球、分類圓圈或文字作為標頭證據。
 4. 若沒有可信的相符頂部標頭，填 header_type="none"，poke_bag 與 item_bag 都留空。不得用畫面別處的「寶可夢」作證據。
 5. image_type 本身不能決定背包欄位。資源頁仍可同時擷取畫面中明確可見的其他道具數量。
 
@@ -3037,6 +3082,26 @@ ${mappingLines}`;
             reader.readAsDataURL(file);
         });
 
+        const fileToStorageHeaderDataUrl = (originalDataUrl) => new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('載入儲存空間標頭失敗，請重新選擇圖片。'));
+            img.onload = () => {
+                const sourceWidth = img.naturalWidth || img.width;
+                const sourceHeight = img.naturalHeight || img.height;
+                const cropHeight = Math.min(sourceHeight, Math.max(240, Math.ceil(sourceHeight * 0.24)));
+                const canvas = document.createElement('canvas');
+                canvas.width = sourceWidth;
+                canvas.height = cropHeight;
+                canvas.getContext('2d').drawImage(
+                    img,
+                    0, 0, sourceWidth, cropHeight,
+                    0, 0, sourceWidth, cropHeight
+                );
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.src = originalDataUrl;
+        });
+
         const fileToHundoCountRegionDataUrl = (originalDataUrl) => new Promise((resolve, reject) => {
             const img = new Image();
             img.onerror = () => reject(new Error('載入百神數辨識區域失敗，請重新選擇圖片。'));
@@ -3675,6 +3740,57 @@ ${mappingLines}`;
             return statusBase;
         };
 
+        const STORAGE_HEADER_IMAGE_TYPES = new Set(['RESOURCE_SCREEN', 'CATEGORY_OVERVIEW_SCREEN']);
+        const buildStorageHeaderPrompt = () => `你是 Pokémon GO 頂部儲存空間標頭的嚴格驗證器。
+只檢查此原圖頂部裁切中的單一儲存空間標頭：
+- 「寶可夢」明確與完整 current/capacity 數對相連時，header_type="pokemon"。
+- 「道具」明確與完整 current/capacity 數對相連時，header_type="item"。
+- 否則 header_type="none" 且 storage_text=""。
+storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 / 875 回傳 "391/875"；258 / 500 回傳 "258/500"；1,234 / 5,678 回傳 "1234/5678"。絕不可只回傳 "875" 或 "500"，不得計算或推論。
+不得從道具圖示、寶可夢圖示、藥品、寶可夢球、分類圓圈或圖中其他文字推斷。只有與斜線數對相連的頂部標頭有效。只輸出 schema JSON。`;
+
+        const normalizeStorageHeaderResult = (result = {}) => {
+            const rawHeaderType = String(result?.header_type || '').trim();
+            const hasValidHeaderType = ['pokemon', 'item', 'none'].includes(rawHeaderType);
+            const storageTextIsString = typeof result?.storage_text === 'string';
+            const storageText = storageTextIsString ? result.storage_text.trim() : '';
+            const capacity = extractStorageCapacity(storageText);
+            const structurallyComplete = hasValidHeaderType && storageTextIsString
+                && (rawHeaderType === 'none' ? storageText === '' : capacity !== '');
+            const ownedHeaderType = structurallyComplete && capacity ? rawHeaderType : 'none';
+            return {
+                header_type: ownedHeaderType,
+                poke_bag: ownedHeaderType === 'pokemon' ? capacity : '',
+                item_bag: ownedHeaderType === 'item' ? capacity : '',
+                structurally_complete: structurallyComplete
+            };
+        };
+
+        const requestStorageHeaderVerification = async (apiKey, headerDataUrl, statusUpdater) => {
+            const raw = await requestOpenAiJsonSchema(
+                apiKey,
+                buildStorageHeaderPrompt(),
+                headerDataUrl,
+                STORAGE_HEADER_JSON_SCHEMA,
+                statusUpdater,
+                { imageDetail: 'high', maxRetries: 1 }
+            );
+            return normalizeStorageHeaderResult(raw);
+        };
+
+        const verifyStorageHeader = async ({ apiKey, file, classification, statusUpdater, onRequest }) => {
+            if (!STORAGE_HEADER_IMAGE_TYPES.has(classification?.image_type)) return null;
+            const originalDataUrl = await fileToOriginalDataUrl(file);
+            const headerDataUrl = await fileToStorageHeaderDataUrl(originalDataUrl);
+            onRequest?.(false);
+            let result = await requestStorageHeaderVerification(apiKey, headerDataUrl, statusUpdater);
+            if (!result.structurally_complete) {
+                onRequest?.(true);
+                result = await requestStorageHeaderVerification(apiKey, headerDataUrl, statusUpdater);
+            }
+            return result;
+        };
+
         const requestSingleImageClassification = async (apiKey, dataUrl, statusUpdater) => {
             const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiClassificationPrompt(), dataUrl, OPENAI_CLASSIFICATION_JSON_SCHEMA, statusUpdater);
             return normalizeAiClassification(rawResult);
@@ -3704,6 +3820,9 @@ ${mappingLines}`;
                 const normalizedValue = String(value || '').trim();
                 if (!normalizedValue) return;
                 document.getElementById(id).value = normalizedValue;
+                if (STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.has(id)) {
+                    storageCapacityAiValueOwnership.set(id, { value: normalizedValue });
+                }
                 highlightInput(id);
             };
 
@@ -3776,7 +3895,9 @@ ${mappingLines}`;
         };
 
         const buildOrdinaryRecoveryTargets = (missingWithScreens = []) => (
-            buildValidationTargets(missingWithScreens)
+            buildValidationTargets(missingWithScreens.filter(
+                ({ field }) => !DEDICATED_VERIFICATION_FIELDS.has(field)
+            ))
         );
 
         const runOrdinaryRecoveryBatch = async ({
@@ -3970,22 +4091,60 @@ ${mappingLines}`;
                 const ordinaryPrimaryRequestCount = normalClassifications.filter(
                     classification => getAiExtractionFields(classification).length > 0
                 ).length;
+                const storageCandidateCount = normalClassifications.filter(
+                    classification => STORAGE_HEADER_IMAGE_TYPES.has(classification.image_type)
+                ).length;
+                diagnostics.storage_candidate_file_count = storageCandidateCount;
                 const normalTask = (async () => {
                     const primaryStartedAt = aiScanNow();
                     progress.update('ordinaryExtraction', 0, ordinaryPrimaryRequestCount);
-                    const taskResults = await quickScan({
-                        apiKey,
-                        dataUrls: normalDataUrls,
-                        classifications: normalClassifications,
-                        statusWriter: () => progress.update(
-                            'ordinaryExtraction',
-                            0,
-                            ordinaryPrimaryRequestCount
-                        )
+                    if (storageCandidateCount > 0) progress.update('storageVerification', 0, storageCandidateCount);
+                    const storageStartedAt = aiScanNow();
+                    let storageCompletedCount = 0;
+                    const [taskResults, storageSettlements] = await Promise.all([
+                        quickScan({
+                            apiKey,
+                            dataUrls: normalDataUrls,
+                            classifications: normalClassifications,
+                            statusWriter: () => progress.update(
+                                'ordinaryExtraction',
+                                0,
+                                ordinaryPrimaryRequestCount
+                            )
+                        }),
+                        Promise.allSettled(normalJobs.map((job, normalIndex) => verifyStorageHeader({
+                            apiKey,
+                            file: job.file,
+                            classification: job.classification,
+                            statusUpdater: null,
+                            onRequest: structuralRetry => {
+                                diagnostics.storage_verification_request_count += 1;
+                                if (structuralRetry) diagnostics.storage_structural_retry_count += 1;
+                            }
+                        }).then(result => {
+                            if (STORAGE_HEADER_IMAGE_TYPES.has(normalClassifications[normalIndex]?.image_type)) {
+                                storageCompletedCount += 1;
+                                progress.update('storageVerification', storageCompletedCount, storageCandidateCount);
+                            }
+                            return { normalIndex, result };
+                        })))
+                    ]);
+                    storageSettlements.forEach((settlement, normalIndex) => {
+                        if (!STORAGE_HEADER_IMAGE_TYPES.has(normalClassifications[normalIndex]?.image_type)) return;
+                        const verified = settlement.status === 'fulfilled' && settlement.value.result
+                            ? settlement.value.result
+                            : normalizeStorageHeaderResult({ header_type: 'none', storage_text: '' });
+                        const imageResult = taskResults.find(result => result.imageIndex === normalIndex)?.imageResult;
+                        if (!imageResult) return;
+                        imageResult.header_type = verified.header_type;
+                        imageResult.poke_bag = verified.poke_bag;
+                        imageResult.item_bag = verified.item_bag;
                     });
                     diagnostics.ordinary_primary_request_count = ordinaryPrimaryRequestCount;
                     diagnostics.stage_duration_ms.ordinary_primary = aiScanNow() - primaryStartedAt;
+                    diagnostics.stage_duration_ms.storage_verification = aiScanNow() - storageStartedAt;
                     progress.complete('ordinaryExtraction');
+                    progress.complete('storageVerification');
                     if (!isCurrentAutoScanRun(scanRunId)) return null;
                     const recoveryStartedAt = aiScanNow();
                     const validationResult = await runOrdinaryRecoveryBatch({
