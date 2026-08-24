@@ -50,6 +50,11 @@ assert.match(
 );
 assert.match(
     html,
+    /<details(?![^>]*\bopen\b)[^>]*aria-label=["']系統連線設定["'][^>]*>[\s\S]*?<summary[^>]*>[\s\S]*?⚙️ 系統設定[\s\S]*?<\/summary>/,
+    'global settings must be collapsed by default behind the system settings control'
+);
+assert.match(
+    html,
     /id=["']saveBtn["'][^>]*>[\s\S]*?儲存以上設定[\s\S]*?<\/button>/,
     'save button must make it clear that it saves the settings above'
 );
