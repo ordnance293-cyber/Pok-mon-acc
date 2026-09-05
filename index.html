@@ -761,6 +761,7 @@
         let activeTrainerTeamScanId = 0;
         let trainerTeamManualRevision = 0;
         let trainerTeamAiValueOwnership = null;
+        let activeAiScanDiagnostics = null;
 
         const beginAutoScanRun = () => {
             STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
@@ -824,7 +825,39 @@
             };
         };
 
+        const AI_DIAGNOSTIC_REQUEST_TYPES = [
+            'classification', 'ordinary_primary', 'ordinary_recovery',
+            'storage_verification', 'storage_structural_retry', 'hundo_count',
+            'hundo_card', 'hundo_card_structural_retry', 'hundo_form_verifier', 'trainer_team'
+        ];
+        const sanitizeAiScanDiagnostics = value => {
+            const prohibitedKey = /^(api.?key|authorization|password|account.?id|spreadsheet.?id|secret|originalDataUrl|classificationDataUrl|trainerTeamEvidenceDataUrl|file|blob)$/i;
+            const prohibitedValue = /(apiKey|authorization|Bearer\s+|password|accountId|spreadsheetId|secret|data:image\/|originalDataUrl|classificationDataUrl|trainerTeamEvidenceDataUrl)/i;
+            const visit = input => {
+                if (input === null || ['number', 'boolean'].includes(typeof input)) return input;
+                if (typeof input === 'string') return prohibitedValue.test(input) ? '[REDACTED]' : input;
+                if (Array.isArray(input)) return input.map(visit);
+                if (typeof input !== 'object') return String(input);
+                const output = {};
+                Object.entries(input).forEach(([key, child]) => {
+                    if (!prohibitedKey.test(key)) output[key] = visit(child);
+                });
+                return output;
+            };
+            return visit(value);
+        };
+        const recordAiDiagnosticRequest = requestType => {
+            if (!activeAiScanDiagnostics || !AI_DIAGNOSTIC_REQUEST_TYPES.includes(requestType)) return;
+            activeAiScanDiagnostics.request_counts[requestType] += 1;
+            activeAiScanDiagnostics.request_counts.total += 1;
+        };
+        const safeAiFailure = (error, stage) => ({
+            stage,
+            reason: String(error?.reasonCode || error?.name || 'request_failed').slice(0, 120),
+            message: String(error?.message || 'request failed').replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]').replace(/data:image\/[^\s]+/gi, '[IMAGE REDACTED]').slice(0, 240)
+        });
         const createAiScanDiagnostics = totalFiles => ({
+            run_id: '',
             total_files: totalFiles,
             classified_files: 0,
             normal_files: 0,
@@ -839,6 +872,18 @@
             storage_candidate_file_count: 0,
             storage_verification_request_count: 0,
             storage_structural_retry_count: 0,
+            request_counts: Object.fromEntries([...AI_DIAGNOSTIC_REQUEST_TYPES, 'total'].map(key => [key, 0])),
+            smart_hundo_summary: { final_hundo_count: '', final_pokemon_list: '', recognized_count: 0, review_card_count: 0, review_reason_counts: {} },
+            images: Array.from({ length: totalFiles }, (_, imageIndex) => ({
+                image_index: imageIndex,
+                preparation: { ordinary_max_size: AI_MAX_IMAGE_SIZE, ordinary_jpeg_quality: AI_JPEG_QUALITY, classification_image_detail: AI_IMAGE_DETAIL, duration_ms: 0, succeeded: false },
+                classification: { image_type: '', search_query: '', duration_ms: 0, succeeded: false },
+                ordinary: { applicable: false, expected_fields: [], primary_duration_ms: 0, primary_result: {}, missing_after_primary: [], recovery_triggered: false, recovery_fields: [], recovery_duration_ms: 0, recovery_result: {}, final_result: {} },
+                storage: { applicable: false, duration_ms: 0, request_count: 0, structural_retry_used: false, header_type: '', poke_bag: '', item_bag: '' },
+                trainer_team: { applicable: false, duration_ms: 0, valid: false, effective_team: '', validation_reasons: [] },
+                smart_hundo: { applicable: false, count_duration_ms: 0, count_succeeded: false, hundo_leg: '', card_duration_ms: 0, card_succeeded: false, structural_retry_used: false, structural_retry_reason: [], structural_retry_duration_ms: 0, form_verify_duration_ms: 0, recognized_count: 0, review_card_count: 0, review_reason_counts: {}, pokemon_list: '' },
+                final_applied_fields: {}, failures: []
+            })),
             stage_duration_ms: {
                 preparation: 0,
                 classification: 0,
@@ -851,6 +896,39 @@
             },
             total_duration_ms: 0
         });
+
+        const publishAiScanDiagnostics = diagnostics => {
+            const safe = sanitizeAiScanDiagnostics(diagnostics);
+            window.lastAiScanDiagnostics = safe;
+            const button = document.getElementById('aiDiagnosticsBtn');
+            if (button) button.classList.remove('hidden');
+            return safe;
+        };
+        window.exportAiScanDiagnostics = () => sanitizeAiScanDiagnostics(window.lastAiScanDiagnostics || null);
+        const formatAiDiagnosticMs = value => `${(Number(value || 0) / 1000).toFixed(2)} 秒`;
+        window.openAiDiagnostics = function() {
+            const diagnostics = window.exportAiScanDiagnostics();
+            if (!diagnostics) return;
+            const stageRows = Object.entries(diagnostics.stage_duration_ms || {})
+                .map(([stage, duration]) => `<li><span>${stage}</span><strong>${formatAiDiagnosticMs(duration)}</strong></li>`).join('');
+            const imageRows = (diagnostics.images || []).map(image => {
+                const ordinary = image.ordinary || {};
+                const smart = image.smart_hundo || {};
+                return `<section class="border rounded-lg p-3 bg-white"><strong>圖片 ${Number(image.image_index) + 1}</strong><p>分類：${image.classification?.image_type || '失敗'}｜${formatAiDiagnosticMs(image.classification?.duration_ms)}</p><p>一般抽值：${ordinary.applicable ? `主要 ${formatAiDiagnosticMs(ordinary.primary_duration_ms)}／補掃 ${ordinary.recovery_triggered ? formatAiDiagnosticMs(ordinary.recovery_duration_ms) : '未觸發'}` : '不適用'}</p>${smart.applicable ? `<p>百神：數量 ${formatAiDiagnosticMs(smart.count_duration_ms)}／卡片 ${formatAiDiagnosticMs(smart.card_duration_ms)}／型態 ${formatAiDiagnosticMs(smart.form_verify_duration_ms)}</p>` : ''}</section>`;
+            }).join('');
+            document.getElementById('aiDiagnosticsSummary').innerHTML = `<p class="font-bold">總耗時 ${formatAiDiagnosticMs(diagnostics.total_duration_ms)}｜OpenAI 請求 ${diagnostics.request_counts?.total || 0}</p><ul class="diag-stage-list">${stageRows}</ul><div class="space-y-2 mt-3">${imageRows}</div>`;
+            document.getElementById('aiDiagnosticsModal').classList.remove('hidden');
+        };
+        window.closeAiDiagnostics = function() {
+            document.getElementById('aiDiagnosticsModal')?.classList.add('hidden');
+        };
+        window.copyAiDiagnostics = async function() {
+            const safe = window.exportAiScanDiagnostics();
+            if (!safe) return;
+            await navigator.clipboard.writeText(JSON.stringify(safe, null, 2));
+            const status = document.getElementById('aiDiagnosticsCopyStatus');
+            if (status) status.textContent = '已複製安全診斷資料';
+        };
 
         const isCurrentSmartHundoSession = (sessionId) => (
             sessionId === activeSmartHundoSessionId && activeSmartHundoSessionId > 0
@@ -3200,6 +3278,7 @@ ${mappingLines}`;
             const maxRetries = options.maxRetries ?? 3;
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
+                    recordAiDiagnosticRequest(options.diagnosticRequestType);
                     const resp = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
                         method: 'POST',
                         headers: {
@@ -3272,7 +3351,8 @@ ${mappingLines}`;
                     reasoningEffort: HUNDO_FORM_VERIFY_REASONING_EFFORT,
                     imageDetail: 'high',
                     includeMetadata: true,
-                    retryParseErrors: false
+                    retryParseErrors: false,
+                    diagnosticRequestType: 'hundo_form_verifier'
                 }
             );
         };
@@ -3312,7 +3392,7 @@ ${mappingLines}`;
                 trainerTeamEvidenceDataUrl,
                 TRAINER_TEAM_SCHEMA,
                 statusUpdater,
-                { imageDetail: 'high', maxRetries: 1 }
+                { imageDetail: 'high', maxRetries: 1, diagnosticRequestType: 'trainer_team' }
             );
             return helpers.validateTrainerTeamEvidence(rawEvidence, {
                 screenshot_index: screenshotIndex
@@ -3345,7 +3425,8 @@ ${mappingLines}`;
                 model: HUNDO_COUNT_MODEL,
                 reasoningEffort: HUNDO_COUNT_REASONING_EFFORT,
                 imageDetail: 'high',
-                includeMetadata: true
+                    includeMetadata: true,
+                    diagnosticRequestType: 'hundo_count'
             }
         );
 
@@ -3364,7 +3445,8 @@ ${mappingLines}`;
                 model: HUNDO_SMART_MODEL,
                 reasoningEffort: HUNDO_SMART_REASONING_EFFORT,
                 imageDetail: HUNDO_SMART_IMAGE_DETAIL,
-                includeMetadata: true
+                    includeMetadata: true,
+                    diagnosticRequestType: structuralRetry ? 'hundo_card_structural_retry' : 'hundo_card'
             }
         );
 
@@ -3378,6 +3460,7 @@ ${mappingLines}`;
             if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
 
             const runAttempt = async (structuralRetry) => {
+                const attemptStartedAt = aiScanNow();
                 const response = await requestSmartHundoExtractionV2(
                     apiKey,
                     originalDataUrl,
@@ -3394,6 +3477,7 @@ ${mappingLines}`;
                     result,
                     finish_reason: finishReason,
                     returned_model: String(response?.returned_model || ''),
+                    duration_ms: aiScanNow() - attemptStartedAt,
                     structure: helpers.validateSmartHundoStructure(result, finishReason)
                 };
             };
@@ -3404,6 +3488,7 @@ ${mappingLines}`;
                     ...firstAttempt,
                     structural_retry_used: false,
                     structural_retry_reason: [],
+                    structural_retry_duration_ms: 0,
                     attempt_count: 1
                 };
             }
@@ -3413,6 +3498,7 @@ ${mappingLines}`;
                 ...secondAttempt,
                 structural_retry_used: true,
                 structural_retry_reason: [...firstAttempt.structure.reasons],
+                structural_retry_duration_ms: secondAttempt.duration_ms,
                 attempt_count: 2
             };
         };
@@ -3532,6 +3618,9 @@ ${mappingLines}`;
             const helpers = globalThis.SmartHundoHelpers;
             if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
 
+            let countDurationMs = 0;
+            let cardDurationMs = 0;
+            const countStartedAt = aiScanNow();
             const countOperation = (async () => {
                 const countRegionDataUrl = await fileToHundoCountRegionDataUrl(originalDataUrl);
                 const response = await requestHundoCountExtraction(
@@ -3544,13 +3633,14 @@ ${mappingLines}`;
                     ...helpers.validateHundoCountEvidence(response?.result, classification),
                     count_source: normalized.count_source
                 };
-            })();
+            })().finally(() => { countDurationMs = aiScanNow() - countStartedAt; });
+            const cardStartedAt = aiScanNow();
             const cardOperation = requestSmartHundoWithStructuralRetry({
                 apiKey,
                 originalDataUrl,
                 imageIndex,
                 statusUpdater: (attempt, maxRetries) => statusUpdater?.('cards', attempt, maxRetries)
-            });
+            }).finally(() => { cardDurationMs = aiScanNow() - cardStartedAt; });
             const [countSettlement, cardSettlement] = await Promise.allSettled([
                 countOperation,
                 cardOperation
@@ -3598,6 +3688,7 @@ ${mappingLines}`;
             const validatedCards = cardResult.cards.map(card => helpers.validateHundoCardStates(
                 helpers.validateHundoPokemonForm(card, normalizePokemonBaseName)
             ));
+            const formVerifyStartedAt = aiScanNow();
             const formVerification = cardSettlement.status === 'fulfilled'
                 ? await runSmartHundoFormVerification({
                     apiKey,
@@ -3640,6 +3731,7 @@ ${mappingLines}`;
                 classification,
                 normalized_search_query: normalizeSearchQuery(classification?.search_query),
                 count,
+                count_operation_succeeded: countSettlement.status === 'fulfilled',
                 card_operation_succeeded: cardSettlement.status === 'fulfilled',
                 card_result: {
                     ...cardResult,
@@ -3654,8 +3746,12 @@ ${mappingLines}`;
                 structure: cardExtraction?.structure || helpers.validateSmartHundoStructure(cardResult, ''),
                 structural_retry_used: cardExtraction?.structural_retry_used === true,
                 structural_retry_reason: cardExtraction?.structural_retry_reason || [],
+                structural_retry_duration_ms: cardExtraction?.structural_retry_duration_ms || 0,
                 request_failures: requestFailures,
                 manual_review_reasons: manualReviewReasons,
+                count_duration_ms: countDurationMs,
+                card_duration_ms: cardDurationMs,
+                form_verify_duration_ms: aiScanNow() - formVerifyStartedAt,
                 ...formVerification.metrics
             };
         };
@@ -3772,14 +3868,17 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
             };
         };
 
-        const requestStorageHeaderVerification = async (apiKey, headerDataUrl, statusUpdater) => {
+        const requestStorageHeaderVerification = async (apiKey, headerDataUrl, statusUpdater, structuralRetry = false) => {
             const raw = await requestOpenAiJsonSchema(
                 apiKey,
                 buildStorageHeaderPrompt(),
                 headerDataUrl,
                 STORAGE_HEADER_JSON_SCHEMA,
                 statusUpdater,
-                { imageDetail: 'high', maxRetries: 1 }
+                Object.assign(
+                    { imageDetail: 'high', maxRetries: 1 },
+                    { diagnosticRequestType: structuralRetry ? 'storage_structural_retry' : 'storage_verification' }
+                )
             );
             return normalizeStorageHeaderResult(raw);
         };
@@ -3789,20 +3888,20 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
             const originalDataUrl = await fileToOriginalDataUrl(file);
             const headerDataUrl = await fileToStorageHeaderDataUrl(originalDataUrl);
             onRequest?.(false);
-            let result = await requestStorageHeaderVerification(apiKey, headerDataUrl, statusUpdater);
+            let result = await requestStorageHeaderVerification(apiKey, headerDataUrl, statusUpdater, false);
             if (!result.structurally_complete) {
                 onRequest?.(true);
-                result = await requestStorageHeaderVerification(apiKey, headerDataUrl, statusUpdater);
+                result = await requestStorageHeaderVerification(apiKey, headerDataUrl, statusUpdater, true);
             }
             return result;
         };
 
         const requestSingleImageClassification = async (apiKey, dataUrl, statusUpdater) => {
-            const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiClassificationPrompt(), dataUrl, OPENAI_CLASSIFICATION_JSON_SCHEMA, statusUpdater);
+            const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiClassificationPrompt(), dataUrl, OPENAI_CLASSIFICATION_JSON_SCHEMA, statusUpdater, { diagnosticRequestType: 'classification' });
             return normalizeAiClassification(rawResult);
         };
 
-        const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = []) => {
+        const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = [], diagnosticRequestType = 'ordinary_primary') => {
             const rawResult = await requestOpenAiJsonSchema(
                 apiKey,
                 buildAiExtractionPrompt({
@@ -3811,7 +3910,8 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 }),
                 dataUrl,
                 OPENAI_EXTRACTION_JSON_SCHEMA,
-                statusUpdater
+                statusUpdater,
+                { diagnosticRequestType }
             );
             return normalizeAiExtraction(rawResult, classification, extractionFields);
         };
@@ -3866,6 +3966,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
         });
 
         const extractSingleAiImage = async ({ apiKey, dataUrl, classification, imageIndex, progressIndex = imageIndex, totalFiles, updateStatus, overrideFields = null }) => {
+            const diagnosticStartedAt = aiScanNow();
             const extractionFields = Array.isArray(overrideFields) && overrideFields.length > 0
                 ? [...new Set(overrideFields)]
                 : getAiExtractionFields(classification);
@@ -3873,7 +3974,8 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 return {
                     imageIndex,
                     imageResult: normalizeAiExtraction({}, classification, extractionFields),
-                    expectedFields: extractionFields
+                    expectedFields: extractionFields,
+                    durationMs: aiScanNow() - diagnosticStartedAt
                 };
             }
 
@@ -3882,7 +3984,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
             updateStatus(`${phaseLabels.extracting} ${progressLabel}`);
             const imageResult = await requestSingleImageExtraction(apiKey, dataUrl, classification, extractionFields, (attempt, maxRetries) => {
                 updateStatus(`${phaseLabels.extracting} ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
-            });
+            }, [], overrideFields ? 'ordinary_recovery' : 'ordinary_primary');
 
             console.log({
                 imageIndex: imageIndex + 1,
@@ -3896,7 +3998,8 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 imageIndex,
                 imageResult,
                 expectedFields: extractionFields,
-                missingFields: getRetryableMissingFields(imageResult, extractionFields)
+                missingFields: getRetryableMissingFields(imageResult, extractionFields),
+                durationMs: aiScanNow() - diagnosticStartedAt
             };
         };
 
@@ -4014,6 +4117,8 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
             const totalFiles = files.length;
             const scanStartedAt = aiScanNow();
             const diagnostics = createAiScanDiagnostics(totalFiles);
+            diagnostics.run_id = String(scanRunId);
+            activeAiScanDiagnostics = diagnostics;
             let smartSessionId = 0;
             let trainerTeamScanId = 0;
             const trainerTeamContextIdAtStart = activeTrainerTeamScanId;
@@ -4037,11 +4142,20 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 const preparationStartedAt = aiScanNow();
                 progress.update('preparation', 0, totalFiles);
                 const jobs = await Promise.all(Array.from(files).map((file, index) =>
-                    fileToResizedDataUrl(file).then(classificationDataUrl => {
+                    (() => {
+                        const imageStartedAt = aiScanNow();
+                        return fileToResizedDataUrl(file).then(classificationDataUrl => {
                         preparedCount += 1;
+                        diagnostics.images[index].preparation.duration_ms = aiScanNow() - imageStartedAt;
+                        diagnostics.images[index].preparation.succeeded = true;
                         progress.update('preparation', preparedCount, totalFiles);
                         return { index, file, classificationDataUrl };
-                    })
+                        }, error => {
+                            diagnostics.images[index].preparation.duration_ms = aiScanNow() - imageStartedAt;
+                            diagnostics.images[index].failures.push(safeAiFailure(error, 'preparation'));
+                            throw error;
+                        });
+                    })()
                 ));
                 diagnostics.stage_duration_ms.preparation = aiScanNow() - preparationStartedAt;
                 progress.complete('preparation');
@@ -4062,8 +4176,9 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 let smartHundoDurationMs = 0;
                 for (let start = 0; start < jobs.length; start += AI_CLASSIFICATION_BATCH_SIZE) {
                     const batch = jobs.slice(start, start + AI_CLASSIFICATION_BATCH_SIZE);
-                    const batchSettlements = await Promise.allSettled(batch.map(job =>
-                        classifySingleAiImage({
+                    const batchSettlements = await Promise.allSettled(batch.map(job => {
+                        const imageStartedAt = aiScanNow();
+                        return classifySingleAiImage({
                             apiKey,
                             dataUrl: job.classificationDataUrl,
                             imageIndex: job.index,
@@ -4071,10 +4186,20 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                             updateStatus: updateClassificationStatus
                         }).then(classification => {
                             classifiedCount += 1;
+                            Object.assign(diagnostics.images[job.index].classification, {
+                                image_type: classification.image_type,
+                                search_query: normalizeSearchQuery(classification.search_query),
+                                duration_ms: aiScanNow() - imageStartedAt,
+                                succeeded: true
+                            });
                             progress.update('classification', classifiedCount, totalFiles);
                             return { ...job, classification };
+                        }, error => {
+                            diagnostics.images[job.index].classification.duration_ms = aiScanNow() - imageStartedAt;
+                            diagnostics.images[job.index].failures.push(safeAiFailure(error, 'classification'));
+                            throw error;
                         })
-                    ));
+                    }));
                     classificationSettlements.push(...batchSettlements);
                     diagnostics.classification_batches_completed += 1;
                     if (!isCurrentAutoScanRun(scanRunId)) return;
@@ -4175,7 +4300,9 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                                 ordinaryPrimaryRequestCount
                             )
                         }),
-                        Promise.allSettled(normalJobs.map((job, normalIndex) => verifyStorageHeader({
+                        Promise.allSettled(normalJobs.map((job, normalIndex) => {
+                            const storageImageStartedAt = aiScanNow();
+                            return verifyStorageHeader({
                             apiKey,
                             file: job.file,
                             classification: job.classification,
@@ -4183,20 +4310,43 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                             onRequest: structuralRetry => {
                                 diagnostics.storage_verification_request_count += 1;
                                 if (structuralRetry) diagnostics.storage_structural_retry_count += 1;
+                                const storageDiagnostic = diagnostics.images[job.index].storage;
+                                storageDiagnostic.request_count += 1;
+                                if (structuralRetry) storageDiagnostic.structural_retry_used = true;
                             }
                         }).then(result => {
+                            diagnostics.images[job.index].storage.duration_ms = aiScanNow() - storageImageStartedAt;
                             if (STORAGE_HEADER_IMAGE_TYPES.has(normalClassifications[normalIndex]?.image_type)) {
                                 storageCompletedCount += 1;
                                 progress.update('storageVerification', storageCompletedCount, storageCandidateCount);
                             }
                             return { normalIndex, result };
-                        })))
+                        });
+                        }))
                     ]);
+                    taskResults.forEach(result => {
+                        const actualIndex = normalJobs[result.imageIndex]?.index;
+                        const ordinary = diagnostics.images[actualIndex]?.ordinary;
+                        if (!ordinary) return;
+                        ordinary.applicable = result.expectedFields.length > 0;
+                        ordinary.expected_fields = [...result.expectedFields];
+                        ordinary.primary_duration_ms = result.durationMs || 0;
+                        ordinary.primary_result = sanitizeAiScanDiagnostics(result.imageResult);
+                        ordinary.missing_after_primary = [...(result.missingFields || [])];
+                    });
                     storageSettlements.forEach((settlement, normalIndex) => {
                         if (!STORAGE_HEADER_IMAGE_TYPES.has(normalClassifications[normalIndex]?.image_type)) return;
+                        const actualIndex = normalJobs[normalIndex].index;
+                        const storageDiagnostic = diagnostics.images[actualIndex].storage;
+                        storageDiagnostic.applicable = true;
                         const verified = settlement.status === 'fulfilled' && settlement.value.result
                             ? settlement.value.result
                             : normalizeStorageHeaderResult({ header_type: 'none', storage_text: '' });
+                        Object.assign(storageDiagnostic, {
+                            header_type: verified.header_type,
+                            poke_bag: verified.poke_bag,
+                            item_bag: verified.item_bag
+                        });
                         const imageResult = taskResults.find(result => result.imageIndex === normalIndex)?.imageResult;
                         if (!imageResult) return;
                         imageResult.header_type = verified.header_type;
@@ -4219,6 +4369,24 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     });
                     diagnostics.ordinary_recovery_request_count = validationResult.recoveryTargetCount;
                     diagnostics.stage_duration_ms.ordinary_recovery = aiScanNow() - recoveryStartedAt;
+                    validationResult.validationTaskResults.forEach(result => {
+                        const actualIndex = normalJobs[result.imageIndex]?.index;
+                        const ordinary = diagnostics.images[actualIndex]?.ordinary;
+                        if (!ordinary) return;
+                        ordinary.recovery_triggered = true;
+                        ordinary.recovery_fields = [...result.expectedFields];
+                        ordinary.recovery_duration_ms = result.durationMs || 0;
+                        ordinary.recovery_result = sanitizeAiScanDiagnostics(result.imageResult);
+                    });
+                    normalJobs.forEach((job, normalIndex) => {
+                        const ordinary = diagnostics.images[job.index].ordinary;
+                        ordinary.final_result = sanitizeAiScanDiagnostics(
+                            mergeTaskResultsIntoAiResult([
+                                ...taskResults.filter(result => result.imageIndex === normalIndex),
+                                ...validationResult.validationTaskResults.filter(result => result.imageIndex === normalIndex)
+                            ])
+                        );
+                    });
                     progress.complete('ordinaryRecovery');
                     return {
                         ...validationResult,
@@ -4227,12 +4395,23 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 })();
                 const parallelTasksStartedAt = aiScanNow();
                 if (trainerTeamJobs.length > 0) progress.update('trainerTeam', 0, trainerTeamJobs.length);
-                const trainerTeamTasks = trainerTeamJobs.map(job => runTrainerTeamScan({
-                    apiKey,
-                    file: job.file,
-                    screenshotIndex: job.index,
-                    statusUpdater: null
-                }));
+                const trainerTeamTasks = trainerTeamJobs.map(job => {
+                    const trainerStartedAt = aiScanNow();
+                    diagnostics.images[job.index].trainer_team.applicable = true;
+                    return runTrainerTeamScan({
+                        apiKey,
+                        file: job.file,
+                        screenshotIndex: job.index,
+                        statusUpdater: null
+                    }).then(result => {
+                        diagnostics.images[job.index].trainer_team.duration_ms = aiScanNow() - trainerStartedAt;
+                        return result;
+                    }, error => {
+                        diagnostics.images[job.index].trainer_team.duration_ms = aiScanNow() - trainerStartedAt;
+                        diagnostics.images[job.index].failures.push(safeAiFailure(error, 'trainer_team'));
+                        throw error;
+                    });
+                });
                 const settlements = await Promise.allSettled([
                     normalTask,
                     ...trainerTeamTasks
@@ -4321,6 +4500,14 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                             screenshot_index: trainerTeamJobs[index].index
                         });
                     });
+                    trainerTeamResults.forEach(result => Object.assign(
+                        diagnostics.images[result.screenshot_index].trainer_team,
+                        {
+                            valid: Boolean(result.valid),
+                            effective_team: result.effective_team || '',
+                            validation_reasons: [...(result.validation_reasons || [])]
+                        }
+                    ));
                     const mergedTrainerTeam = teamHelpers.mergeTrainerTeamResults(trainerTeamResults);
                     const appliedToForm = (
                         mergedTrainerTeam.valid
@@ -4452,6 +4639,33 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         verifier_request_count: 0,
                                 form_verify_model: HUNDO_FORM_VERIFY_MODEL
                     });
+                    smartResults.forEach(result => {
+                        const imageConversion = helpers.smartHundoCardsToPokemonList(result.card_result.cards);
+                        const imageReview = helpers.summarizeHundoManualReview(result.card_result.cards, result.manual_review_reasons);
+                        Object.assign(diagnostics.images[result.imageIndex].smart_hundo, {
+                            applicable: true,
+                            count_duration_ms: result.count_duration_ms || 0,
+                            count_succeeded: Boolean(result.count_operation_succeeded),
+                            hundo_leg: result.count.hundo_leg || '',
+                            card_duration_ms: result.card_duration_ms || 0,
+                            card_succeeded: Boolean(result.card_operation_succeeded),
+                            structural_retry_used: Boolean(result.structural_retry_used),
+                            structural_retry_reason: [...result.structural_retry_reason],
+                            structural_retry_duration_ms: result.structural_retry_duration_ms || 0,
+                            form_verify_duration_ms: result.form_verify_duration_ms || 0,
+                            recognized_count: Number(imageConversion.recognized_count || 0),
+                            review_card_count: Number(imageReview.review_card_count || 0),
+                            review_reason_counts: { ...imageReview.review_reason_counts },
+                            pokemon_list: imageConversion.pokemon_list || ''
+                        });
+                    });
+                    diagnostics.smart_hundo_summary = {
+                        final_hundo_count: countMerge.hundo_leg || '',
+                        final_pokemon_list: conversion.pokemon_list || '',
+                        recognized_count: Number(conversion.recognized_count || 0),
+                        review_card_count: Number(reviewSummary.review_card_count || 0),
+                        review_reason_counts: { ...reviewSummary.review_reason_counts }
+                    };
                     const diagnostics = helpers.shapeSmartHundoDiagnostics({
                         scan_session_id: String(smartSessionId),
                         screenshots: smartResults.map(result => ({
@@ -4540,7 +4754,11 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 const totalFailureCount = classificationFailureCount + normalFailureCount + smartFailureCount;
                 diagnostics.stage_duration_ms.final_merge = aiScanNow() - finalMergeStartedAt;
                 diagnostics.total_duration_ms = aiScanNow() - scanStartedAt;
-                if (isCurrentAutoScanRun(scanRunId)) window.lastAiScanDiagnostics = diagnostics;
+                diagnostics.images.forEach(image => {
+                    const fields = image.ordinary.expected_fields || [];
+                    image.final_applied_fields = Object.fromEntries(fields.map(field => [field, normalMergedResult[field] ?? '']));
+                });
+                if (isCurrentAutoScanRun(scanRunId)) publishAiScanDiagnostics(diagnostics);
                 if (totalFailureCount > 0) {
                     writeRunStatus(`<i class="fas fa-exclamation-triangle text-amber-600"></i> 掃描完成，但有 ${totalFailureCount} 張失敗；成功結果已保留`);
                 } else if (smartHundoJobs.length === 0) {
@@ -4551,6 +4769,9 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 alert("GPT 解析失敗，請稍後再試");
                 const summary = safeSmartHundoErrorSummary(error, 'auto_scan', 'auto_scan_failed');
                 console.warn('AI scan failed', summary);
+                diagnostics.total_duration_ms = aiScanNow() - scanStartedAt;
+                diagnostics.failure = safeAiFailure(error, 'auto_scan');
+                publishAiScanDiagnostics(diagnostics);
                 const failureStatus = `<i class="fas fa-exclamation-triangle text-red-600"></i> ${AI_SCAN_STATUS_LABEL} 失敗，請稍後再試`;
                 if (smartSessionId) {
                     if (isCurrentSmartRun()) setSmartHundoStatus(smartSessionId, failureStatus);
@@ -4558,6 +4779,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     writeRunStatus(failureStatus);
                 }
             } finally {
+                if (activeAiScanDiagnostics === diagnostics) activeAiScanDiagnostics = null;
                 if (
                     isCurrentAutoScanRun(scanRunId)
                     && (!smartSessionId || isCurrentSmartHundoSession(smartSessionId))
@@ -4814,6 +5036,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                             <div id="imagePreviewContainer" class="flex flex-wrap gap-1 md:gap-2 w-full py-1 md:py-2 justify-center"></div>
                             <div id="aiActionButtons" class="hidden w-full mt-1 space-y-1">
                                 <button type="button" id="aiAutoBtn" onclick="autoScan()" class="w-full bg-indigo-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-indigo-700 transition">🤖 AI自動掃描</button>
+                                <button type="button" id="aiDiagnosticsBtn" onclick="openAiDiagnostics()" class="hidden w-full bg-white border border-indigo-200 text-indigo-700 px-2 py-1.5 rounded-lg text-[11px] md:text-sm font-bold hover:bg-indigo-50 transition">📋 AI 診斷</button>
                                 <p id="aiAutoStatus" class="px-1 text-[10px] text-indigo-600 min-h-[1rem] leading-relaxed"></p>
                                 <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；只有命中「傳說的寶可夢,幻,究極異獸&amp;4*」的圖片才會辨識百神清單，其餘圖片只讀對應欄位，最後統一回填。</p>
                             </div>
@@ -5023,6 +5246,20 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
         </div>
     </main>
     <textarea id="hiddenCopyArea" class="hidden"></textarea>
+
+    <div id="aiDiagnosticsModal" class="hidden fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-3" onclick="if(event.target===this)closeAiDiagnostics()">
+      <div class="bg-gray-50 rounded-2xl shadow-2xl p-4 w-full max-w-lg max-h-[90vh] overflow-y-auto text-xs text-gray-700">
+        <div class="flex justify-between items-center border-b pb-2 mb-3">
+          <h3 class="font-bold text-indigo-800 text-base">📋 AI 掃描診斷</h3>
+          <button type="button" onclick="closeAiDiagnostics()" class="text-gray-500 text-xl" aria-label="關閉診斷">&times;</button>
+        </div>
+        <div id="aiDiagnosticsSummary"></div>
+        <div class="sticky bottom-0 bg-gray-50 pt-3 mt-3 border-t">
+          <button type="button" onclick="copyAiDiagnostics()" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold">複製診斷資料</button>
+          <p id="aiDiagnosticsCopyStatus" class="text-center text-green-700 min-h-[1rem] mt-1"></p>
+        </div>
+      </div>
+    </div>
 
     <!-- 帳號密碼複製 Modal -->
     <div id="copyModal" class="hidden fixed inset-0 bg-black/60 z-[200] flex items-center justify-center" onclick="if(event.target===this)document.getElementById('copyModal').classList.add('hidden')">
