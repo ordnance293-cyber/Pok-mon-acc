@@ -47,4 +47,34 @@ assert(source.includes('AI_CLASSIFICATION_BATCH_SIZE = 2'), 'classification conc
 assert(!source.includes('window.fetch =') && !source.includes('globalThis.fetch ='), 'diagnostics must not monkey-patch fetch');
 assert.strictEqual((source.match(/id="aiDiagnosticsBtn"/g) || []).length, 1, 'diagnostics button id must be unique');
 assert.strictEqual((source.match(/id="aiDiagnosticsModal"/g) || []).length, 1, 'diagnostics modal id must be unique');
+
+const smartSummaryAssignment = source.indexOf('diagnostics.smart_hundo_summary =');
+const smartDiagnosticsShape = source.indexOf('helpers.shapeSmartHundoDiagnostics({', smartSummaryAssignment);
+const smartDiagnosticsPublish = source.indexOf('publishSmartHundoDiagnostics(smartSessionId,', smartDiagnosticsShape);
+assert(smartSummaryAssignment >= 0 && smartDiagnosticsShape > smartSummaryAssignment && smartDiagnosticsPublish > smartDiagnosticsShape,
+  'Smart Hundo finalization must update auto-scan diagnostics, then shape and publish its diagnostics');
+const smartFinalizationSource = source.slice(smartSummaryAssignment, smartDiagnosticsPublish + 100);
+assert(!/const\s+diagnostics\s*=\s*helpers\.shapeSmartHundoDiagnostics\s*\(/.test(smartFinalizationSource),
+  'Smart Hundo diagnostics must not shadow the outer auto-scan diagnostics');
+const localNameMatch = smartFinalizationSource.match(/const\s+([A-Za-z_$][\w$]*)\s*=\s*helpers\.shapeSmartHundoDiagnostics\s*\(/);
+assert(localNameMatch && localNameMatch[1] !== 'diagnostics',
+  'Smart Hundo diagnostics must use a distinct local identifier');
+assert(smartFinalizationSource.includes(`publishSmartHundoDiagnostics(smartSessionId, ${localNameMatch[1]});`),
+  'the distinct Smart Hundo diagnostics object must be published');
+
+const finalizationContext = { published: null };
+vm.runInNewContext(`
+  let diagnostics = { smart_hundo_summary: null };
+  const helpers = { shapeSmartHundoDiagnostics: value => ({ shaped: value }) };
+  const publishSmartHundoDiagnostics = (_sessionId, value) => { published = value; };
+  const smartSessionId = 'regression';
+  {
+    diagnostics.smart_hundo_summary = { recognized_count: 1 };
+    const ${localNameMatch[1]} = helpers.shapeSmartHundoDiagnostics({ screenshots: [] });
+    publishSmartHundoDiagnostics(smartSessionId, ${localNameMatch[1]});
+  }
+  if (diagnostics.smart_hundo_summary.recognized_count !== 1 || !published.shaped) {
+    throw new Error('Smart Hundo finalization did not update and publish diagnostics');
+  }
+`, finalizationContext);
 console.log('AI scan safe diagnostics tests passed; 0 live OpenAI requests.');

@@ -471,8 +471,8 @@ def main() -> int:
     )
     smart_diagnostics_call = source_span(
         source,
-        "                    const diagnostics = helpers.shapeSmartHundoDiagnostics({",
-        "\n                    publishSmartHundoDiagnostics(smartSessionId, diagnostics);",
+        "                    const smartHundoDiagnostics = helpers.shapeSmartHundoDiagnostics({",
+        "\n                    publishSmartHundoDiagnostics(smartSessionId, smartHundoDiagnostics);",
         "smart-hundo diagnostics call",
         include_end=False,
     )
