@@ -4666,7 +4666,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         review_card_count: Number(reviewSummary.review_card_count || 0),
                         review_reason_counts: { ...reviewSummary.review_reason_counts }
                     };
-                    const diagnostics = helpers.shapeSmartHundoDiagnostics({
+                    const smartHundoDiagnostics = helpers.shapeSmartHundoDiagnostics({
                         scan_session_id: String(smartSessionId),
                         screenshots: smartResults.map(result => ({
                             index: result.imageIndex,
@@ -4708,7 +4708,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         ...formVerificationMetrics
                     });
                     if (!isCurrentSmartRun()) return;
-                    publishSmartHundoDiagnostics(smartSessionId, diagnostics);
+                    publishSmartHundoDiagnostics(smartSessionId, smartHundoDiagnostics);
 
                     if (countMerge.hundo_leg) {
                         if (!isCurrentSmartRun()) return;
