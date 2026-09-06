@@ -60,7 +60,7 @@ globalThis.SmartHundoHelpers = {
 
   const helpers = require('../smart-hundo-helpers.js');
   const safeDiagnostics = helpers.shapeSmartHundoDiagnostics({ screenshots: [{
-    smart_hundo_reasoning_effort: 'medium', card_request_count: 1,
+    smart_hundo_reasoning_effort: 'medium', logical_card_attempt_count: 1,
     card_request_usages: [{ input_tokens: 21, output_tokens: 9, reasoning_tokens: 4, cached_input_tokens: 3, apiKey: 'leak', image: 'leak' }]
   }] });
   assert.deepStrictEqual(safeDiagnostics.screenshots[0].card_request_usages, [{ input_tokens: 21, output_tokens: 9, reasoning_tokens: 4, cached_input_tokens: 3 }]);
@@ -77,7 +77,9 @@ globalThis.SmartHundoHelpers = {
   assert(autoScan.indexOf('getSmartHundoReasoningEffortForRun()') < autoScan.indexOf('await Promise.all'), 'effort is snapshotted before asynchronous work');
   assert(autoScan.includes('setHundoReasoningTestDisabled(true)') && autoScan.includes('setHundoReasoningTestDisabled(false)'));
   assert(autoScan.indexOf('diagnostics.processing_duration_ms = aiScanNow() - scanStartedAt') < autoScan.indexOf('alert(`以下欄位'), 'processing timer stops before blocking completion alert');
-  assert(autoScan.includes('diagnostics.within_60s = operationComplete && !hasManualReview'));
+  assert(autoScan.includes('diagnostics.within_60s = diagnostics.hundo_completion.applicable'));
+  assert(autoScan.includes('await helpers.observeSmartHundoRenderOpportunity'));
+  assert(autoScan.includes('publishAiScanDiagnostics(diagnostics);'));
   assert(autoScan.includes('diagnostics.operation_complete = false;'));
 
   console.log('Smart Hundo reasoning comparison tests passed; mocked responses only, 0 live OpenAI requests.');
