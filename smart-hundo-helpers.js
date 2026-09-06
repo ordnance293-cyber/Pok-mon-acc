@@ -428,11 +428,11 @@
         ) return 'uncertain';
         if (
             evidence?.badge_type === 'commemorative_location_badge'
-            && evidence?.appearance !== 'event_special_background'
+            && evidence?.appearance === 'location_style_background'
         ) return 'commemorative';
         if (
             evidence?.badge_type === 'special_background_badge'
-            && evidence?.appearance !== 'location_style_background'
+            && evidence?.appearance === 'event_special_background'
         ) return 'special';
         return 'uncertain';
     };
@@ -1092,6 +1092,10 @@
                 verification_evidence: diagnosticVerificationEvidence(card?.verification_evidence),
                 verification_status: diagnosticEnum(card?.verification_status, DIAGNOSTIC_VERIFICATION_STATUS_VALUES)
             } : {}),
+            primary_background_type: diagnosticEnum(card?.primary_background_type, BACKGROUND_TYPE_VALUES),
+            primary_effective_background_type: diagnosticEnum(card?.primary_effective_background_type, BACKGROUND_TYPE_VALUES),
+            verified_background_type: diagnosticEnum(card?.verified_background_type, BACKGROUND_TYPE_VALUES),
+            background_verification_status: diagnosticString(card?.background_verification_status),
             manual_review_reasons: diagnosticReviewReasons(card?.manual_review_reasons)
         };
     };
@@ -1106,6 +1110,8 @@
     });
     const diagnosticFormVerificationMetrics = (source = {}) => ({
         target_candidate_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_candidate_count')),
+        background_candidate_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'background_candidate_count')),
+        background_verified_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'background_verified_count')),
         target_verified_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_verified_count')),
         target_review_card_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'target_review_card_count')),
         contact_sheet_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'contact_sheet_count')),
@@ -1232,7 +1238,13 @@
         form_verifier_evidence_mismatch: '型態複核結果與身體結構證據不一致',
         form_verifier_invalid_result: '型態複核回傳格式或卡片對應錯誤',
         form_verifier_structural_incomplete: '型態複核未回傳全部候選卡片',
-        form_verification_request_failed: '型態複核請求失敗'
+        form_verification_request_failed: '型態複核請求失敗',
+        background_crop_not_clear: '背卡徽章區域裁切不完整，需人工確認',
+        background_verifier_evidence_mismatch: '背卡複核證據不一致',
+        background_verifier_low_confidence: '背卡複核信心不足',
+        background_verifier_invalid_result: '背卡複核卡片對應錯誤',
+        background_verifier_structural_incomplete: '背卡複核未回傳全部候選卡片',
+        background_verification_request_failed: '背卡複核請求失敗'
     });
 
     const isHundoReviewReason = (reason) => Object.prototype.hasOwnProperty.call(HUNDO_REVIEW_REASON_MESSAGES, reason);

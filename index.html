@@ -2572,6 +2572,12 @@ form_id = "uncertain"
 具有巨大盾牌式頭頸和胸前裝甲：form_id = zamazenta_crowned
 不得只因紅、藍、金色就判成 Crowned。
 
+【背景圖示】
+只依同卡右下徽章的形狀與完整卡片脈絡分類，不可只看顏色或「附近有東西」。location/globe-style 徽章是 commemorative_location_badge + location_style_background；blue flower-pattern 徽章是 special_background_badge + event_special_background。粉紅 Dynamax X、左下淨化星芒及 other 都不是背景。Dynamax 與真正背景可共存，必須檢查整個徽章區。區域清楚且無背景才可 none；裁切、遮擋或關聯不明一律 uncertain。
+
+【蒼響】
+劍之王必須清楚看見口中長劍、頭頸胸裝甲及完整身體；一般形態必須清楚看見一般狼形的嘴、頭頸與身體，不能只因沒看到劍而判一般。嘴或身體裁切、遮擋或特徵衝突必須 uncertain。
+
 【帝牙盧卡】
 文字即使只寫「帝牙盧卡」，圖片若為起源型態：form_id = dialga_origin
 不得被 visible_label 帶回 dialga_standard。
@@ -2832,7 +2838,7 @@ CP附近＝色違
 - upper-right filled_yellow_five_point_star 只代表我的最愛，不代表任何其他狀態或型態。
 - lower-left light-cyan flower／radial symbol 是淨化候選，絕對不是背卡或色違。
 - lower-left purple flame／smoke／aura 是暗影候選，絕對不是背卡；氣場即使延伸到身體周圍，也必須有同卡 lower_left 錨點，around_pokemon 本身不足。
-- lower-right badge 是背卡候選，先確認 position=lower_right，再以 badge_type 分類紀念或特別背卡。commemorative_location_badge 可直接支持 commemorative；special_background_badge 可直接支持 special，完整背景外觀只是次要支持，不是必要條件。紀念徽章配 event_special_background 或特別徽章配 location_style_background 時必須輸出 uncertain。
+- lower-right badge 是背卡候選，先確認 position=lower_right，再以 badge_type 分類紀念或特別背卡。commemorative 需要 commemorative_location_badge 與 location_style_background 同時明確；special 需要 special_background_badge 與 event_special_background 同時明確。粉紅 Dynamax X 與左下淨化星芒都不是背卡。紀念徽章配 event_special_background 或特別徽章配 location_style_background 時必須輸出 uncertain。
 - lucky 仍只以同卡 behind_pokemon 的 large_gold_shimmering_background 判斷。
 
 raw 狀態與位置優先 evidence 不一致時必須輸出 uncertain，不得猜測。黃色最愛星、左下淨化／暗影、右下背卡及 CP 色違候選彼此不可互換。
@@ -2909,7 +2915,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             if (!isDenseExactArray(verificationJobs) || verificationJobs.length < 1 || verificationJobs.length > 6 || !candidateMap) return false;
             const cardIds = new Set();
             let screenshotIndex = null;
-            const jobKeys = ['tile_id', 'card_id', 'screenshot_index', 'base_species', 'candidate_form_ids'];
+            const jobKeys = ['tile_id', 'card_id', 'screenshot_index', 'base_species', 'requested_dimensions', 'candidate_form_ids'];
             return verificationJobs.every((job, index) => {
                 if (!job || typeof job !== 'object' || Array.isArray(job) || Object.getPrototypeOf(job) !== Object.prototype) return false;
                 if (Object.getOwnPropertySymbols(job).length !== 0 || Object.getOwnPropertyNames(job).length !== jobKeys.length) return false;
@@ -2919,9 +2925,15 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 if (!Number.isSafeInteger(job.screenshot_index) || job.screenshot_index < 0) return false;
                 if (screenshotIndex === null) screenshotIndex = job.screenshot_index;
                 if (job.screenshot_index !== screenshotIndex) return false;
+                if (!isDenseExactArray(job.requested_dimensions) || job.requested_dimensions.length < 1
+                    || job.requested_dimensions.some(value => !['form', 'background'].includes(value))
+                    || new Set(job.requested_dimensions).size !== job.requested_dimensions.length) return false;
                 const expectedCandidates = candidateMap[job.base_species];
-                if (!Array.isArray(expectedCandidates) || !isDenseExactArray(job.candidate_form_ids) || job.candidate_form_ids.length !== expectedCandidates.length) return false;
-                if (!job.candidate_form_ids.every((candidate, index) => candidate === expectedCandidates[index])) return false;
+                if (!isDenseExactArray(job.candidate_form_ids)) return false;
+                if (job.requested_dimensions.includes('form') && (!Array.isArray(expectedCandidates)
+                    || job.candidate_form_ids.length !== expectedCandidates.length
+                    || !job.candidate_form_ids.every((candidate, index) => candidate === expectedCandidates[index]))) return false;
+                if (!job.requested_dimensions.includes('form') && job.candidate_form_ids.length !== 0) return false;
                 cardIds.add(job.card_id);
                 return true;
             });
@@ -2932,7 +2944,7 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 throw new Error('invalid form verification jobs');
             }
             const mappingLines = verificationJobs.map(job => (
-                `${job.tile_id} | card_id=${job.card_id} | base_species=${job.base_species} | candidates=${job.candidate_form_ids.join(',')}`
+                `${job.tile_id} | card_id=${job.card_id} | screenshot_index=${job.screenshot_index} | requested=${job.requested_dimensions.join('+')} | base_species=${job.base_species} | candidates=${job.candidate_form_ids.join(',') || 'not_requested'}`
             )).join('\n');
             const evidenceLines = verificationJobs.flatMap(job => job.candidate_form_ids
                 .filter(formId => formId !== 'uncertain')
@@ -2943,9 +2955,16 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
             return `你是寶可夢 GO 指定形態的嚴格視覺驗證器。
 
 【通則】
-只從放大的寶可夢本體裁切圖辨識形態；每個 tile 都只有一個已知 base species。不得辨識 CP、名稱、異色、幸運、最愛、火箭隊狀態、背景或卡片數量。忽略殘留的 CP、地點、151515、96% 與暱稱文字。
+每個 tile 只處理 requested_dimensions。未要求的維度回傳 uncertain 證據，絕不可改寫。背景檢查須觀看完整卡片與右下徽章區；形態檢查須觀看完整本體。
+只從放大的寶可夢本體裁切圖辨識形態；每個 tile 都只有一個已知 base species。形態不得由 CP、名稱、異色、幸運、最愛、火箭隊狀態或背景推論。忽略殘留的 CP、地點、151515、96% 與暱稱文字。
 形態判定權威是本體結構、姿勢、四肢、手臂、比例、頸胸、獅子／月翼／結晶宿主、融合宿主及形態特有部位。顏色只能作為輔助，絕不可作為決定性依據。不清楚、太小或被裁切的決定性區域必須回傳 uncertain；絕不可因已知 base species 就預設為 standard 或 base。
 不得使用 CP、不得使用 暱稱、不得使用 visible label、不得使用 異色、不得使用 color shortcut。帝牙盧卡與帕路奇亞的顏色或異色絕不可作為形態捷徑；它們的顏色只能是輔助，絕不覆蓋本體結構證據。
+
+【背景圖示】
+只依同卡右下徽章的形狀與完整卡片脈絡分類，不可只看顏色或「附近有東西」。location/globe-style 徽章是 commemorative_location_badge + location_style_background；blue flower-pattern 徽章是 special_background_badge + event_special_background。粉紅 Dynamax X、左下淨化星芒及 other 都不是背景。Dynamax 與真正背景可共存，必須檢查整個徽章區。區域清楚且無背景才可 none；裁切、遮擋或關聯不明一律 uncertain。
+
+【蒼響】
+劍之王必須清楚看見口中長劍、頭頸胸裝甲及完整身體；一般形態必須清楚看見一般狼形的嘴、頭頸與身體，不能只因沒看到劍而判一般。嘴或身體裁切、遮擋或特徵衝突必須 uncertain。
 
 【帝牙盧卡】
 帝牙盧卡一般形態：粗壯、寬闊的四足身體，標準四腿，判斷頸部與胸部的厚實結構。短而緊湊的軀幹，不是高而窄的馬型身體；確認寬闊白色肩部／背部結構與正常頸胸比例。
@@ -2967,7 +2986,7 @@ necrozma_dusk_mane | body_plan=necrozma_quadruped_lion | limb_layout=quadruped_l
 奈克洛茲瑪拂曉之翼：寬大的月翼、沒有獅子身體，融合宿主是露奈雅拉。確認巨大的側向蝙蝠／月翼主導寬度、露奈雅拉宿主、小型中央身體與黑色結晶結構，不是獅子也不是直立。
 necrozma_dawn_wings | body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings
 
-只輸出符合 schema 的 cards。每張卡必須回傳 tile_id、card_id、base_species 與所有證據欄位；只能從該 tile 的 candidates 選擇 verified_form_id 或 uncertain。
+只輸出符合 schema 的 cards。每張卡必須逐字回傳 tile_id、card_id、screenshot_index、requested_dimensions、base_species 與所有證據欄位；只能從該 tile 的 candidates 選擇 verified_form_id 或 uncertain。
 本次 candidates 涵蓋的任何支援家族都必須依裁切圖直接比較各候選形態。只有決定性外觀清楚且信心達標時才可選形態；無法確定時必須選 uncertain，絕不可默認 standard/base。
 
 【本次候選證據代碼】
@@ -3032,6 +3051,8 @@ ${mappingLines}`;
                             properties: {
                                 tile_id: { type: 'string' },
                                 card_id: { type: 'string' },
+                                screenshot_index: { type: 'integer', minimum: 0 },
+                                requested_dimensions: { type: 'array', items: { type: 'string', enum: ['form', 'background'] } },
                                 base_species: { type: 'string' },
                                 verified_form_id: {
                                     type: 'string',
@@ -3052,11 +3073,20 @@ ${mappingLines}`;
                                     type: 'string',
                                     enum: ['uncertain', ...Object.values(globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE).map(value => value.decisive_feature)]
                                 },
-                                key_features_visible: { type: 'boolean' }
+                                key_features_visible: { type: 'boolean' },
+                                verified_background_type: { type: 'string', enum: ['none', 'commemorative', 'special', 'uncertain'] },
+                                background_verification_confidence: { type: 'number', minimum: 0, maximum: 1 },
+                                background_region_visibility: { type: 'string', enum: ['clear', 'partially_visible', 'cropped', 'not_visible', 'uncertain'] },
+                                background_card_association: { type: 'string', enum: ['same_card', 'neighboring_card', 'uncertain'] },
+                                observed_icon_class: { type: 'string', enum: ['none', 'location_globe_badge', 'special_flower_badge', 'pink_dynamax_x', 'purification_starburst', 'other', 'uncertain'] },
+                                badge_type: { type: 'string', enum: ['none', 'commemorative_location_badge', 'special_background_badge', 'other', 'uncertain'] },
+                                appearance: { type: 'string', enum: ['none', 'location_style_background', 'event_special_background', 'other', 'uncertain'] }
                             },
                             required: [
-                                'tile_id', 'card_id', 'base_species', 'verified_form_id', 'verification_confidence',
-                                'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible'
+                                'tile_id', 'card_id', 'screenshot_index', 'requested_dimensions', 'base_species', 'verified_form_id', 'verification_confidence',
+                                'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible',
+                                'verified_background_type', 'background_verification_confidence', 'background_region_visibility',
+                                'background_card_association', 'observed_icon_class', 'badge_type', 'appearance'
                             ]
                         }
                     }
@@ -3076,16 +3106,18 @@ ${mappingLines}`;
             && candidate.screenshot_index >= 0
             && Object.hasOwn(candidate, 'base_species')
             && typeof candidate.base_species === 'string'
-            && Object.hasOwn(candidate, 'candidate_form_ids')
+            && Array.isArray(candidate.requested_dimensions)
+            && candidate.requested_dimensions.length > 0
+            && candidate.requested_dimensions.every(value => ['form', 'background'].includes(value))
             && Array.isArray(candidate.candidate_form_ids)
-            && candidate.candidate_form_ids.length > 0
-            && Array.isArray(globalThis.SmartHundoFormVerifier?.VERIFIED_FORM_IDS_BY_BASE_SPECIES?.[candidate.base_species])
-            && candidate.candidate_form_ids.length === globalThis.SmartHundoFormVerifier.VERIFIED_FORM_IDS_BY_BASE_SPECIES[candidate.base_species].length
-            && candidate.candidate_form_ids.every((formId, index) => (
-                formId === globalThis.SmartHundoFormVerifier.VERIFIED_FORM_IDS_BY_BASE_SPECIES[candidate.base_species][index]
+            && (!candidate.requested_dimensions.includes('form') || (
+                Array.isArray(globalThis.SmartHundoFormVerifier?.VERIFIED_FORM_IDS_BY_BASE_SPECIES?.[candidate.base_species])
+                && candidate.candidate_form_ids.length === globalThis.SmartHundoFormVerifier.VERIFIED_FORM_IDS_BY_BASE_SPECIES[candidate.base_species].length
+                && candidate.candidate_form_ids.every((formId, index) => (formId === globalThis.SmartHundoFormVerifier.VERIFIED_FORM_IDS_BY_BASE_SPECIES[candidate.base_species][index]))
             ))
             && Object.hasOwn(candidate, 'pokemon_bbox')
             && hasSmartHundoCropBoundingBox(candidate.pokemon_bbox)
+            && (!candidate.requested_dimensions.includes('background') || hasSmartHundoCropBoundingBox(candidate.card_bbox))
         );
         const loadSmartHundoOriginalImage = originalDataUrl => new Promise((resolve, reject) => {
             if (typeof originalDataUrl !== 'string' || !originalDataUrl.startsWith('data:image/')) {
@@ -3104,7 +3136,7 @@ ${mappingLines}`;
             if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0) {
                 return smartHundoCropFailure(candidate);
             }
-            const bbox = candidate.pokemon_bbox;
+            const bbox = candidate.requested_dimensions.includes('background') ? candidate.card_bbox : candidate.pokemon_bbox;
             const bodyX = (bbox.x_min / 1000) * sourceWidth;
             const bodyY = (bbox.y_min / 1000) * sourceHeight;
             const bodyWidth = ((bbox.x_max - bbox.x_min) / 1000) * sourceWidth;
@@ -3629,10 +3661,12 @@ ${mappingLines}`;
             const verifier = globalThis.SmartHundoFormVerifier;
             const helpers = globalThis.SmartHundoHelpers;
             if (!verifier || !helpers) throw new Error('Smart Hundo form verification helpers are unavailable');
-            const planned = verifier.planTargetHundoFormCandidates(cards, { screenshotIndex: imageIndex });
+            const planned = verifier.planTargetHundoAttributeCandidates(cards, { screenshotIndex: imageIndex });
             let finalCards = planned.cards;
             const metrics = {
                 target_candidate_count: planned.target_candidate_count,
+                background_candidate_count: planned.background_candidate_count || 0,
+                background_verified_count: 0,
                 target_verified_count: 0,
                 target_review_card_count: 0,
                 contact_sheet_count: 0,
@@ -3688,33 +3722,33 @@ ${mappingLines}`;
                         isCurrentRun
                     });
                     if (!isCurrentRun()) return { cards: finalCards, metrics, stale: true };
-                    const result = verifier.normalizeHundoFormVerifierResult(response?.result);
-                    const structure = verifier.validateHundoFormVerifierStructure(
-                        result,
-                        jobs,
-                        String(response?.finish_reason || '')
+                    const result = response?.result;
+                    const structure = verifier.validateHundoAttributeVerifierStructure(
+                        result, jobs, String(response?.finish_reason || '')
                     );
                     const onlySheetCards = annotatedCards.filter(card => jobIds.includes(card?.card_id));
-                    const merged = verifier.mergeHundoFormVerificationResults(
+                    const merged = verifier.mergeHundoAttributeVerificationResults(
                         onlySheetCards,
                         jobs,
                         result,
-                        structure,
-                        helpers.HUNDO_FORM_CANONICAL_NAMES
+                        helpers.HUNDO_FORM_CANONICAL_NAMES,
+                        structure
                     );
                     const mergedById = new Map(merged.map(card => [card.card_id, card]));
                     finalCards = annotatedCards.map(card => mergedById.get(card?.card_id) || card);
                 } catch (_error) {
                     if (!isCurrentRun()) return { cards: finalCards, metrics, stale: true };
+                    const formIds = jobs.filter(job => job.requested_dimensions.includes('form')).map(job => job.card_id);
                     finalCards = verifier.markHundoFormVerificationFailure(
-                        annotatedCards,
-                        jobIds,
-                        'form_verification_request_failed',
-                        'request_failed'
-                    );
+                        annotatedCards, formIds, 'form_verification_request_failed', 'request_failed'
+                    ).map(card => jobs.some(job => job.card_id === card?.card_id && job.requested_dimensions.includes('background'))
+                        ? { ...card, effective_background_type: 'uncertain', background_verification_status: 'request_failed',
+                            manual_review_reasons: [...new Set([...(card.manual_review_reasons || []), 'background_verification_request_failed'])] }
+                        : card);
                 }
             }
             metrics.target_verified_count = finalCards.filter(card => card?.verification_status === 'verified').length;
+            metrics.background_verified_count = finalCards.filter(card => card?.background_verification_status === 'verified').length;
             metrics.target_review_card_count = finalCards.filter(card => (
                 verifier.isTargetHundoFormBaseSpecies(card?.base_species)
                 && card?.effective_form_id === 'uncertain'
