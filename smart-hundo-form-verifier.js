@@ -459,7 +459,7 @@
         const plannedCards = inputCards.map((card, cardIndex) => {
             if (!isTargetHundoFormBaseSpecies(card?.base_species)) return card;
             targetCardCount += 1;
-            if (card?.effective_form_id !== 'uncertain') return card;
+            if (card?.effective_form_id !== 'uncertain' && card?.base_species !== '蒼響') return card;
             const bboxContract = normalizeHundoBboxContract(card);
             const eligibleSpecies = ['recognized', 'partial'].includes(card?.recognition_status)
                 && isFinitePrimitiveNumber(card?.species_confidence)
@@ -491,6 +491,7 @@
                         screenshot_index: candidateIdentity.screenshot_index,
                         base_species: card.base_species,
                         candidate_form_ids: VERIFIED_FORM_IDS_BY_BASE_SPECIES[card.base_species],
+                        requested_dimensions: ['form'],
                         pokemon_bbox: { ...bboxContract.pokemon_bbox }
                     }
                 });
@@ -539,6 +540,7 @@
                     card_id: candidate.card_id,
                     screenshot_index: candidate.screenshot_index,
                     base_species: candidate.base_species,
+                    requested_dimensions: Array.isArray(candidate.requested_dimensions) ? candidate.requested_dimensions.slice() : ['form'],
                     candidate_form_ids: Array.isArray(candidate.candidate_form_ids)
                         ? candidate.candidate_form_ids.slice()
                         : []
@@ -570,6 +572,126 @@
         }) : [];
     };
 
+    const backgroundNeedsVerification = card => {
+        const evidence = card?.background_evidence || {};
+        return ['commemorative', 'special'].includes(card?.background_type)
+            || card?.effective_background_type === 'uncertain'
+            || evidence.present === true
+            || ['other', 'uncertain'].includes(evidence.badge_type)
+            || ['other', 'uncertain'].includes(evidence.appearance);
+    };
+
+    // Coalesces form and background review into one identity-bound job per card.
+    const planTargetHundoAttributeCandidates = (cards, options = {}) => {
+        const formPlan = planTargetHundoFormCandidates(cards, options);
+        const byId = new Map(formPlan.candidates.map(candidate => [candidate.card_id, { ...candidate }]));
+        const plannedCards = formPlan.cards.slice();
+        cards.forEach((original, index) => {
+            if (!backgroundNeedsVerification(original)) return;
+            const identity = candidateIdentityFor(original, options);
+            const bbox = normalizeHundoBoundingBox(original?.card_bbox);
+            const usable = identity && bbox
+                && isFinitePrimitiveNumber(original?.bbox_confidence)
+                && original.bbox_confidence >= HUNDO_FORM_BBOX_CONFIDENCE_THRESHOLD
+                && USABLE_BBOX_VISIBILITY_VALUES.has(original?.bbox_visibility);
+            if (!usable) {
+                plannedCards[index] = {
+                    ...plannedCards[index],
+                    primary_background_type: original?.background_type,
+                    primary_effective_background_type: original?.effective_background_type,
+                    effective_background_type: 'uncertain',
+                    manual_review_reasons: addReason(original?.manual_review_reasons || [], 'background_crop_not_clear')
+                };
+                return;
+            }
+            const existing = byId.get(identity.card_id);
+            byId.set(identity.card_id, {
+                ...(existing || {
+                    card_id: identity.card_id, screenshot_index: identity.screenshot_index,
+                    base_species: original?.base_species || '', candidate_form_ids: [],
+                    pokemon_bbox: normalizeHundoBoundingBox(original?.pokemon_bbox) || bbox
+                }),
+                card_bbox: bbox,
+                requested_dimensions: [...new Set([...(existing?.requested_dimensions || []), 'background'])]
+            });
+            const current = plannedCards[index];
+            plannedCards[index] = {
+                ...current,
+                primary_background_type: original?.background_type,
+                primary_effective_background_type: original?.effective_background_type,
+                primary_background_confidence: original?.background_confidence,
+                primary_background_evidence: original?.background_evidence,
+                effective_background_type: 'uncertain',
+                background_verification_status: 'pending'
+            };
+        });
+        return { ...formPlan, cards: plannedCards, candidates: [...byId.values()],
+            target_candidate_count: byId.size,
+            background_candidate_count: [...byId.values()].filter(c => c.requested_dimensions.includes('background')).length };
+    };
+
+    const validateVerifiedBackground = result => {
+        const visibility = result?.background_region_visibility;
+        const associated = result?.background_card_association === 'same_card';
+        const confidence = result?.background_verification_confidence;
+        if (!associated || visibility !== 'clear' || !isFinitePrimitiveNumber(confidence))
+            return { valid: false, reason: 'background_verifier_evidence_mismatch' };
+        if (confidence < HUNDO_FORM_VERIFY_CONFIDENCE_THRESHOLD)
+            return { valid: false, reason: 'background_verifier_low_confidence' };
+        const type = result?.verified_background_type;
+        const positive = type === 'commemorative'
+            ? result.badge_type === 'commemorative_location_badge' && result.appearance === 'location_style_background'
+            : type === 'special'
+                ? result.badge_type === 'special_background_badge' && result.appearance === 'event_special_background'
+                : false;
+        const negative = type === 'none' && result.badge_type === 'none' && result.appearance === 'none'
+            && ['none', 'pink_dynamax_x', 'purification_starburst'].includes(result.observed_icon_class);
+        if (!positive && !negative) return { valid: false, reason: 'background_verifier_evidence_mismatch' };
+        return { valid: true, type };
+    };
+
+    const mergeHundoAttributeVerificationResults = (cards, jobs, results, canonicalNames) => {
+        const list = Array.isArray(results?.cards) ? results.cards : [];
+        const counts = new Map(); list.forEach(r => counts.set(r?.card_id, (counts.get(r?.card_id) || 0) + 1));
+        const byId = new Map(list.map(r => [r?.card_id, r]));
+        const jobIds = new Set(jobs.map(j => j.card_id));
+        const foreign = list.some(r => !jobIds.has(r?.card_id));
+        return cards.map(card => {
+            const job = jobs.find(j => j.card_id === card?.card_id);
+            if (!job) return card;
+            const result = byId.get(job.card_id);
+            const identityValid = !foreign && counts.get(job.card_id) === 1 && result
+                && result.card_id === job.card_id && result.tile_id === job.tile_id
+                && result.screenshot_index === job.screenshot_index
+                && Array.isArray(result.requested_dimensions)
+                && result.requested_dimensions.length === job.requested_dimensions.length
+                && result.requested_dimensions.every((value, index) => value === job.requested_dimensions[index]);
+            let merged = card;
+            if (job.requested_dimensions.includes('form')) {
+                if (!identityValid) merged = verificationFailure(merged, 'form_verifier_invalid_result');
+                else {
+                    const verdict = validateHundoVerifiedForm({ tile_id: result.tile_id, card_id: result.card_id, base_species: result.base_species, verified_form_id: result.verified_form_id, verification_confidence: result.verification_confidence, crop_visibility: result.crop_visibility, body_plan: result.body_plan, limb_layout: result.limb_layout, fusion_host: result.fusion_host, decisive_feature: result.decisive_feature, key_features_visible: result.key_features_visible }, job);
+                    if (!verdict.valid) merged = verificationFailure(merged, verdict.reason);
+                    else merged = { ...merged, verified_form_id: verdict.result.verified_form_id,
+                        verification_confidence: verdict.result.verification_confidence,
+                        verification_evidence: { crop_visibility: verdict.result.crop_visibility, body_plan: verdict.result.body_plan,
+                            limb_layout: verdict.result.limb_layout, fusion_host: verdict.result.fusion_host,
+                            decisive_feature: verdict.result.decisive_feature, key_features_visible: verdict.result.key_features_visible },
+                        verification_status: 'verified', effective_form_id: verdict.result.verified_form_id,
+                        canonical_official_name: canonicalNames[verdict.result.verified_form_id] };
+                }
+            }
+            if (job.requested_dimensions.includes('background')) {
+                const verdict = identityValid ? validateVerifiedBackground(result) : { valid: false, reason: 'background_verifier_invalid_result' };
+                merged = verdict.valid ? { ...merged, verified_background_type: verdict.type,
+                    background_verification_status: 'verified', effective_background_type: verdict.type }
+                    : { ...merged, verified_background_type: 'uncertain', background_verification_status: 'failed',
+                        effective_background_type: 'uncertain', manual_review_reasons: addReason(merged.manual_review_reasons || [], verdict.reason) };
+            }
+            return merged;
+        });
+    };
+
     const api = Object.freeze({
         TARGET_HUNDO_FORM_BASE_SPECIES,
         VERIFIED_FORM_IDS_BY_BASE_SPECIES,
@@ -588,6 +710,10 @@
         mergeHundoFormVerificationResults,
         isTargetHundoFormBaseSpecies,
         planTargetHundoFormCandidates,
+        planTargetHundoAttributeCandidates,
+        backgroundNeedsVerification,
+        validateVerifiedBackground,
+        mergeHundoAttributeVerificationResults,
         planHundoFormVerificationBatches,
         markHundoFormVerificationFailure
     });
