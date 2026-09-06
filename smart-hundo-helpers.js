@@ -1112,6 +1112,16 @@
         verifier_request_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_request_count')),
         form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-5.6-sol' ? 'gpt-5.6-sol' : ''
     });
+    const diagnosticDuration = value => Number.isFinite(value) && value >= 0 ? value : null;
+    const diagnosticTokenUsage = usage => {
+        if (!usage || typeof usage !== 'object') return null;
+        const safe = {};
+        ['input_tokens', 'output_tokens', 'reasoning_tokens', 'cached_input_tokens'].forEach(field => {
+            const value = usage[field];
+            if (Number.isFinite(value) && value >= 0) safe[field] = value;
+        });
+        return Object.keys(safe).length > 0 ? safe : null;
+    };
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),
         screenshots: (Array.isArray(session?.screenshots) ? session.screenshots : []).map(screenshot => ({
@@ -1136,7 +1146,15 @@
             hundo_count_model: diagnosticString(screenshot?.hundo_count_model),
             smart_hundo_requested_model: diagnosticString(screenshot?.smart_hundo_requested_model),
             smart_hundo_returned_model: diagnosticString(screenshot?.smart_hundo_returned_model),
-            smart_hundo_reasoning_effort: diagnosticString(screenshot?.smart_hundo_reasoning_effort),
+            smart_hundo_reasoning_effort: ['high', 'medium'].includes(screenshot?.smart_hundo_reasoning_effort) ? screenshot.smart_hundo_reasoning_effort : 'high',
+            card_request_usages: (Array.isArray(screenshot?.card_request_usages) ? screenshot.card_request_usages : []).map(diagnosticTokenUsage).filter(Boolean),
+            card_request_count: diagnosticNonnegativeInteger(screenshot?.card_request_count),
+            logical_card_attempt_count: diagnosticNonnegativeInteger(screenshot?.logical_card_attempt_count),
+            count_duration_ms: diagnosticDuration(screenshot?.count_duration_ms),
+            card_duration_ms: diagnosticDuration(screenshot?.card_duration_ms),
+            form_verify_duration_ms: diagnosticDuration(screenshot?.form_verify_duration_ms),
+            count_operation_succeeded: screenshot?.count_operation_succeeded === true,
+            card_operation_succeeded: screenshot?.card_operation_succeeded === true,
             structural_retry_used: screenshot?.structural_retry_used === true,
             structural_retry_reason: diagnosticStructuralReasons(screenshot?.structural_retry_reason),
             cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(diagnosticCard),
@@ -1160,6 +1178,96 @@
         pokemon_list: diagnosticString(session?.pokemon_list),
         ...diagnosticFormVerificationMetrics(session)
     });
+
+    const expandSmartHundoPokemonListCount = pokemonList => {
+        const text = String(pokemonList ?? '').trim();
+        if (!text) return 0;
+        let total = 0;
+        for (const rawEntry of text.split(',')) {
+            const entry = rawEntry.trim();
+            if (!entry) return null;
+            const quantity = entry.match(/\*(\d+)$/);
+            const count = quantity ? Number(quantity[1]) : 1;
+            if (!Number.isSafeInteger(count) || count < 1) return null;
+            total += count;
+        }
+        return Number.isSafeInteger(total) ? total : null;
+    };
+
+    const observeSmartHundoRenderOpportunity = async ({
+        scheduleFrame,
+        isVisible = () => true,
+        isCurrentRun = () => true
+    } = {}) => {
+        if (!isCurrentRun()) return 'unavailable';
+        if (!isVisible()) return 'unverified_background';
+        if (typeof scheduleFrame !== 'function') return 'unavailable';
+        const nextFrame = () => new Promise(resolve => scheduleFrame(resolve));
+        await nextFrame();
+        if (!isCurrentRun()) return 'unavailable';
+        if (!isVisible()) return 'unverified_background';
+        await nextFrame();
+        if (!isCurrentRun()) return 'unavailable';
+        return isVisible() ? 'observed' : 'unverified_background';
+    };
+
+    const evaluateSmartHundoCompletion = ({
+        applicable = false,
+        imageIndexes = [],
+        elapsedMs = null,
+        finalCount = '',
+        finalPokemonList = '',
+        countApplied = false,
+        listApplied = false,
+        countValid = false,
+        countConflict = false,
+        cardOperationsSucceeded = false,
+        structuresComplete = false,
+        overlapResolved = false,
+        verificationComplete = false,
+        cardReviewCount = 0,
+        sessionReviewReasons = [],
+        renderObservation = 'pending',
+        currentRun = true
+    } = {}) => {
+        const expandedPokemonCount = expandSmartHundoPokemonListCount(finalPokemonList);
+        const numericCount = /^(0|[1-9]\d*)$/.test(String(finalCount)) ? Number(finalCount) : null;
+        const blockingReasons = [];
+        if (!applicable) blockingReasons.push('no_hundo_input');
+        if (!currentRun) blockingReasons.push('stale_or_cancelled');
+        if (!countValid || numericCount === null) blockingReasons.push('count_unverified');
+        if (countConflict) blockingReasons.push('count_conflict');
+        if (!cardOperationsSucceeded) blockingReasons.push('card_operation_failed');
+        if (!structuresComplete) blockingReasons.push('card_enumeration_incomplete');
+        if (!overlapResolved) blockingReasons.push('overlap_unresolved');
+        if (!verificationComplete) blockingReasons.push('form_verification_incomplete');
+        if (Number(cardReviewCount) > 0) blockingReasons.push('card_review_unresolved');
+        if (Array.isArray(sessionReviewReasons) && sessionReviewReasons.length > 0) blockingReasons.push('session_review_unresolved');
+        if (expandedPokemonCount === null || numericCount !== expandedPokemonCount) blockingReasons.push('count_list_mismatch');
+        if (!countApplied) blockingReasons.push('count_not_applied');
+        if (!listApplied) blockingReasons.push('list_not_applied');
+        if (renderObservation !== 'observed') blockingReasons.push('render_not_observed');
+        const completed = applicable && blockingReasons.length === 0;
+        const safeElapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0 ? elapsedMs : null;
+        return {
+            applicable: Boolean(applicable),
+            scope: 'submitted_hundo_batch',
+            image_indexes: (Array.isArray(imageIndexes) ? imageIndexes : []).filter(Number.isInteger),
+            target_ms: 60000,
+            count_applied: Boolean(countApplied),
+            list_applied: Boolean(listApplied),
+            validation_complete: Boolean(countValid && !countConflict && cardOperationsSucceeded && structuresComplete && overlapResolved && verificationComplete && Number(cardReviewCount) === 0 && (!Array.isArray(sessionReviewReasons) || sessionReviewReasons.length === 0) && numericCount === expandedPokemonCount),
+            render_observation: ['pending', 'observed', 'unverified_background', 'unavailable'].includes(renderObservation) ? renderObservation : 'unavailable',
+            complete_visible_elapsed_ms: completed ? safeElapsed : null,
+            completed,
+            within_60s: completed && safeElapsed !== null && safeElapsed <= 60000,
+            final_count: String(finalCount ?? ''),
+            final_pokemon_list: String(finalPokemonList ?? ''),
+            expanded_pokemon_count: expandedPokemonCount,
+            blocking_reasons: [...new Set(blockingReasons)],
+            accuracy_status: 'not_evaluated'
+        };
+    };
 
     const validateSmartHundoStructure = (result = {}, finishReason = '') => {
         const cards = Array.isArray(result?.cards) ? result.cards : [];
@@ -1633,6 +1741,9 @@
         detectScreenshotOverlap,
         mergeSmartHundoScreenshots,
         shapeSmartHundoDiagnostics,
+        expandSmartHundoPokemonListCount,
+        observeSmartHundoRenderOpportunity,
+        evaluateSmartHundoCompletion,
         validateSmartHundoStructure,
         normalizeHundoCountResult,
         validateHundoCountEvidence,
