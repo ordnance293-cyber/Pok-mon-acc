@@ -4739,16 +4739,19 @@
             return openAiResponse(content, () => requestStageEvents.push({ event: 'finish', schemaName }));
           }
           if (schemaName === 'pokemon_go_smart_hundo_form_verifier_v2') {
-            const cards = [...prompt.matchAll(/(T\d+) \| card_id=([^\s]+) \| base_species=([^\s]+) \| candidates=([^\s]+)/g)].flatMap(match => {
+            const cards = [...prompt.matchAll(/(T\d+) \| card_id=([^\s]+) \| screenshot_index=(\d+) \| requested=([^\s]+) \| base_species=([^\s]+) \| candidates=([^\s]+)/g)].flatMap(match => {
               const verified_form_id = verifiedFormByCardId.get(match[2])
                 || (verifiedFormByCardId.size === 1 ? [...verifiedFormByCardId.values()][0] : null);
               if (!verified_form_id) return [];
               const evidence = globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE[verified_form_id];
               return {
-                tile_id: match[1], card_id: match[2], base_species: match[3], verified_form_id,
+                tile_id: match[1], card_id: match[2], screenshot_index: Number(match[3]), requested_dimensions: match[4].split('+'), base_species: match[5], verified_form_id,
                 verification_confidence: 0.97, crop_visibility: 'clear', body_plan: evidence.body_plan,
                 limb_layout: evidence.limb_layout, fusion_host: evidence.fusion_host,
-                decisive_feature: evidence.decisive_feature, key_features_visible: true
+                decisive_feature: evidence.decisive_feature, key_features_visible: true,
+                verified_background_type: 'uncertain', background_verification_confidence: 0,
+                background_region_visibility: 'uncertain', background_card_association: 'uncertain',
+                observed_icon_class: 'uncertain', badge_type: 'uncertain', appearance: 'uncertain'
               };
             });
             return openAiResponse({ cards }, () => requestStageEvents.push({ event: 'finish', schemaName }));
@@ -6218,8 +6221,8 @@
         });
 
         const formVerifierJobs = () => [
-          { tile_id: 'T1', card_id: '0:2:1:1', screenshot_index: 0, base_species: '帝牙盧卡', candidate_form_ids: ['dialga_standard', 'dialga_origin', 'uncertain'] },
-          { tile_id: 'T2', card_id: '0:2:1:2', screenshot_index: 0, base_species: '奈克洛茲瑪', candidate_form_ids: ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'uncertain'] }
+          { tile_id: 'T1', card_id: '0:2:1:1', screenshot_index: 0, base_species: '帝牙盧卡', requested_dimensions: ['form'], candidate_form_ids: ['dialga_standard', 'dialga_origin', 'uncertain'] },
+          { tile_id: 'T2', card_id: '0:2:1:2', screenshot_index: 0, base_species: '奈克洛茲瑪', requested_dimensions: ['form'], candidate_form_ids: ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'uncertain'] }
         ];
         const requestFormVerifier = (overrides = {}) => requestSmartHundoFormVerification({
           apiKey: 'test-key',
@@ -6244,20 +6247,23 @@
         const verifierCardForJob = (job, formId = 'dialga_origin', overrides = {}) => {
           const evidence = globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE[formId];
           return {
-            tile_id: job.tile_id, card_id: job.card_id, base_species: job.base_species,
+            tile_id: job.tile_id, card_id: job.card_id, screenshot_index: job.screenshot_index ?? 0,
+            requested_dimensions: job.requested_dimensions || ['form'], base_species: job.base_species,
             verified_form_id: formId, verification_confidence: 0.97, crop_visibility: 'clear',
             body_plan: evidence.body_plan, limb_layout: evidence.limb_layout,
             fusion_host: evidence.fusion_host, decisive_feature: evidence.decisive_feature,
-            key_features_visible: true, ...overrides
+            key_features_visible: true, verified_background_type: 'uncertain', background_verification_confidence: 0,
+            background_region_visibility: 'uncertain', background_card_association: 'uncertain', observed_icon_class: 'uncertain',
+            badge_type: 'uncertain', appearance: 'uncertain', ...overrides
           };
         };
         const verifierCardsFromPrompt = (payload, formId = 'dialga_origin', overrides = {}) => (
-          [...payload.messages[0].content[0].text.matchAll(/(T\d+) \| card_id=([^\s]+) \| base_species=([^\s]+)/g)]
-            .map(match => verifierCardForJob({ tile_id: match[1], card_id: match[2], base_species: match[3] }, formId, overrides))
+          [...payload.messages[0].content[0].text.matchAll(/(T\d+) \| card_id=([^\s]+) \| screenshot_index=(\d+) \| requested=([^\s]+) \| base_species=([^\s]+)/g)]
+            .map(match => verifierCardForJob({ tile_id: match[1], card_id: match[2], screenshot_index: Number(match[3]), requested_dimensions: match[4].split('+'), base_species: match[5] }, formId, overrides))
         );
 
         await asyncTest('defines the strict limited-candidate verifier schema', async () => {
-          const fields = ['tile_id', 'card_id', 'base_species', 'verified_form_id', 'verification_confidence', 'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible'];
+          const fields = ['tile_id', 'card_id', 'screenshot_index', 'requested_dimensions', 'base_species', 'verified_form_id', 'verification_confidence', 'crop_visibility', 'body_plan', 'limb_layout', 'fusion_host', 'decisive_feature', 'key_features_visible', 'verified_background_type', 'background_verification_confidence', 'background_region_visibility', 'background_card_association', 'observed_icon_class', 'badge_type', 'appearance'];
           equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-5.6-sol');
           equal(HUNDO_FORM_VERIFIER_SCHEMA.name, 'pokemon_go_smart_hundo_form_verifier_v2');
           equal(HUNDO_FORM_VERIFIER_SCHEMA.strict, true);
@@ -6283,7 +6289,7 @@
             '帝牙盧卡與帕路奇亞的顏色或異色絕不可作為形態捷徑',
             'body_plan=dialga_stocky_wide_quadruped | limb_layout=four_standard_legs | fusion_host=not_applicable | decisive_feature=dialga_standard_stocky_neck_chest',
             'body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings',
-            'T1 | card_id=0:2:1:1 | base_species=帝牙盧卡 | candidates=dialga_standard,dialga_origin,uncertain'
+            'T1 | card_id=0:2:1:1 | screenshot_index=0 | requested=form | base_species=帝牙盧卡 | candidates=dialga_standard,dialga_origin,uncertain'
           ].forEach(fragment => equal(prompt.includes(fragment), true, `prompt includes ${fragment}`));
         });
 
@@ -6459,6 +6465,50 @@
           } finally { globalThis.fetch = previousFetch; }
         });
 
+        await asyncTest('orchestrates background-only identity checks and selective reason clearing', async () => {
+          const runner = globalThis.runSmartHundoFormVerification;
+          const source = runtimeTargetCard(0, {
+            base_species: '超夢', form_id: 'not_applicable', effective_form_id: 'not_applicable',
+            canonical_official_name: '超夢', background_type: 'special', effective_background_type: 'uncertain',
+            background_confidence: .99, background_evidence: { present: true, region_visibility: 'clear',
+              position: 'lower_right', badge_type: 'special_background_badge', appearance: 'event_special_background' },
+            manual_review_reasons: ['background_uncertain', 'shiny_uncertain']
+          });
+          const previousFetch = globalThis.fetch;
+          try {
+            installStrictOpenAiFetchMock(async ({ payload }) => {
+              const prompt = payload.messages[0].content[0].text;
+              const match = /(T\d+) \| card_id=([^\s]+) \| screenshot_index=(\d+) \| requested=([^\s]+) \| base_species=([^\s]+)/.exec(prompt);
+              return openAiResponse({ cards: [verifierCardForJob({ tile_id: match[1], card_id: match[2],
+                screenshot_index: Number(match[3]), requested_dimensions: match[4].split('+'), base_species: match[5] },
+                'dialga_origin', { verified_form_id: 'uncertain', verification_confidence: 0,
+                  crop_visibility: 'uncertain', body_plan: 'uncertain', limb_layout: 'uncertain', fusion_host: 'uncertain',
+                  decisive_feature: 'uncertain', key_features_visible: false, verified_background_type: 'special',
+                  background_verification_confidence: .99, background_region_visibility: 'clear',
+                  background_card_association: 'same_card', observed_icon_class: 'special_flower_badge',
+                  badge_type: 'special_background_badge', appearance: 'event_special_background' })] });
+            });
+            const accepted = await runner({ apiKey: 'test-key', originalDataUrl, imageIndex: 0, cards: [source] });
+            equal(accepted.metrics.verifier_request_count, 1);
+            equal(accepted.cards[0].effective_background_type, 'special');
+            deepEqual(accepted.cards[0].manual_review_reasons, ['shiny_uncertain']);
+
+            installStrictOpenAiFetchMock(async ({ payload }) => {
+              const cards = verifierCardsFromPrompt(payload, 'dialga_origin', { base_species: '急凍鳥',
+                verified_form_id: 'uncertain', verification_confidence: 0, crop_visibility: 'uncertain', body_plan: 'uncertain',
+                limb_layout: 'uncertain', fusion_host: 'uncertain', decisive_feature: 'uncertain', key_features_visible: false,
+                verified_background_type: 'special', background_verification_confidence: .99, background_region_visibility: 'clear',
+                background_card_association: 'same_card', observed_icon_class: 'special_flower_badge',
+                badge_type: 'special_background_badge', appearance: 'event_special_background' });
+              return openAiResponse({ cards });
+            });
+            const rejected = await runner({ apiKey: 'test-key', originalDataUrl, imageIndex: 0, cards: [source] });
+            equal(rejected.cards[0].effective_background_type, 'uncertain');
+            equal(rejected.cards[0].manual_review_reasons.includes('background_uncertain'), true);
+            equal(rejected.cards[0].manual_review_reasons.includes('shiny_uncertain'), true);
+          } finally { globalThis.fetch = previousFetch; }
+        });
+
         await asyncTest('isolates one failed contact sheet after one successful sheet and never falls back from failed verifier verdicts', async () => {
           const runner = globalThis.runSmartHundoFormVerification;
           const cards = Array.from({ length: 7 }, (_value, index) => runtimeTargetCard(index));
@@ -6523,13 +6573,14 @@
                 equal(schemaName, 'pokemon_go_smart_hundo_form_verifier_v2');
                 requests += 1;
                 const prompt = payload.messages[0].content[0].text;
-                const jobs = [...prompt.matchAll(/(T\d+) \| card_id=([^\s]+) \| base_species=([^\s]+)/g)].map((match) => ({
-                  tile_id: match[1],
-                  card_id: match[2],
-                  base_species: match[3],
+                const jobs = [...prompt.matchAll(/(T\d+) \| card_id=([^\s]+) \| screenshot_index=(\d+) \| requested=([^\s]+) \| base_species=([^\s]+)/g)].map((match) => ({
+                  tile_id: match[1], card_id: match[2], screenshot_index: Number(match[3]),
+                  requested_dimensions: match[4].split('+'), base_species: match[5],
                   verified_form_id: 'dialga_origin', verification_confidence: 0.97, crop_visibility: 'clear',
                   body_plan: 'dialga_elongated_equine_quadruped', limb_layout: 'four_long_legs',
-                  fusion_host: 'not_applicable', decisive_feature: 'dialga_origin_elongated_neck_chest', key_features_visible: true
+                  fusion_host: 'not_applicable', decisive_feature: 'dialga_origin_elongated_neck_chest', key_features_visible: true,
+                  verified_background_type: 'uncertain', background_verification_confidence: 0, background_region_visibility: 'uncertain',
+                  background_card_association: 'uncertain', observed_icon_class: 'uncertain', badge_type: 'uncertain', appearance: 'uncertain'
                 }));
                 return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ cards: jobs }) } }] }) };
               });
@@ -6579,8 +6630,8 @@
           deepEqual(card.properties.key_features_visible, { type: 'boolean' });
 
           const jobs = [
-            { tile_id: 'T1', card_id: '0:2:1:1', screenshot_index: 0, base_species: '帝牙盧卡', candidate_form_ids: ['dialga_standard', 'dialga_origin', 'uncertain'] },
-            { tile_id: 'T2', card_id: '0:2:1:2', screenshot_index: 0, base_species: '奈克洛茲瑪', candidate_form_ids: ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'uncertain'] }
+            { tile_id: 'T1', card_id: '0:2:1:1', screenshot_index: 0, base_species: '帝牙盧卡', requested_dimensions: ['form'], candidate_form_ids: ['dialga_standard', 'dialga_origin', 'uncertain'] },
+            { tile_id: 'T2', card_id: '0:2:1:2', screenshot_index: 0, base_species: '奈克洛茲瑪', requested_dimensions: ['form'], candidate_form_ids: ['necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings', 'uncertain'] }
           ];
           const prompt = buildSmartHundoFormVerifierPrompt(jobs);
           [
@@ -6613,8 +6664,8 @@
             'body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings',
             'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest', 'palkia_standard_visible_arms', 'palkia_origin_centaur_body',
             'necrozma_base_crystal_body', 'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings',
-            'T1 | card_id=0:2:1:1 | base_species=帝牙盧卡 | candidates=dialga_standard,dialga_origin,uncertain',
-            'T2 | card_id=0:2:1:2 | base_species=奈克洛茲瑪 | candidates=necrozma_base,necrozma_dusk_mane,necrozma_dawn_wings,uncertain'
+            'T1 | card_id=0:2:1:1 | screenshot_index=0 | requested=form | base_species=帝牙盧卡 | candidates=dialga_standard,dialga_origin,uncertain',
+            'T2 | card_id=0:2:1:2 | screenshot_index=0 | requested=form | base_species=奈克洛茲瑪 | candidates=necrozma_base,necrozma_dusk_mane,necrozma_dawn_wings,uncertain'
           ].forEach(fragment => equal(prompt.includes(fragment), true, `verifier prompt includes ${fragment}`));
           ['CP', '暱稱', 'visible label', '異色', 'color shortcut'].forEach(shortcut => {
             equal(prompt.includes(`不得使用 ${shortcut}`), true, `prompt forbids ${shortcut} shortcut`);

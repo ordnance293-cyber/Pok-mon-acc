@@ -1243,6 +1243,7 @@
         background_verifier_evidence_mismatch: '背卡複核證據不一致',
         background_verifier_low_confidence: '背卡複核信心不足',
         background_verifier_invalid_result: '背卡複核卡片對應錯誤',
+        background_verifier_structural_incomplete: '背卡複核未回傳全部候選卡片',
         background_verification_request_failed: '背卡複核請求失敗'
     });
 

@@ -67,10 +67,58 @@ assert.deepEqual(corrected.map(c => c.effective_background_type), ['special', 'n
 assert.equal(corrected[1].effective_form_id, 'zacian_standard');
 const bad = verifier.mergeHundoAttributeVerificationResults(plan.cards, jobs, { cards: [...outputs, outputs.find(value => value.card_id === 'c1')] }, helpers.HUNDO_FORM_CANONICAL_NAMES);
 assert.equal(bad[0].effective_background_type, 'uncertain', 'duplicate result is rejected');
-assert.equal(bad[2].effective_background_type, 'none', 'duplicate cannot alter a neighboring card');
+assert.equal(bad[2].effective_background_type, 'uncertain', 'invalid batch cannot correct a neighboring card');
 
 const reference = [card('r0', '蓋歐卡', 'not_applicable', 'none', 3011), card('r1', '烈空坐', 'not_applicable', 'none', 2802), card('r2', '蓋歐卡', 'not_applicable', 'none', 2703), card('r3', '酋雷姆', 'kyurem_white', 'none', 2604), ...corrected];
 reference[0].effective_rocket_state = 'purified';
 assert.deepEqual(helpers.smartHundoCardsToPokemonList(reference), { pokemon_list: '蓋歐卡*2,烈空坐,焰白酋雷姆,特別背卡超夢,蒼響,急凍鳥', recognized_count: 7, review_card_count: 0, review_reason_counts: {} });
 assert.equal(verifier.validateVerifiedBackground({ verified_background_type: 'none', background_verification_confidence: .99, background_region_visibility: 'cropped', background_card_association: 'same_card', observed_icon_class: 'none', badge_type: 'none', appearance: 'none' }).valid, false);
 console.log('PASS Smart Hundo attribute verification regressions');
+
+// Review follow-up: the observed icon must agree with both positive evidence fields.
+for (const [type, badge, appearance, validIcon] of [
+  ['special', 'special_background_badge', 'event_special_background', 'special_flower_badge'],
+  ['commemorative', 'commemorative_location_badge', 'location_style_background', 'location_globe_badge']
+]) {
+  for (const incompatibleIcon of ['pink_dynamax_x', 'purification_starburst', 'other', 'none', 'uncertain']) {
+    assert.equal(verifier.validateVerifiedBackground({ verified_background_type: type,
+      background_verification_confidence: .99, background_region_visibility: 'clear',
+      background_card_association: 'same_card', observed_icon_class: incompatibleIcon,
+      badge_type: badge, appearance }).valid, false, `${type} rejects ${incompatibleIcon}`);
+  }
+  assert.equal(verifier.validateVerifiedBackground({ verified_background_type: type,
+    background_verification_confidence: .99, background_region_visibility: 'clear',
+    background_card_association: 'same_card', observed_icon_class: validIcon,
+    badge_type: badge, appearance }).valid, true, `${type} accepts its matching icon`);
+}
+assert.equal(verifier.validateVerifiedBackground({ verified_background_type: 'none',
+  background_verification_confidence: .99, background_region_visibility: 'clear',
+  background_card_association: 'same_card', observed_icon_class: 'pink_dynamax_x',
+  badge_type: 'none', appearance: 'none' }).valid, true, 'clear associated Dynamax-only evidence supports none');
+
+const backgroundOnlyCard = card('s1', '超夢', 'not_applicable', 'special', 2507);
+backgroundOnlyCard.manual_review_reasons = ['background_uncertain', 'shiny_uncertain'];
+const backgroundOnlyPlan = verifier.planTargetHundoAttributeCandidates([backgroundOnlyCard], { screenshotIndex: 2 });
+const backgroundOnlyJob = verifier.planHundoFormVerificationBatches(backgroundOnlyPlan.candidates)[0].jobs[0];
+assert.deepEqual(backgroundOnlyJob.requested_dimensions, ['background']);
+const matchingBackground = resultFor(backgroundOnlyJob, { verified_background_type: 'special',
+  background_verification_confidence: .99, background_region_visibility: 'clear',
+  background_card_association: 'same_card', observed_icon_class: 'special_flower_badge',
+  badge_type: 'special_background_badge', appearance: 'event_special_background' });
+const matchedBackground = verifier.mergeHundoAttributeVerificationResults(backgroundOnlyPlan.cards,
+  [backgroundOnlyJob], { cards: [matchingBackground] }, helpers.HUNDO_FORM_CANONICAL_NAMES)[0];
+assert.equal(matchedBackground.effective_background_type, 'special');
+assert.deepEqual(matchedBackground.manual_review_reasons, ['shiny_uncertain']);
+const wrongSpecies = verifier.mergeHundoAttributeVerificationResults(backgroundOnlyPlan.cards,
+  [backgroundOnlyJob], { cards: [{ ...matchingBackground, base_species: '急凍鳥' }] }, helpers.HUNDO_FORM_CANONICAL_NAMES)[0];
+assert.equal(wrongSpecies.effective_background_type, 'uncertain');
+assert.equal(wrongSpecies.background_verification_status, 'failed');
+assert.equal(wrongSpecies.manual_review_reasons.includes('background_uncertain'), true);
+assert.equal(wrongSpecies.manual_review_reasons.includes('shiny_uncertain'), true);
+
+const missingStructure = verifier.validateHundoAttributeVerifierStructure({ cards: outputs.slice(1) }, jobs, 'stop');
+assert.equal(missingStructure.complete, false);
+assert.equal(missingStructure.reason, 'structural_incomplete');
+const truncatedStructure = verifier.validateHundoAttributeVerifierStructure({ cards: outputs }, jobs, 'length');
+assert.equal(truncatedStructure.complete, false);
+assert.equal(truncatedStructure.reason, 'structural_incomplete');

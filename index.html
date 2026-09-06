@@ -3723,12 +3723,16 @@ ${mappingLines}`;
                     });
                     if (!isCurrentRun()) return { cards: finalCards, metrics, stale: true };
                     const result = response?.result;
+                    const structure = verifier.validateHundoAttributeVerifierStructure(
+                        result, jobs, String(response?.finish_reason || '')
+                    );
                     const onlySheetCards = annotatedCards.filter(card => jobIds.includes(card?.card_id));
                     const merged = verifier.mergeHundoAttributeVerificationResults(
                         onlySheetCards,
                         jobs,
                         result,
-                        helpers.HUNDO_FORM_CANONICAL_NAMES
+                        helpers.HUNDO_FORM_CANONICAL_NAMES,
+                        structure
                     );
                     const mergedById = new Map(merged.map(card => [card.card_id, card]));
                     finalCards = annotatedCards.map(card => mergedById.get(card?.card_id) || card);

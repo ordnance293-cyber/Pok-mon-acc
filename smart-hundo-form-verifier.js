@@ -640,9 +640,11 @@
             return { valid: false, reason: 'background_verifier_low_confidence' };
         const type = result?.verified_background_type;
         const positive = type === 'commemorative'
-            ? result.badge_type === 'commemorative_location_badge' && result.appearance === 'location_style_background'
+            ? result.observed_icon_class === 'location_globe_badge'
+                && result.badge_type === 'commemorative_location_badge' && result.appearance === 'location_style_background'
             : type === 'special'
-                ? result.badge_type === 'special_background_badge' && result.appearance === 'event_special_background'
+                ? result.observed_icon_class === 'special_flower_badge'
+                    && result.badge_type === 'special_background_badge' && result.appearance === 'event_special_background'
                 : false;
         const negative = type === 'none' && result.badge_type === 'none' && result.appearance === 'none'
             && ['none', 'pink_dynamax_x', 'purification_starburst'].includes(result.observed_icon_class);
@@ -650,8 +652,36 @@
         return { valid: true, type };
     };
 
-    const mergeHundoAttributeVerificationResults = (cards, jobs, results, canonicalNames) => {
+    const validateHundoAttributeVerifierStructure = (results, jobs, finishReason = '') => {
+        const list = Array.isArray(results?.cards) ? results.cards : null;
+        if (!list || !Array.isArray(jobs)) return { complete: false, reason: 'invalid_result' };
+        if (['length', 'truncated', 'truncation'].includes(String(finishReason || '').toLowerCase())) {
+            return { complete: false, reason: 'structural_incomplete' };
+        }
+        const jobCards = new Set();
+        const jobTiles = new Set();
+        for (const job of jobs) {
+            if (!job?.card_id || !job?.tile_id || jobCards.has(job.card_id) || jobTiles.has(job.tile_id)) {
+                return { complete: false, reason: 'invalid_result' };
+            }
+            jobCards.add(job.card_id); jobTiles.add(job.tile_id);
+        }
+        const resultCards = new Set();
+        const resultTiles = new Set();
+        for (const result of list) {
+            if (!result?.card_id || !result?.tile_id || resultCards.has(result.card_id) || resultTiles.has(result.tile_id)
+                || !jobCards.has(result.card_id) || !jobTiles.has(result.tile_id)) {
+                return { complete: false, reason: 'invalid_result' };
+            }
+            resultCards.add(result.card_id); resultTiles.add(result.tile_id);
+        }
+        if (resultCards.size !== jobCards.size) return { complete: false, reason: 'structural_incomplete' };
+        return { complete: true, reason: '' };
+    };
+
+    const mergeHundoAttributeVerificationResults = (cards, jobs, results, canonicalNames, structure) => {
         const list = Array.isArray(results?.cards) ? results.cards : [];
+        const structural = structure || validateHundoAttributeVerifierStructure(results, jobs);
         const counts = new Map(); list.forEach(r => counts.set(r?.card_id, (counts.get(r?.card_id) || 0) + 1));
         const byId = new Map(list.map(r => [r?.card_id, r]));
         const jobIds = new Set(jobs.map(j => j.card_id));
@@ -660,15 +690,18 @@
             const job = jobs.find(j => j.card_id === card?.card_id);
             if (!job) return card;
             const result = byId.get(job.card_id);
-            const identityValid = !foreign && counts.get(job.card_id) === 1 && result
+            const identityValid = structural.complete === true && !foreign && counts.get(job.card_id) === 1 && result
                 && result.card_id === job.card_id && result.tile_id === job.tile_id
                 && result.screenshot_index === job.screenshot_index
+                && result.base_species === job.base_species
+                && result.base_species === card.base_species
                 && Array.isArray(result.requested_dimensions)
                 && result.requested_dimensions.length === job.requested_dimensions.length
                 && result.requested_dimensions.every((value, index) => value === job.requested_dimensions[index]);
             let merged = card;
             if (job.requested_dimensions.includes('form')) {
-                if (!identityValid) merged = verificationFailure(merged, 'form_verifier_invalid_result');
+                if (!identityValid) merged = verificationFailure(merged, structural.reason === 'structural_incomplete'
+                    ? 'form_verifier_structural_incomplete' : 'form_verifier_invalid_result');
                 else {
                     const verdict = validateHundoVerifiedForm({ tile_id: result.tile_id, card_id: result.card_id, base_species: result.base_species, verified_form_id: result.verified_form_id, verification_confidence: result.verification_confidence, crop_visibility: result.crop_visibility, body_plan: result.body_plan, limb_layout: result.limb_layout, fusion_host: result.fusion_host, decisive_feature: result.decisive_feature, key_features_visible: result.key_features_visible }, job);
                     if (!verdict.valid) merged = verificationFailure(merged, verdict.reason);
@@ -682,9 +715,15 @@
                 }
             }
             if (job.requested_dimensions.includes('background')) {
-                const verdict = identityValid ? validateVerifiedBackground(result) : { valid: false, reason: 'background_verifier_invalid_result' };
+                const verdict = identityValid ? validateVerifiedBackground(result) : { valid: false, reason: structural.reason === 'structural_incomplete'
+                    ? 'background_verifier_structural_incomplete' : 'background_verifier_invalid_result' };
                 merged = verdict.valid ? { ...merged, verified_background_type: verdict.type,
-                    background_verification_status: 'verified', effective_background_type: verdict.type }
+                    background_verification_status: 'verified', effective_background_type: verdict.type,
+                    manual_review_reasons: (merged.manual_review_reasons || []).filter(reason => ![
+                        'background_uncertain', 'background_crop_not_clear', 'background_verifier_evidence_mismatch',
+                        'background_verifier_low_confidence', 'background_verifier_invalid_result', 'background_verifier_structural_incomplete',
+                        'background_verification_request_failed'
+                    ].includes(reason)) }
                     : { ...merged, verified_background_type: 'uncertain', background_verification_status: 'failed',
                         effective_background_type: 'uncertain', manual_review_reasons: addReason(merged.manual_review_reasons || [], verdict.reason) };
             }
@@ -713,6 +752,7 @@
         planTargetHundoAttributeCandidates,
         backgroundNeedsVerification,
         validateVerifiedBackground,
+        validateHundoAttributeVerifierStructure,
         mergeHundoAttributeVerificationResults,
         planHundoFormVerificationBatches,
         markHundoFormVerificationFailure
