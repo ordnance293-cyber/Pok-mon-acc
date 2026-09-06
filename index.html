@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script src="smart-hundo-helpers.js"></script>
+    <script src="hundo-list-count.js"></script>
     <script src="smart-hundo-form-verifier.js"></script>
     <script src="trainer-team-helpers.js"></script>
     <script src="sold-account-cleanup.js"></script>
@@ -480,12 +481,21 @@
             const accountId = getVal('g_id').trim();
             if(!accountId) { showMsg("請輸入帳號代碼！", "red"); return; }
             const normalizedHundos = syncNormalizedHundoList();
+            if (normalizedHundos === null) {
+                showMsg("百神清單數量格式未完成，請使用：蓋歐卡*2", "red");
+                document.getElementById('g_hundos')?.focus();
+                return;
+            }
+            const parsedHundos = window.updateHundoCount();
+            if (!parsedHundos?.valid) return;
+            const generatedText = window.generateText();
+            if (!generatedText) return;
             
             const newItem = {
                 accountId, level: getVal('g_level'), team: getVal('g_team'), price: getVal('g_price') || "未標價",
                 stardust: getVal('g_stardust'), xp: getVal('g_xp'), rarecandy: getVal('st_rarecandy'), coin: getVal('st_coin'), 
                 greenpass: getVal('st_greenpass'), masterball: getVal('st_masterball'), poke_bag: getVal('st_poke_bag'), item_bag: getVal('st_item_bag'), 
-                rare_list: getVal('g_rare_list'), hundos: normalizedHundos, st_hundo_leg: getVal('st_hundo_leg'), st_legend: getVal('st_legend'), 
+                rare_list: getVal('g_rare_list'), hundos: normalizedHundos, st_hundo_leg: String(parsedHundos.total), st_legend: getVal('st_legend'),
                 st_shiny: getVal('st_shiny'), st_shiny_leg: getVal('st_shiny_leg'), st_costume: getVal('st_costume'), st_bg_comm: getVal('st_bg_comm'), 
                 st_bg_special: getVal('st_bg_special'), st_dyna: getVal('st_dyna'), st_giga: getVal('st_giga'), st_perfect: getVal('st_perfect'),
                 st_old_poke: getVal('st_old_poke'), st_old_leg: getVal('st_old_leg'),
@@ -497,7 +507,7 @@
                 chk_hoenn: getChk('chk_hoenn'), sel_hoenn: getVal('sel_hoenn'),
                 chk_dyna_form: getChk('chk_dyna'), chk_groudon: getChk('chk_groudon'),
                 chk_kyogre: getChk('chk_kyogre'), chk_rayquaza: getChk('chk_rayquaza'),
-                fullText: encodeURIComponent(window.generateText()), status: getVal('g_item_status')
+                fullText: encodeURIComponent(generatedText), status: getVal('g_item_status')
             };
 
             for(let i=1; i<=15; i++) newItem['chk_sp_'+i] = getChk('chk_sp_'+i);
@@ -680,7 +690,10 @@
             if (!item) return;
             trainerTeamAiValueOwnership = null;
             invalidateTrainerTeamScan();
-            return editAccountWithExistingFormBehavior(uid);
+            currentHundoScreenshotEvidence = null;
+            const result = editAccountWithExistingFormBehavior(uid);
+            window.updateHundoCount();
+            return result;
         };
 
         window.bulkUpdateAccountIds = async function() {
@@ -739,22 +752,31 @@
             resetAiActionButtons();
         };
 
-        window.clearImage = function() { invalidateTrainerTeamScan(); document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; toggleAiActionButtons(false); resetAiActionButtons(); };
+        window.clearImage = function() { invalidateTrainerTeamScan(); currentHundoScreenshotEvidence = null; document.getElementById('imageInput').value = ''; document.getElementById('imagePreviewContainer').innerHTML = ''; toggleAiActionButtons(false); resetAiActionButtons(); window.updateHundoCount(); };
+
+        let currentHundoScreenshotEvidence = null;
+        let hundoInputComposing = false;
 
         window.updateHundoCount = function() {
             const listInput = document.getElementById('g_hundos');
-            if (!listInput) return;
-            // 百神數只能來自畫面數字，禁止再由 pokemon_list 自動回推統計。
-            listInput.classList.add('ring-2', 'ring-blue-200');
-            setTimeout(() => listInput.classList.remove('ring-2', 'ring-blue-200'), 300);
+            const countInput = document.getElementById('st_hundo_leg');
+            if (!listInput || !countInput || hundoInputComposing) return null;
+            return globalThis.HundoListCount.synchronizeHundoCount({
+                listInput,
+                countInput,
+                evidence: currentHundoScreenshotEvidence,
+                messageElement: document.getElementById('hundoCountMessage')
+            });
         };
 
-        const SMART_HUNDO_AI_OWNED_INPUT_IDS = new Set(['g_hundos', 'st_hundo_leg']);
+        const SMART_HUNDO_AI_OWNED_INPUT_IDS = new Set(['g_hundos']);
         const smartHundoAiValueOwnership = new Map();
         const STORAGE_CAPACITY_AI_OWNED_INPUT_IDS = new Set(['st_poke_bag', 'st_item_bag']);
         const storageCapacityAiValueOwnership = new Map();
         let smartHundoSessionCounter = 0;
         let activeSmartHundoSessionId = 0;
+        let smartHundoManualRevision = 0;
+        let activeSmartHundoStartRevision = 0;
         let autoScanRunCounter = 0;
         let activeAutoScanRunId = 0;
         let trainerTeamScanCounter = 0;
@@ -1009,6 +1031,14 @@
 
         document.getElementById('g_team')?.addEventListener('change', handleTrainerTeamManualEdit);
         document.getElementById('imageInput')?.addEventListener('change', invalidateTrainerTeamScan);
+        document.getElementById('imageInput')?.addEventListener('change', () => {
+            currentHundoScreenshotEvidence = null;
+            window.updateHundoCount();
+        });
+        document.getElementById('g_id')?.addEventListener('change', () => {
+            currentHundoScreenshotEvidence = null;
+            window.updateHundoCount();
+        });
         STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
             document.getElementById(inputId)?.addEventListener('input', () => {
                 storageCapacityAiValueOwnership.delete(inputId);
@@ -1032,6 +1062,7 @@
         const beginSmartHundoScanSession = () => {
             smartHundoSessionCounter += 1;
             activeSmartHundoSessionId = smartHundoSessionCounter;
+            activeSmartHundoStartRevision = smartHundoManualRevision;
 
             SMART_HUNDO_AI_OWNED_INPUT_IDS.forEach(inputId => {
                 const marker = smartHundoAiValueOwnership.get(inputId);
@@ -1039,6 +1070,8 @@
                 if (marker && input && input.value === marker.value) input.value = '';
             });
             smartHundoAiValueOwnership.clear();
+            currentHundoScreenshotEvidence = null;
+            window.updateHundoCount();
 
             window.lastSmartHundoDiagnostics = null;
             window.lastSmartHundoScanResult = null;
@@ -1049,6 +1082,7 @@
             if (!SMART_HUNDO_AI_OWNED_INPUT_IDS.has(inputId) || !isCurrentSmartHundoSession(sessionId)) {
                 return false;
             }
+            if (inputId === 'g_hundos' && smartHundoManualRevision !== activeSmartHundoStartRevision) return false;
             const input = document.getElementById(inputId);
             if (!input) return false;
             const normalizedValue = String(value ?? '');
@@ -1060,14 +1094,22 @@
         const handleSmartHundoManualEdit = (inputId) => {
             if (!SMART_HUNDO_AI_OWNED_INPUT_IDS.has(inputId)) return false;
             smartHundoAiValueOwnership.delete(inputId);
+            if (inputId === 'g_hundos') smartHundoManualRevision += 1;
             return true;
         };
 
-        SMART_HUNDO_AI_OWNED_INPUT_IDS.forEach(inputId => {
-            document.getElementById(inputId)?.addEventListener('input', () => {
-                handleSmartHundoManualEdit(inputId);
-            });
+        const hundoListInput = document.getElementById('g_hundos');
+        hundoListInput?.addEventListener('compositionstart', () => { hundoInputComposing = true; });
+        hundoListInput?.addEventListener('compositionend', () => {
+            hundoInputComposing = false;
+            handleSmartHundoManualEdit('g_hundos');
+            window.updateHundoCount();
         });
+        hundoListInput?.addEventListener('input', event => {
+            handleSmartHundoManualEdit('g_hundos');
+            if (!event.isComposing && !hundoInputComposing) window.updateHundoCount();
+        });
+        window.updateHundoCount();
 
         const publishSmartHundoDiagnostics = (sessionId, diagnostics) => {
             if (!isCurrentSmartHundoSession(sessionId)) return false;
@@ -1883,11 +1925,11 @@
         };
 
         const normalizePokemonListEntry = (value) => {
-            let text = String(value || '').trim();
+            let text = globalThis.HundoListCount.normalizeParsingCopy(value).trim();
             if (!text) return null;
             text = text.replace(/^[•\-\d.\s]+/, '');
-            const countMatch = text.match(/(?:[*xXｘＸ])\s*(\d+)$/);
-            const count = countMatch ? Math.max(parseInt(countMatch[1], 10) || 1, 1) : 1;
+            const countMatch = text.match(/(?:[*×])\s*(\d+)$/);
+            const count = countMatch ? Number(countMatch[1]) : 1;
             if (countMatch) text = text.slice(0, countMatch.index).trim();
             const name = canonical_name(text);
             if (!name) return null;
@@ -1914,8 +1956,12 @@
         const syncNormalizedHundoList = () => {
             const listInput = document.getElementById('g_hundos');
             if (!listInput) return '';
+            const before = globalThis.HundoListCount.parseHundoListCount(listInput.value);
+            if (!before.valid) return null;
             const normalized = normalizePokemonList(listInput.value);
             if (normalized !== listInput.value.trim()) listInput.value = normalized;
+            const after = window.updateHundoCount();
+            if (!after?.valid) return null;
             return normalized;
         };
 
@@ -4115,9 +4161,11 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             }
 
             Object.entries(AI_AUTOFILL_FIELD_TO_INPUT).forEach(([field, inputId]) => {
+                if (field === 'hundo_leg') return;
                 setInputValueIfPresent(inputId, res[field]);
             });
             restoreProtectedAiState(protectedState);
+            window.updateHundoCount();
         };
 
         const classifySingleAiImage = async ({ apiKey, dataUrl, imageIndex, totalFiles, updateStatus }) => {
@@ -4923,9 +4971,13 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     if (!isCurrentSmartRun()) return;
                     publishSmartHundoDiagnostics(smartSessionId, smartHundoDiagnostics);
 
-                    if (countMerge.hundo_leg) {
+                    if (countMerge.conflict || String(countMerge.hundo_leg ?? '') !== '') {
                         if (!isCurrentSmartRun()) return;
-                        markSmartHundoAiValue('st_hundo_leg', countMerge.hundo_leg, smartSessionId);
+                        currentHundoScreenshotEvidence = {
+                            sessionId: smartSessionId,
+                            count: String(countMerge.hundo_leg ?? '') === '' ? null : Number(countMerge.hundo_leg),
+                            conflicting: Boolean(countMerge.conflict)
+                        };
                     }
                     if (shouldReplaceSmartList) {
                         if (!isCurrentSmartRun()) return;
@@ -4933,6 +4985,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                             window.updateHundoCount();
                         }
                     }
+                    window.updateHundoCount();
                     if (!isCurrentSmartRun()) return;
                     setSmartHundoStatus(smartSessionId, formatSmartHundoStatus({
                         countMerge,
@@ -5020,6 +5073,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
 
         window.resetForm = function() {
             trainerTeamAiValueOwnership = null;
+            currentHundoScreenshotEvidence = null;
             document.querySelectorAll('input:not([type=password]), textarea, select').forEach(el => { 
                 if(!['googleSheetId','gasUrl','openaiApiKey', 'simpleAccountSpreadsheetId', 'simpleAccountGasUrl', 'simpleAccountFulfillmentSecret', 'searchInput', 'filterStatus', 'sortMode'].includes(el.id)) {
                     if(el.type === 'checkbox') el.checked = false; 
@@ -5045,6 +5099,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             if(cancelEditBtn) cancelEditBtn.classList.add('hidden');
 
             window.togglePage(1);
+            window.updateHundoCount();
         };
 
         const formatWanFieldForDisplay = (value) => {
@@ -5061,6 +5116,10 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             const v = (id) => document.getElementById(id).value.trim(); 
             const checked = (id) => document.getElementById(id).checked;
             const normalizedHundos = syncNormalizedHundoList();
+            if (normalizedHundos === null) {
+                document.getElementById('g_hundos')?.focus();
+                return '';
+            }
             
             const valid = (val) => {
                 if (!val) return false;
@@ -5123,7 +5182,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 if (stardustDisplay) res.push(`星塵 ${stardustDisplay}`);
             }
             
-            if(valid(v('st_hundo_leg'))) { let listStr = normalizedHundos ? ` ${normalizedHundos}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
+            { let listStr = normalizedHundos ? ` ${normalizedHundos}` : ''; res.push(`✅${v('st_hundo_leg')}隻百神${listStr}`); }
             if(valid(v('st_legend'))) res.push(`✅神獸總數${v('st_legend')}隻`); 
             if(valid(v('st_shiny'))) res.push(`✅色違寶可夢${v('st_shiny')}隻`);
             if(valid(v('st_shiny_leg'))) res.push(`✅色違神獸${v('st_shiny_leg')}隻`); 
@@ -5257,10 +5316,11 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
 
                         <div class="space-y-2 md:space-y-3">
                             <textarea id="g_rare_list" placeholder="稀有怪..." class="w-full p-1.5 border border-gray-200 rounded-lg text-[10px] md:text-xs h-12 md:h-16 bg-white outline-none focus:ring-2 focus:ring-gray-300"></textarea>
-                            <textarea id="g_hundos" oninput="window.updateHundoCount()" placeholder="百神清單..." class="w-full p-1.5 border border-blue-200 bg-blue-50/30 rounded-lg text-[10px] md:text-xs h-16 md:h-20 font-bold outline-none focus:ring-2 focus:ring-blue-300"></textarea>
+                            <textarea id="g_hundos" aria-describedby="hundoCountMessage" placeholder="百神清單..." class="w-full p-1.5 border border-blue-200 bg-blue-50/30 rounded-lg text-[10px] md:text-xs h-16 md:h-20 font-bold outline-none focus:ring-2 focus:ring-blue-300"></textarea>
+                            <p id="hundoCountMessage" class="hidden text-[10px] mt-1" aria-live="polite"></p>
 
                             <div class="grid grid-cols-2 md:grid-cols-5 gap-1 md:gap-2 text-[10px] mt-1">
-                                <div><label class="block text-gray-500 mb-0.5 text-center">百神數</label><input type="number" id="st_hundo_leg" class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none text-center"></div>
+                                <div><label class="block text-gray-500 mb-0.5 text-center">百神數</label><input type="number" id="st_hundo_leg" readonly class="w-full p-1 border rounded bg-yellow-50 font-bold outline-none text-center"></div>
                                 <div><label class="block text-gray-500 mb-0.5 text-center">神獸總</label><input type="number" id="st_legend" class="w-full p-1 border rounded outline-none text-center"></div>
                                 <div><label class="block text-gray-500 mb-0.5 text-center">色違總</label><input type="number" id="st_shiny" class="w-full p-1 border rounded outline-none text-center"></div>
                                 <div><label class="block text-gray-500 mb-0.5 text-center">色違神</label><input type="number" id="st_shiny_leg" class="w-full p-1 border rounded outline-none text-center"></div>
