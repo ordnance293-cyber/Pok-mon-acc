@@ -19,6 +19,7 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "index.html"
 SMART_HUNDO_HELPERS = ROOT / "smart-hundo-helpers.js"
+SMART_HUNDO_VISUAL_RULES = ROOT / "smart-hundo-visual-rules.js"
 TRAINER_TEAM_HELPERS = ROOT / "trainer-team-helpers.js"
 SOLD_ACCOUNT_CLEANUP = ROOT / "sold-account-cleanup.js"
 SOLD_CLEANUP_TEST = ROOT / "tests" / "sold-account-cleanup.test.js"
@@ -361,6 +362,7 @@ def assert_trainer_diagnostics_and_logging_are_safe(source: str, console_argumen
 
 def main() -> int:
     source = normalized_source(INDEX_HTML)
+    visual_rules_source = normalized_source(SMART_HUNDO_VISUAL_RULES)
     helpers_source = normalized_source(SMART_HUNDO_HELPERS)
     trainer_helpers_source = normalized_source(TRAINER_TEAM_HELPERS)
     sold_cleanup_source = normalized_source(SOLD_ACCOUNT_CLEANUP)
@@ -800,11 +802,13 @@ def main() -> int:
             require_fragment(smart_hundo_request, "reasoningEffort: HUNDO_SMART_REASONING_EFFORT", "Smart Hundo reasoning route"),
             assert_forbidden(smart_hundo_request, ("OPENAI_MODEL",), "Smart Hundo wrapper fallback"),
         ]),
-        ("Smart Hundo prompt makes direct full-image recognition primary", lambda: [
+        ("Smart Hundo prompt delegates recognition safeguards to the shared runtime rules", lambda: [
             require_fragment(source, "【直接視覺辨識原則】", "direct recognition prompt"),
-            require_fragment(source, "文字只能當作次要輔助證據", "secondary label guidance"),
-            require_fragment(source, "不得因為 visible_label 只顯示基礎物種，就退回 standard 或 base", "no generic-label fallback"),
-            require_fragment(source, "不得被 visible_label 帶回 dialga_standard", "Dialga direct-recognition example"),
+            require_fragment(source, "SmartHundoVisualRules.buildPrimaryVisualRules()", "shared primary prompt builder"),
+            require_fragment(visual_rules_source, "visible_label 只能作為次要證據", "secondary label guidance"),
+            require_fragment(visual_rules_source, "不得因為 visible_label 只顯示基礎物種，就退回 standard 或 base", "no generic-label fallback"),
+            require_fragment(visual_rules_source, "不得被 visible_label 帶回 dialga_standard", "Dialga direct-recognition safeguard"),
+            require_fragment(visual_rules_source, "證據不足仍為 uncertain", "insufficient-evidence safeguard"),
         ]),
         ("limited-candidate form verifier request remains isolated and strict", lambda: [
             require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-sol';", "verifier model"),
@@ -955,6 +959,7 @@ def main() -> int:
     blocked: list[str] = []
     node_executable = shutil.which("node")
     node_tests = (
+        ("Smart Hundo assembled runtime prompt tests", ROOT / "tests" / "smart-hundo-visual-rules.test.js"),
         ("position-first deterministic tests", ROOT / "tests" / "smart-hundo-position-first.test.js"),
         ("sold-account cleanup tests", SOLD_CLEANUP_TEST),
         ("Apps Script SOLD reconciliation tests", ROOT / "tests" / "apps-script-sold-reconcile.test.js"),
