@@ -763,7 +763,25 @@
         let trainerTeamAiValueOwnership = null;
         let activeAiScanDiagnostics = null;
 
+        const AI_REVIEW_FIELD_IDS = ['st_shiny_leg', 'st_shiny', 'st_legend', 'st_poke_bag', 'st_item_bag'];
+        const setAiFieldReview = (inputId, message) => {
+            const input = document.getElementById(inputId);
+            if (!input) return false;
+            let review = document.getElementById(`${inputId}_review`);
+            if (!review) {
+                review = document.createElement('div');
+                review.id = `${inputId}_review`;
+                review.className = 'text-[10px] text-amber-700 mt-1';
+                input.insertAdjacentElement('afterend', review);
+            }
+            review.textContent = String(message || '');
+            review.classList.toggle('hidden', !message);
+            return true;
+        };
+        const clearAiFieldReviews = () => AI_REVIEW_FIELD_IDS.forEach(id => setAiFieldReview(id, ''));
+
         const beginAutoScanRun = () => {
+            clearAiFieldReviews();
             STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
                 const marker = storageCapacityAiValueOwnership.get(inputId);
                 const input = document.getElementById(inputId);
@@ -1342,6 +1360,21 @@
                 ]
             }
         };
+        const SHINY_LEGENDARY_JSON_SCHEMA = {
+            name: 'pokemon_go_shiny_legendary_count_evidence',
+            strict: true,
+            schema: {
+                type: 'object', additionalProperties: false,
+                properties: {
+                    visible_query: { type: 'string' },
+                    active_tab: { type: 'string', enum: ['pokemon', 'egg', 'other', 'unknown'] },
+                    source_region: { type: 'string', enum: ['pokemon_tab_summary', 'other', 'unknown'] },
+                    raw_summary_text: { type: 'string' },
+                    target_summary_readable: { type: 'boolean' }
+                },
+                required: ['visible_query', 'active_tab', 'source_region', 'raw_summary_text', 'target_summary_readable']
+            }
+        };
         const STORAGE_HEADER_JSON_SCHEMA = {
             name: 'pokemon_go_storage_header_verifier',
             strict: true,
@@ -1350,9 +1383,11 @@
                 additionalProperties: false,
                 properties: {
                     header_type: { type: 'string', enum: ['pokemon', 'item', 'none'] },
-                    storage_text: { type: 'string' }
+                    relevant_header_label: { type: 'string' },
+                    storage_text: { type: 'string' },
+                    outcome: { type: 'string', enum: ['verified', 'not_visible', 'unreadable'] }
                 },
-                required: ['header_type', 'storage_text']
+                required: ['header_type', 'relevant_header_label', 'storage_text', 'outcome']
             }
         };
 
@@ -1977,6 +2012,27 @@
             return baseFields;
         };
 
+        const normalizeParenthesizedSearchCount = value => {
+            const raw = String(value ?? '').trim().replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xFF10));
+            const match = raw.match(/^[（(]\s*(\d+)\s*[）)]$/);
+            return match ? match[1] : '';
+        };
+
+        const normalizeShinyLegendaryEvidence = (result = {}, classification = {}) => {
+            const visibleQuery = normalizeSearchQuery(result?.visible_query);
+            const rawSummaryText = typeof result?.raw_summary_text === 'string' ? result.raw_summary_text.trim() : '';
+            const valid = normalizeSearchQuery(classification?.search_query) === normalizeSearchQuery(SHINY_LEGENDARY_FILTER)
+                && visibleQuery === normalizeSearchQuery(SHINY_LEGENDARY_FILTER)
+                && result?.active_tab === 'pokemon'
+                && result?.source_region === 'pokemon_tab_summary'
+                && result?.target_summary_readable === true;
+            const shinyLeg = valid ? normalizeParenthesizedSearchCount(rawSummaryText) : '';
+            return {
+                shiny_leg: shinyLeg,
+                evidence: { visible_query: visibleQuery, active_tab: String(result?.active_tab || 'unknown'), source_region: String(result?.source_region || 'unknown'), raw_summary_text: rawSummaryText, target_summary_readable: result?.target_summary_readable === true, accepted: shinyLeg !== '' }
+            };
+        };
+
         const normalizeAiExtraction = (result = {}, classification = {}, allowedFields = null) => {
             const normalized = buildEmptyAiResult();
             normalized.image_type = AI_IMAGE_TYPES.has(String(classification?.image_type || '').trim()) ? String(classification.image_type).trim() : 'OTHER';
@@ -1984,12 +2040,23 @@
             normalized.header_type = ['pokemon', 'item'].includes(String(result?.header_type || '').trim())
                 ? String(result.header_type).trim()
                 : 'none';
+            if (normalized.image_type === 'SHINY_LEGENDARY_SCREEN') {
+                const shinyEvidence = normalizeShinyLegendaryEvidence(result, classification);
+                normalized.shiny_leg = shinyEvidence.shiny_leg;
+                normalized.shiny_legendary_evidence = shinyEvidence.evidence;
+            }
 
             AI_NUMERIC_RESULT_FIELDS.forEach(field => {
+                if (field === 'shiny_leg' && normalized.image_type === 'SHINY_LEGENDARY_SCREEN') return;
                 normalized[field] = ['poke_bag', 'item_bag'].includes(field)
                     ? extractStorageCapacity(result?.[field])
                     : extractSingleNumber(result?.[field]);
             });
+            normalized.storage_primary_evidence = {
+                header_type: normalized.header_type,
+                poke_bag_raw: typeof result?.poke_bag === 'string' ? result.poke_bag.trim() : '',
+                item_bag_raw: typeof result?.item_bag === 'string' ? result.item_bag.trim() : ''
+            };
             normalized.xp = normalizeWanValue(extractSlashSideNumber(result?.xp, 'left'));
             normalized.stardust = normalizeWanValue(result?.stardust);
             normalized.pokemon_list = normalizePokemonList(result?.pokemon_list);
@@ -2140,6 +2207,36 @@
             }));
         };
         const DEDICATED_VERIFICATION_FIELDS = new Set(['poke_bag', 'item_bag']);
+        const reconcileShinyLegendaryCounts = (mergedResult = {}, taskResults = []) => {
+            const result = { ...mergedResult };
+            const sourceFor = field => taskResults
+                .filter(task => String(task?.imageResult?.[field] ?? '').trim() !== '')
+                .map(task => Number(task.imageIndex) + 1);
+            const shinyLeg = String(mergedResult.shiny_leg ?? '').trim();
+            const comparisons = [
+                { field: 'shiny', label: '色違總數' },
+                { field: 'legendary', label: '傳說總數' }
+            ];
+            const conflicts = comparisons.filter(({ field }) => {
+                const value = String(mergedResult[field] ?? '').trim();
+                return shinyLeg !== '' && value !== '' && Number(shinyLeg) > Number(value);
+            }).map(({ field, label }) => ({
+                field, label, shiny_leg: shinyLeg, comparison: String(mergedResult[field]),
+                shiny_leg_sources: sourceFor('shiny_leg'), comparison_sources: sourceFor(field)
+            }));
+            if (conflicts.length) {
+                result.shiny_leg = '';
+                conflicts.forEach(conflict => { result[conflict.field] = ''; });
+            }
+            return { result, conflicts, accepted: conflicts.length === 0 && shinyLeg !== '' };
+        };
+
+        const formatCountConsistencyReview = reconciliation => {
+            const conflict = reconciliation?.conflicts?.[0];
+            if (!conflict) return '';
+            return `數量衝突：色違神獸 ${conflict.shiny_leg}（圖${conflict.shiny_leg_sources.join('、')}）大於${conflict.label} ${conflict.comparison}（圖${conflict.comparison_sources.join('、')}），請核對來源截圖。`;
+        };
+
         const mergeTaskResultsIntoAiResult = (taskResults = []) => mergeAiResults(taskResults.map(task => task.imageResult));
 
         const buildAiClassificationPrompt = () => `你是寶可夢 GO 截圖分類器。這次只會收到 1 張圖片，你只能做第一階段分類，禁止抽取數字，禁止假設其他圖片存在，禁止跨圖合併。
@@ -2331,9 +2428,9 @@ ${outputTemplate}
                 case 'SHINY_LEGENDARY_SCREEN':
                     return `${baseRules}
 
-這是一張搜尋頁，搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」。
-你必須讀取頂部數字並填入 shiny_leg。
-除了 shiny_leg 之外，其餘欄位都必須留空字串。`;
+這是一張色違神獸搜尋頁。先逐字核對畫面搜尋欄正規化後完全符合「${SHINY_LEGENDARY_FILTER}」。
+找出目前啟用的「寶可夢」分頁，僅讀取分頁標題下方、搜尋欄上方，與該分頁直接相連的括號結果摘要。
+保留 visible_query、active_tab、source_region、raw_summary_text 與 target_summary_readable 證據。不得使用電池、時鐘、蛋數、CP、儲存容量或可見卡片數。看不清或來源不符必須標示 unreadable/unknown，不得猜測。`;
                 case 'OLD_POKEMON_SCREEN':
                     return `${baseRules}
 
@@ -3186,6 +3283,24 @@ ${mappingLines}`;
             img.src = originalDataUrl;
         });
 
+        const fileToShinyLegendaryEvidenceDataUrl = (originalDataUrl) => new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('載入色違神獸結果證據失敗，請重新選擇圖片。'));
+            img.onload = () => {
+                const width = img.naturalWidth || img.width;
+                const height = img.naturalHeight || img.height;
+                // Keep a broad, aspect-ratio-relative header/search region.  It excludes most
+                // status-bar pixels without assuming one device's fixed coordinates.
+                const sourceY = Math.min(Math.floor(height * 0.025), 48);
+                const cropHeight = Math.min(height - sourceY, Math.max(320, Math.ceil(height * 0.43)));
+                const canvas = document.createElement('canvas');
+                canvas.width = width; canvas.height = cropHeight;
+                canvas.getContext('2d').drawImage(img, 0, sourceY, width, cropHeight, 0, 0, width, cropHeight);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.src = originalDataUrl;
+        });
+
         const fileToHundoCountRegionDataUrl = (originalDataUrl) => new Promise((resolve, reject) => {
             const img = new Image();
             img.onerror = () => reject(new Error('載入百神數辨識區域失敗，請重新選擇圖片。'));
@@ -3844,28 +3959,56 @@ ${mappingLines}`;
 
         const STORAGE_HEADER_IMAGE_TYPES = new Set(['RESOURCE_SCREEN', 'CATEGORY_OVERVIEW_SCREEN']);
         const buildStorageHeaderPrompt = () => `你是 Pokémon GO 頂部儲存空間標頭的嚴格驗證器。
-只檢查此原圖頂部裁切中的單一儲存空間標頭：
-- 「寶可夢」明確與完整 current/capacity 數對相連時，header_type="pokemon"。
-- 「道具」明確與完整 current/capacity 數對相連時，header_type="item"。
-- 否則 header_type="none" 且 storage_text=""。
-storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 / 875 回傳 "391/875"；258 / 500 回傳 "258/500"；1,234 / 5,678 回傳 "1234/5678"。絕不可只回傳 "875" 或 "500"，不得計算或推論。
-不得從道具圖示、寶可夢圖示、藥品、寶可夢球、分類圓圈或圖中其他文字推斷。只有與斜線數對相連的頂部標頭有效。只輸出 schema JSON。`;
+裁切中同時出現「寶可夢 161/400」與「蛋 9/12」是正常版面；必須依標籤與數對的直接關聯判斷，不能因第二個分頁或斜線數對而拒絕。
+- 「寶可夢」相連完整 current/capacity：header_type="pokemon"，保留標籤及完整數對。
+- 「道具」相連完整 current/capacity：header_type="item"，保留標籤及完整數對。
+- 「蛋」的數對一律不是寶可夢或道具容量。
+- 搜尋摘要如「(15)」及單獨「400」都不是容量證據。
+outcome="verified" 僅限相關標籤與完整數對清楚可讀；畫面沒有相關標頭用 "not_visible"；看得到但不清楚用 "unreadable"。後兩者 header_type="none" 且 storage_text=""。
+storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"），不得計算或推論。只輸出 schema JSON。`;
 
         const normalizeStorageHeaderResult = (result = {}) => {
             const rawHeaderType = String(result?.header_type || '').trim();
-            const hasValidHeaderType = ['pokemon', 'item', 'none'].includes(rawHeaderType);
-            const storageTextIsString = typeof result?.storage_text === 'string';
-            const storageText = storageTextIsString ? result.storage_text.trim() : '';
+            const label = typeof result?.relevant_header_label === 'string' ? result.relevant_header_label.trim() : '';
+            const storageText = typeof result?.storage_text === 'string' ? result.storage_text.trim() : '';
+            const outcome = ['verified', 'not_visible', 'unreadable'].includes(result?.outcome) ? result.outcome : 'unreadable';
             const capacity = extractStorageCapacity(storageText);
-            const structurallyComplete = hasValidHeaderType && storageTextIsString
-                && (rawHeaderType === 'none' ? storageText === '' : capacity !== '');
-            const ownedHeaderType = structurallyComplete && capacity ? rawHeaderType : 'none';
+            const labelMatches = rawHeaderType === 'pokemon' ? /寶可夢|pokemon/i.test(label)
+                : rawHeaderType === 'item' ? /道具|item/i.test(label) : false;
+            const verified = outcome === 'verified' && ['pokemon', 'item'].includes(rawHeaderType) && labelMatches && capacity !== '';
+            const truthfulAbsence = ['not_visible', 'unreadable'].includes(outcome)
+                && rawHeaderType === 'none' && storageText === '';
             return {
-                header_type: ownedHeaderType,
-                poke_bag: ownedHeaderType === 'pokemon' ? capacity : '',
-                item_bag: ownedHeaderType === 'item' ? capacity : '',
-                structurally_complete: structurallyComplete
+                status: verified ? 'verified' : outcome,
+                header_type: verified ? rawHeaderType : 'none',
+                relevant_header_label: label,
+                raw_pair: storageText,
+                poke_bag: verified && rawHeaderType === 'pokemon' ? capacity : '',
+                item_bag: verified && rawHeaderType === 'item' ? capacity : '',
+                structurally_complete: verified || truthfulAbsence
             };
+        };
+
+        const reconcileStorageEvidence = (records = [], field = 'poke_bag') => {
+            const candidateKey = `${field}_candidate`;
+            const candidates = records.filter(record => record[candidateKey]?.value).map(record => record[candidateKey]);
+            const observations = records.filter(record => record.verification?.field === field && record.verification.value).map(record => record.verification);
+            const values = [...new Set([...candidates, ...observations].map(item => String(item.value)))];
+            if (values.length > 1) return { status: 'conflicting', accepted_value: '', candidates, observations };
+            const verified = observations[0];
+            if (verified) return { status: 'verified', accepted_value: verified.value, accepted_source_image_index: verified.image_index, candidates, observations };
+            if (candidates.length) {
+                const statuses = [...new Set(records.map(record => record.verification_status).filter(Boolean))];
+                return { status: 'pending', accepted_value: '', candidates, observations, verification_statuses: statuses };
+            }
+            return { status: 'unconfirmed', accepted_value: '', candidates, observations };
+        };
+
+        const formatStorageReview = (field, decision) => {
+            const label = field === 'poke_bag' ? '寶可夢包' : '道具包';
+            if (decision?.status === 'conflicting') return `${label}數量衝突：辨識到 ${[...new Set([...decision.candidates, ...decision.observations].map(item => item.value))].join('、')}，請核對來源截圖。`;
+            if (decision?.status === 'pending') return `${label}待確認：初次辨識 ${decision.candidates.map(item => item.value).join('、')}，容量驗證未確認；請核對原圖後手動填入。`;
+            return '';
         };
 
         const requestStorageHeaderVerification = async (apiKey, headerDataUrl, statusUpdater, structuralRetry = false) => {
@@ -3909,7 +4052,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     retry_fields: retryFields
                 }),
                 dataUrl,
-                OPENAI_EXTRACTION_JSON_SCHEMA,
+                classification.image_type === 'SHINY_LEGENDARY_SCREEN' ? SHINY_LEGENDARY_JSON_SCHEMA : OPENAI_EXTRACTION_JSON_SCHEMA,
                 statusUpdater,
                 { diagnosticRequestType }
             );
@@ -4055,6 +4198,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 mergedResult,
                 coverage,
                 validationTaskResults,
+                allResults,
                 recoveryTargetCount: totalTargets
             };
         };
@@ -4274,7 +4418,11 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 if (trainerTeamJobs.length > 0) {
                     trainerTeamScanId = beginTrainerTeamScan();
                 }
-                const normalDataUrls = normalJobs.map(job => job.classificationDataUrl);
+                const normalDataUrls = await Promise.all(normalJobs.map(async job => {
+                    if (job.classification.image_type !== 'SHINY_LEGENDARY_SCREEN') return job.classificationDataUrl;
+                    const originalDataUrl = await fileToOriginalDataUrl(job.file);
+                    return fileToShinyLegendaryEvidenceDataUrl(originalDataUrl);
+                }));
                 const normalClassifications = normalJobs.map(job => job.classification);
                 const ordinaryPrimaryRequestCount = normalClassifications.filter(
                     classification => getAiExtractionFields(classification).length > 0
@@ -4334,25 +4482,46 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                         ordinary.primary_result = sanitizeAiScanDiagnostics(result.imageResult);
                         ordinary.missing_after_primary = [...(result.missingFields || [])];
                     });
+                    const storageRecords = [];
                     storageSettlements.forEach((settlement, normalIndex) => {
                         if (!STORAGE_HEADER_IMAGE_TYPES.has(normalClassifications[normalIndex]?.image_type)) return;
                         const actualIndex = normalJobs[normalIndex].index;
-                        const storageDiagnostic = diagnostics.images[actualIndex].storage;
-                        storageDiagnostic.applicable = true;
-                        const verified = settlement.status === 'fulfilled' && settlement.value.result
-                            ? settlement.value.result
-                            : normalizeStorageHeaderResult({ header_type: 'none', storage_text: '' });
-                        Object.assign(storageDiagnostic, {
-                            header_type: verified.header_type,
-                            poke_bag: verified.poke_bag,
-                            item_bag: verified.item_bag
-                        });
                         const imageResult = taskResults.find(result => result.imageIndex === normalIndex)?.imageResult;
                         if (!imageResult) return;
-                        imageResult.header_type = verified.header_type;
-                        imageResult.poke_bag = verified.poke_bag;
-                        imageResult.item_bag = verified.item_bag;
+                        const primaryEvidence = imageResult.storage_primary_evidence || {};
+                        const record = {
+                            image_index: actualIndex + 1,
+                            poke_bag_candidate: imageResult.poke_bag ? { value: imageResult.poke_bag, raw_pair: primaryEvidence.poke_bag_raw, image_index: actualIndex + 1 } : null,
+                            item_bag_candidate: imageResult.item_bag ? { value: imageResult.item_bag, raw_pair: primaryEvidence.item_bag_raw, image_index: actualIndex + 1 } : null,
+                            verification_status: settlement.status === 'rejected' ? 'request_failed' : (settlement.value?.result?.status || 'unreadable'),
+                            verification: null
+                        };
+                        const verified = settlement.status === 'fulfilled' ? settlement.value?.result : null;
+                        if (verified?.status === 'verified') {
+                            const field = verified.header_type === 'pokemon' ? 'poke_bag' : 'item_bag';
+                            record.verification = { field, value: verified[field], raw_pair: verified.raw_pair, label: verified.relevant_header_label, image_index: actualIndex + 1 };
+                        }
+                        storageRecords.push(record);
+                        const storageDiagnostic = diagnostics.images[actualIndex].storage;
+                        storageDiagnostic.applicable = true;
+                        Object.assign(storageDiagnostic, sanitizeAiScanDiagnostics({
+                            primary_candidate: record.poke_bag_candidate || record.item_bag_candidate,
+                            verification_status: record.verification_status,
+                            verification: record.verification
+                        }));
+                        imageResult.header_type = 'none'; imageResult.poke_bag = ''; imageResult.item_bag = '';
                     });
+                    const storageDecisions = {
+                        poke_bag: reconcileStorageEvidence(storageRecords, 'poke_bag'),
+                        item_bag: reconcileStorageEvidence(storageRecords, 'item_bag')
+                    };
+                    for (const field of ['poke_bag', 'item_bag']) {
+                        const decision = storageDecisions[field];
+                        if (!decision.accepted_value) continue;
+                        const target = taskResults.find(result => STORAGE_HEADER_IMAGE_TYPES.has(result.imageResult.image_type));
+                        if (target) target.imageResult[field] = decision.accepted_value;
+                    }
+                    diagnostics.storage_reconciliation = sanitizeAiScanDiagnostics(storageDecisions);
                     diagnostics.ordinary_primary_request_count = ordinaryPrimaryRequestCount;
                     diagnostics.stage_duration_ms.ordinary_primary = aiScanNow() - primaryStartedAt;
                     diagnostics.stage_duration_ms.storage_verification = aiScanNow() - storageStartedAt;
@@ -4390,6 +4559,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                     progress.complete('ordinaryRecovery');
                     return {
                         ...validationResult,
+                        storageDecisions,
                         failedJobCount: Number(taskResults.failedJobCount || 0)
                     };
                 })();
@@ -4478,13 +4648,22 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 const {
                     mergedResult: normalMergedResult,
                     coverage: ordinaryCoverage,
-                    validationTaskResults
+                    validationTaskResults,
+                    allResults: ordinaryAllResults = [],
+                    storageDecisions = {}
                 } = normalOutcome;
                 let finalCoverage = ordinaryCoverage;
                 if (!isCurrentAutoScanRun(scanRunId)) return;
                 const finalMergeStartedAt = aiScanNow();
                 progress.update('finalMerge', 0, 0);
-                applyAiResultToForm(normalMergedResult);
+                const countReconciliation = reconcileShinyLegendaryCounts(normalMergedResult, ordinaryAllResults);
+                applyAiResultToForm(countReconciliation.result);
+                setAiFieldReview('st_shiny_leg', formatCountConsistencyReview(countReconciliation));
+                setAiFieldReview('st_shiny', countReconciliation.conflicts.some(conflict => conflict.field === 'shiny') ? formatCountConsistencyReview(countReconciliation) : '');
+                setAiFieldReview('st_legend', countReconciliation.conflicts.some(conflict => conflict.field === 'legendary') ? formatCountConsistencyReview(countReconciliation) : '');
+                diagnostics.count_consistency = sanitizeAiScanDiagnostics(countReconciliation);
+                setAiFieldReview('st_poke_bag', formatStorageReview('poke_bag', storageDecisions.poke_bag));
+                setAiFieldReview('st_item_bag', formatStorageReview('item_bag', storageDecisions.item_bag));
 
                 if (trainerTeamJobs.length > 0) {
                     const teamHelpers = globalThis.TrainerTeamHelpers;
@@ -4756,7 +4935,7 @@ storage_text 必須回傳完整可見數對，包含兩個數字與斜線：391 
                 diagnostics.total_duration_ms = aiScanNow() - scanStartedAt;
                 diagnostics.images.forEach(image => {
                     const fields = image.ordinary.expected_fields || [];
-                    image.final_applied_fields = Object.fromEntries(fields.map(field => [field, normalMergedResult[field] ?? '']));
+                    image.final_applied_fields = Object.fromEntries(fields.map(field => [field, countReconciliation.result[field] ?? '']));
                 });
                 if (isCurrentAutoScanRun(scanRunId)) publishAiScanDiagnostics(diagnostics);
                 if (totalFailureCount > 0) {
