@@ -1112,6 +1112,16 @@
         verifier_request_count: diagnosticStrictNonnegativeInteger(diagnosticOwnObjectValue(source, 'verifier_request_count')),
         form_verify_model: diagnosticString(diagnosticOwnObjectValue(source, 'form_verify_model')) === 'gpt-5.6-sol' ? 'gpt-5.6-sol' : ''
     });
+    const diagnosticDuration = value => Number.isFinite(value) && value >= 0 ? value : null;
+    const diagnosticTokenUsage = usage => {
+        if (!usage || typeof usage !== 'object') return null;
+        const safe = {};
+        ['input_tokens', 'output_tokens', 'reasoning_tokens', 'cached_input_tokens'].forEach(field => {
+            const value = usage[field];
+            if (Number.isFinite(value) && value >= 0) safe[field] = value;
+        });
+        return Object.keys(safe).length > 0 ? safe : null;
+    };
     const shapeSmartHundoDiagnostics = (session = {}) => ({
         scan_session_id: diagnosticString(session?.scan_session_id),
         screenshots: (Array.isArray(session?.screenshots) ? session.screenshots : []).map(screenshot => ({
@@ -1136,7 +1146,14 @@
             hundo_count_model: diagnosticString(screenshot?.hundo_count_model),
             smart_hundo_requested_model: diagnosticString(screenshot?.smart_hundo_requested_model),
             smart_hundo_returned_model: diagnosticString(screenshot?.smart_hundo_returned_model),
-            smart_hundo_reasoning_effort: diagnosticString(screenshot?.smart_hundo_reasoning_effort),
+            smart_hundo_reasoning_effort: ['high', 'medium'].includes(screenshot?.smart_hundo_reasoning_effort) ? screenshot.smart_hundo_reasoning_effort : 'high',
+            card_request_usages: (Array.isArray(screenshot?.card_request_usages) ? screenshot.card_request_usages : []).map(diagnosticTokenUsage).filter(Boolean),
+            card_request_count: diagnosticNonnegativeInteger(screenshot?.card_request_count),
+            count_duration_ms: diagnosticDuration(screenshot?.count_duration_ms),
+            card_duration_ms: diagnosticDuration(screenshot?.card_duration_ms),
+            form_verify_duration_ms: diagnosticDuration(screenshot?.form_verify_duration_ms),
+            count_operation_succeeded: screenshot?.count_operation_succeeded === true,
+            card_operation_succeeded: screenshot?.card_operation_succeeded === true,
             structural_retry_used: screenshot?.structural_retry_used === true,
             structural_retry_reason: diagnosticStructuralReasons(screenshot?.structural_retry_reason),
             cards: (Array.isArray(screenshot?.cards) ? screenshot.cards : []).map(diagnosticCard),

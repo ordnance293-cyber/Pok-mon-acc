@@ -891,7 +891,11 @@
             storage_verification_request_count: 0,
             storage_structural_retry_count: 0,
             request_counts: Object.fromEntries([...AI_DIAGNOSTIC_REQUEST_TYPES, 'total'].map(key => [key, 0])),
-            smart_hundo_summary: { final_hundo_count: '', final_pokemon_list: '', recognized_count: 0, review_card_count: 0, review_reason_counts: {} },
+            smart_hundo_reasoning_effort: HUNDO_SMART_REASONING_EFFORT,
+            processing_duration_ms: 0,
+            within_60s: false,
+            operation_complete: false,
+            smart_hundo_summary: { final_hundo_count: '', final_pokemon_list: '', recognized_count: 0, review_card_count: 0, review_reason_counts: {}, incomplete: false },
             images: Array.from({ length: totalFiles }, (_, imageIndex) => ({
                 image_index: imageIndex,
                 preparation: { ordinary_max_size: AI_MAX_IMAGE_SIZE, ordinary_jpeg_quality: AI_JPEG_QUALITY, classification_image_detail: AI_IMAGE_DETAIL, duration_ms: 0, succeeded: false },
@@ -899,7 +903,7 @@
                 ordinary: { applicable: false, expected_fields: [], primary_duration_ms: 0, primary_result: {}, missing_after_primary: [], recovery_triggered: false, recovery_fields: [], recovery_duration_ms: 0, recovery_result: {}, final_result: {} },
                 storage: { applicable: false, duration_ms: 0, request_count: 0, structural_retry_used: false, header_type: '', poke_bag: '', item_bag: '' },
                 trainer_team: { applicable: false, duration_ms: 0, valid: false, effective_team: '', validation_reasons: [] },
-                smart_hundo: { applicable: false, count_duration_ms: 0, count_succeeded: false, hundo_leg: '', card_duration_ms: 0, card_succeeded: false, structural_retry_used: false, structural_retry_reason: [], structural_retry_duration_ms: 0, form_verify_duration_ms: 0, recognized_count: 0, review_card_count: 0, review_reason_counts: {}, pokemon_list: '' },
+                smart_hundo: { applicable: false, selected_card_reasoning_effort: HUNDO_SMART_REASONING_EFFORT, requested_card_model: '', returned_card_model: '', card_request_usages: [], card_request_count: 0, form_verification_active: false, count_duration_ms: 0, count_succeeded: false, hundo_leg: '', card_duration_ms: 0, card_succeeded: false, structural_retry_used: false, structural_retry_reason: [], structural_retry_duration_ms: 0, form_verify_duration_ms: 0, recognized_count: 0, review_card_count: 0, review_reason_counts: {}, pokemon_list: '' },
                 final_applied_fields: {}, failures: []
             })),
             stage_duration_ms: {
@@ -1119,6 +1123,21 @@
         const HUNDO_COUNT_REASONING_EFFORT = 'medium';
         const HUNDO_SMART_MODEL = 'gpt-5.6-sol';
         const HUNDO_SMART_REASONING_EFFORT = 'high';
+        const HUNDO_SMART_REASONING_EFFORTS = new Set(['high', 'medium']);
+        const isHundoReasoningTestEnabled = () => new URLSearchParams(window.location.search).get('hundo_test') === '1';
+        const getSmartHundoReasoningEffortForRun = () => {
+            if (!isHundoReasoningTestEnabled()) return HUNDO_SMART_REASONING_EFFORT;
+            const selected = document.getElementById('hundoReasoningEffort')?.value;
+            return HUNDO_SMART_REASONING_EFFORTS.has(selected) ? selected : HUNDO_SMART_REASONING_EFFORT;
+        };
+        const setHundoReasoningTestDisabled = disabled => {
+            const selector = document.getElementById('hundoReasoningEffort');
+            if (selector) selector.disabled = Boolean(disabled);
+        };
+        const initializeHundoReasoningTestControl = () => {
+            const control = document.getElementById('hundoReasoningTestControl');
+            if (control) control.classList.toggle('hidden', !isHundoReasoningTestEnabled());
+        };
         const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-sol';
         const HUNDO_FORM_VERIFY_REASONING_EFFORT = 'high';
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
@@ -3428,10 +3447,18 @@ ${mappingLines}`;
                         throw parseError;
                     }
                     if (!options.includeMetadata) return result;
+                    const usage = data?.usage;
+                    const numericUsage = value => Number.isFinite(value) && value >= 0 ? value : null;
                     return {
                         result,
                         finish_reason: String(data?.choices?.[0]?.finish_reason || ''),
-                        returned_model: String(data?.model || '')
+                        returned_model: String(data?.model || ''),
+                        usage: usage && typeof usage === 'object' ? {
+                            input_tokens: numericUsage(usage.prompt_tokens ?? usage.input_tokens),
+                            output_tokens: numericUsage(usage.completion_tokens ?? usage.output_tokens),
+                            reasoning_tokens: numericUsage(usage.completion_tokens_details?.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens),
+                            cached_input_tokens: numericUsage(usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens)
+                        } : null
                     };
                 } catch (error) {
                     if (error?.reasonCode === 'openai_json_parse_error' && options.retryParseErrors === false) throw error;
@@ -3549,7 +3576,7 @@ ${mappingLines}`;
             apiKey,
             originalDataUrl,
             statusUpdater,
-            { structuralRetry = false } = {}
+            { structuralRetry = false, reasoningEffort = HUNDO_SMART_REASONING_EFFORT } = {}
         ) => requestOpenAiJsonSchema(
             apiKey,
             buildSmartHundoPrompt({ structuralRetry }),
@@ -3558,7 +3585,7 @@ ${mappingLines}`;
             statusUpdater,
             {
                 model: HUNDO_SMART_MODEL,
-                reasoningEffort: HUNDO_SMART_REASONING_EFFORT,
+                reasoningEffort: HUNDO_SMART_REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : HUNDO_SMART_REASONING_EFFORT,
                 imageDetail: HUNDO_SMART_IMAGE_DETAIL,
                     includeMetadata: true,
                     diagnosticRequestType: structuralRetry ? 'hundo_card_structural_retry' : 'hundo_card'
@@ -3569,7 +3596,8 @@ ${mappingLines}`;
             apiKey,
             originalDataUrl,
             imageIndex,
-            statusUpdater
+            statusUpdater,
+            reasoningEffort = HUNDO_SMART_REASONING_EFFORT
         } = {}) => {
             const helpers = globalThis.SmartHundoHelpers;
             if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
@@ -3580,7 +3608,7 @@ ${mappingLines}`;
                     apiKey,
                     originalDataUrl,
                     statusUpdater,
-                    { structuralRetry }
+                    { structuralRetry, reasoningEffort }
                 );
                 const result = helpers.normalizeSmartHundoResult(
                     response?.result,
@@ -3592,6 +3620,7 @@ ${mappingLines}`;
                     result,
                     finish_reason: finishReason,
                     returned_model: String(response?.returned_model || ''),
+                    usage: response?.usage || null,
                     duration_ms: aiScanNow() - attemptStartedAt,
                     structure: helpers.validateSmartHundoStructure(result, finishReason)
                 };
@@ -3604,7 +3633,8 @@ ${mappingLines}`;
                     structural_retry_used: false,
                     structural_retry_reason: [],
                     structural_retry_duration_ms: 0,
-                    attempt_count: 1
+                    attempt_count: 1,
+                    card_request_usages: firstAttempt.usage ? [firstAttempt.usage] : []
                 };
             }
 
@@ -3614,7 +3644,8 @@ ${mappingLines}`;
                 structural_retry_used: true,
                 structural_retry_reason: [...firstAttempt.structure.reasons],
                 structural_retry_duration_ms: secondAttempt.duration_ms,
-                attempt_count: 2
+                attempt_count: 2,
+                card_request_usages: [firstAttempt.usage, secondAttempt.usage].filter(Boolean)
             };
         };
 
@@ -3728,7 +3759,8 @@ ${mappingLines}`;
             imageIndex,
             classification,
             statusUpdater,
-            isCurrentRun = () => true
+            isCurrentRun = () => true,
+            reasoningEffort = HUNDO_SMART_REASONING_EFFORT
         } = {}) => {
             const helpers = globalThis.SmartHundoHelpers;
             if (!helpers) throw new Error('智慧百神辨識元件未載入，請重新整理後再試。');
@@ -3754,7 +3786,8 @@ ${mappingLines}`;
                 apiKey,
                 originalDataUrl,
                 imageIndex,
-                statusUpdater: (attempt, maxRetries) => statusUpdater?.('cards', attempt, maxRetries)
+                statusUpdater: (attempt, maxRetries) => statusUpdater?.('cards', attempt, maxRetries),
+                reasoningEffort
             }).finally(() => { cardDurationMs = aiScanNow() - cardStartedAt; });
             const [countSettlement, cardSettlement] = await Promise.allSettled([
                 countOperation,
@@ -3857,7 +3890,8 @@ ${mappingLines}`;
                 hundo_count_model: HUNDO_COUNT_MODEL,
                 smart_hundo_requested_model: HUNDO_SMART_MODEL,
                 smart_hundo_returned_model: cardExtraction?.returned_model || '',
-                smart_hundo_reasoning_effort: HUNDO_SMART_REASONING_EFFORT,
+                smart_hundo_reasoning_effort: HUNDO_SMART_REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : HUNDO_SMART_REASONING_EFFORT,
+                card_request_usages: cardExtraction?.card_request_usages || [],
                 structure: cardExtraction?.structure || helpers.validateSmartHundoStructure(cardResult, ''),
                 structural_retry_used: cardExtraction?.structural_retry_used === true,
                 structural_retry_reason: cardExtraction?.structural_retry_reason || [],
@@ -4257,11 +4291,13 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             const files = document.getElementById('imageInput').files;
             if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
             if(files.length === 0) return;
+            const smartHundoReasoningEffort = getSmartHundoReasoningEffortForRun();
             const scanRunId = beginAutoScanRun();
             const totalFiles = files.length;
             const scanStartedAt = aiScanNow();
             const diagnostics = createAiScanDiagnostics(totalFiles);
             diagnostics.run_id = String(scanRunId);
+            diagnostics.smart_hundo_reasoning_effort = smartHundoReasoningEffort;
             activeAiScanDiagnostics = diagnostics;
             let smartSessionId = 0;
             let trainerTeamScanId = 0;
@@ -4278,6 +4314,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 && isCurrentSmartHundoSession(smartSessionId)
             );
             setAiActionButtonsDisabled(true);
+            setHundoReasoningTestDisabled(true);
             writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 0/${totalFiles}`);
             try {
                 const helpers = globalThis.SmartHundoHelpers;
@@ -4372,7 +4409,8 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                                 imageIndex: job.index,
                                 classification: job.classification,
                                 isCurrentRun: isCurrentSmartRun,
-                                statusUpdater: () => {}
+                                statusUpdater: () => {},
+                                reasoningEffort: smartHundoReasoningEffort
                             });
                             smartSettlements.push({ status: 'fulfilled', value });
                         } catch (reason) {
@@ -4823,6 +4861,12 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                         const imageReview = helpers.summarizeHundoManualReview(result.card_result.cards, result.manual_review_reasons);
                         Object.assign(diagnostics.images[result.imageIndex].smart_hundo, {
                             applicable: true,
+                            selected_card_reasoning_effort: result.smart_hundo_reasoning_effort,
+                            requested_card_model: result.smart_hundo_requested_model,
+                            returned_card_model: result.smart_hundo_returned_model,
+                            card_request_usages: result.card_request_usages,
+                            card_request_count: result.structural_retry_used ? 2 : 1,
+                            form_verification_active: Number(result.verifier_request_count || 0) > 0,
                             count_duration_ms: result.count_duration_ms || 0,
                             count_succeeded: Boolean(result.count_operation_succeeded),
                             hundo_leg: result.count.hundo_leg || '',
@@ -4843,7 +4887,8 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                         final_pokemon_list: conversion.pokemon_list || '',
                         recognized_count: Number(conversion.recognized_count || 0),
                         review_card_count: Number(reviewSummary.review_card_count || 0),
-                        review_reason_counts: { ...reviewSummary.review_reason_counts }
+                        review_reason_counts: { ...reviewSummary.review_reason_counts },
+                        incomplete: !allCardOperationsSucceeded || reviewSummary.review_card_count > 0
                     };
                     const smartHundoDiagnostics = helpers.shapeSmartHundoDiagnostics({
                         scan_session_id: String(smartSessionId),
@@ -4865,6 +4910,13 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                             smart_hundo_requested_model: result.smart_hundo_requested_model,
                             smart_hundo_returned_model: result.smart_hundo_returned_model,
                             smart_hundo_reasoning_effort: result.smart_hundo_reasoning_effort,
+                            card_request_usages: result.card_request_usages,
+                            card_request_count: result.structural_retry_used ? 2 : 1,
+                            count_duration_ms: result.count_duration_ms,
+                            card_duration_ms: result.card_duration_ms,
+                            form_verify_duration_ms: result.form_verify_duration_ms,
+                            count_operation_succeeded: result.count_operation_succeeded,
+                            card_operation_succeeded: result.card_operation_succeeded,
                             structural_retry_used: result.structural_retry_used,
                             structural_retry_reason: result.structural_retry_reason,
                             cards: result.card_result.cards,
@@ -4924,13 +4976,19 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 if (finalCoverage.missingWithScreens.length > 0) {
                     missingMessages.push(`已有對應截圖但重檢後仍無法確認：${finalCoverage.missingWithScreens.map(({ field }) => AI_FIELD_LABELS[field] || field).join('、')}`);
                 }
+                const smartFailureCount = smartSettlements.filter(settlement => settlement.status === 'rejected').length;
+                const totalFailureCount = classificationFailureCount + normalFailureCount + smartFailureCount;
+                const hasManualReview = Number(diagnostics.smart_hundo_summary.review_card_count || 0) > 0;
+                const operationComplete = totalFailureCount === 0 && missingMessages.length === 0
+                    && diagnostics.smart_hundo_summary.incomplete !== true;
+                diagnostics.processing_duration_ms = aiScanNow() - scanStartedAt;
+                diagnostics.operation_complete = operationComplete;
+                diagnostics.within_60s = operationComplete && !hasManualReview && diagnostics.processing_duration_ms <= 60000;
                 if (missingMessages.length > 0) {
                     if (!isCurrentAutoScanRun(scanRunId)) return;
                     console.warn('AI required field validation result:', finalCoverage);
                     alert(`以下欄位已逐一驗證，但本次仍未能自動填入：\n${missingMessages.join('\n')}`);
                 }
-                const smartFailureCount = smartSettlements.filter(settlement => settlement.status === 'rejected').length;
-                const totalFailureCount = classificationFailureCount + normalFailureCount + smartFailureCount;
                 diagnostics.stage_duration_ms.final_merge = aiScanNow() - finalMergeStartedAt;
                 diagnostics.total_duration_ms = aiScanNow() - scanStartedAt;
                 diagnostics.images.forEach(image => {
@@ -4945,6 +5003,9 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 }
             } catch (error) {
                 if (!isCurrentAutoScanRun(scanRunId)) return;
+                diagnostics.processing_duration_ms = aiScanNow() - scanStartedAt;
+                diagnostics.operation_complete = false;
+                diagnostics.within_60s = false;
                 alert("GPT 解析失敗，請稍後再試");
                 const summary = safeSmartHundoErrorSummary(error, 'auto_scan', 'auto_scan_failed');
                 console.warn('AI scan failed', summary);
@@ -4968,11 +5029,13 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                         aiButton.disabled = false;
                         aiButton.innerHTML = AI_SCAN_BUTTON_LABEL;
                     }
+                    setHundoReasoningTestDisabled(false);
                 }
             }
         };
 
         window.analyzeMultipleImages = window.autoScan;
+        initializeHundoReasoningTestControl();
 
         window.togglePage = function(pageNumber) {
             const page1 = document.getElementById('mainPage1');
@@ -5215,6 +5278,14 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                             <div id="imagePreviewContainer" class="flex flex-wrap gap-1 md:gap-2 w-full py-1 md:py-2 justify-center"></div>
                             <div id="aiActionButtons" class="hidden w-full mt-1 space-y-1">
                                 <button type="button" id="aiAutoBtn" onclick="autoScan()" class="w-full bg-indigo-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-indigo-700 transition">🤖 AI自動掃描</button>
+                                <div id="hundoReasoningTestControl" class="hidden rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
+                                    <label for="hundoReasoningEffort" class="font-bold mr-1">百神推理測試</label>
+                                    <select id="hundoReasoningEffort" class="rounded border border-amber-300 bg-white px-1 py-0.5">
+                                        <option value="high" selected>high（目前設定）</option>
+                                        <option value="medium">medium（速度測試）</option>
+                                    </select>
+                                    <p class="mt-1 leading-relaxed">僅比較百神卡片推理力度；模型、原圖及驗證規則不變。</p>
+                                </div>
                                 <button type="button" id="aiDiagnosticsBtn" onclick="openAiDiagnostics()" class="hidden w-full bg-white border border-indigo-200 text-indigo-700 px-2 py-1.5 rounded-lg text-[11px] md:text-sm font-bold hover:bg-indigo-50 transition">📋 AI 診斷</button>
                                 <p id="aiAutoStatus" class="px-1 text-[10px] text-indigo-600 min-h-[1rem] leading-relaxed"></p>
                                 <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；只有命中「傳說的寶可夢,幻,究極異獸&amp;4*」的圖片才會辨識百神清單，其餘圖片只讀對應欄位，最後統一回填。</p>
