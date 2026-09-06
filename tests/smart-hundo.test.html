@@ -3770,7 +3770,7 @@
         equal(HUNDO_SMART_MODEL, 'gpt-5.6-sol');
         equal(HUNDO_FORM_VERIFY_MODEL, 'gpt-5.6-sol');
         equal(HUNDO_COUNT_REASONING_EFFORT, 'medium');
-        equal(HUNDO_SMART_REASONING_EFFORT, 'high');
+        equal(HUNDO_SMART_REASONING_EFFORT, 'medium');
         equal(HUNDO_FORM_VERIFY_REASONING_EFFORT, 'high');
         equal(lastPayload.model, 'gpt-4.1-mini', 'ordinary extraction uses the ordinary model');
         equal(lastPayload.temperature, 0.1, 'ordinary extraction keeps temperature');
@@ -4172,7 +4172,7 @@
           attempts.forEach(({ payload, schemaName }) => {
             equal(schemaName, 'pokemon_go_hundo_smart_extractor_v2');
             equal(payload.model, 'gpt-5.6-sol', 'both complete-image attempts use the Smart Hundo model');
-            equal(payload.reasoning_effort, 'high', 'both complete-image attempts use high reasoning');
+            equal(payload.reasoning_effort, 'medium', 'both complete-image attempts use medium reasoning');
             equal(['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.4-mini', 'gpt-4.1-mini'].includes(payload.model), false, 'complete-image attempts do not fall back to non-Sol models');
             equal(Object.hasOwn(payload, 'temperature'), false, 'Smart Hundo never sends temperature');
             equal(payload.messages[0].content[1].image_url.url, originalDataUrl);
@@ -5399,7 +5399,7 @@
           equal(classifierRequests.every(request => request.payload.model === 'gpt-4.1-mini' && request.payload.temperature === 0.1 && !Object.hasOwn(request.payload, 'reasoning_effort')), true, 'classification remains on the ordinary model');
           equal(ordinaryRequests.every(request => request.payload.model === 'gpt-4.1-mini' && request.payload.temperature === 0.1 && !Object.hasOwn(request.payload, 'reasoning_effort')), true, 'ordinary extraction remains on the ordinary model');
           equal(countRequests.every(request => request.payload.model === 'gpt-5.6-luna' && request.payload.reasoning_effort === 'medium' && !Object.hasOwn(request.payload, 'temperature')), true, 'Smart Hundo count routes only to Luna');
-          equal(cardRequests.every(request => request.payload.model === 'gpt-5.6-sol' && request.payload.reasoning_effort === 'high' && !Object.hasOwn(request.payload, 'temperature')), true, 'Smart Hundo cards route only to Sol high');
+          equal(cardRequests.every(request => request.payload.model === 'gpt-5.6-sol' && request.payload.reasoning_effort === 'medium' && !Object.hasOwn(request.payload, 'temperature')), true, 'Smart Hundo cards route only to Sol medium');
           equal(routedRequests.some(request => ['pokemon_go_hundo_smart_extractor_v2', 'pokemon_go_smart_hundo_form_verifier_v2'].includes(request.schemaName) && ['gpt-4.1-mini', 'gpt-5.4-mini', 'gpt-5.6-terra', 'gpt-5.6-luna'].includes(request.payload.model)), false, 'Smart Hundo card/form requests never fall back');
           deepEqual(cardRequests.map(request => request.imageUrl), [
             'data:image/png;base64,ORIGINAL_EXACT_A',
@@ -5442,7 +5442,7 @@
           equal(routedSmartScreenshot.classification_model, 'gpt-4.1-mini');
           equal(routedSmartScreenshot.hundo_count_model, 'gpt-5.6-luna');
           equal(routedSmartScreenshot.smart_hundo_requested_model, 'gpt-5.6-sol');
-          equal(routedSmartScreenshot.smart_hundo_reasoning_effort, 'high');
+          equal(routedSmartScreenshot.smart_hundo_reasoning_effort, 'medium');
           equal(routedSmartScreenshot.form_verify_model, 'gpt-5.6-sol');
           equal(normalizeAiClassification(classificationByImage.EXACT_B_RAW_OTHER).image_type, 'HUNDO_LEGENDARY_SCREEN');
           equal(normalizeAiClassification(classificationByImage.SIMILAR_HUNDO).image_type, 'OTHER');

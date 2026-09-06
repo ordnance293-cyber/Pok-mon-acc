@@ -780,7 +780,7 @@ def main() -> int:
             require_fragment(source, "const HUNDO_COUNT_MODEL = 'gpt-5.6-luna';", "Hundo count model"),
             require_fragment(source, "const HUNDO_COUNT_REASONING_EFFORT = 'medium';", "Hundo count reasoning"),
             require_fragment(source, "const HUNDO_SMART_MODEL = 'gpt-5.6-sol';", "Smart Hundo model"),
-            require_fragment(source, "const HUNDO_SMART_REASONING_EFFORT = 'high';", "Smart Hundo reasoning"),
+            require_fragment(source, "const HUNDO_SMART_REASONING_EFFORT = 'medium';", "Smart Hundo reasoning"),
             require_fragment(source, "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-sol';", "form verifier model"),
             require_fragment(source, "const HUNDO_FORM_VERIFY_REASONING_EFFORT = 'high';", "form verifier reasoning"),
             require_fragment(source, "const AI_MAX_IMAGE_SIZE = 1000;", "maximum image size"),
