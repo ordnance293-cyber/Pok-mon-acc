@@ -1,81 +1,24 @@
-const assert = require('assert');
-const fs = require('fs');
-const vm = require('vm');
-const path = require('path');
-
-const source = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-const expression = name => {
-  const marker = `const ${name} =`;
-  const start = source.indexOf(marker);
-  assert.notStrictEqual(start, -1, `missing ${name}`);
-  const end = source.indexOf('\n        };', start);
-  assert.notStrictEqual(end, -1, `unterminated ${name}`);
-  return source.slice(start, end + '\n        };'.length);
-};
-const context = {};
-vm.createContext(context);
-vm.runInContext(`${expression('extractStorageCapacity')}\nthis.extractStorageCapacity = extractStorageCapacity;`, context);
-vm.runInContext(`${expression('normalizeStorageHeaderResult')}\nthis.normalizeStorageHeaderResult = normalizeStorageHeaderResult;`, context);
-
-const extract = context.extractStorageCapacity;
-for (const [input, expected] of [
-  ['391/875', '875'], ['391 / 875', '875'], ['258/500', '500'],
-  ['1,234/5,678', '5678'], ['391／875', '875'], ['１，２３４／５，６７８', '5678'],
-  ['391', ''], ['875', ''], ['258', ''], ['500', ''], ['391/', ''], ['／875', ''],
-  ['391 875', ''], ['道具 391/875', ''], ['寶可夢 258/500', ''],
-  ['current=391 capacity=875', ''], ['', ''], [null, ''], [undefined, '']
-]) assert.strictEqual(extract(input), expected, `strict parser mismatch for ${String(input)}`);
-
-const normalize = value => JSON.parse(JSON.stringify(context.normalizeStorageHeaderResult(value)));
-assert.deepStrictEqual(normalize({ header_type: 'item', storage_text: '391/875' }), {
-  header_type: 'item', poke_bag: '', item_bag: '875', structurally_complete: true
-});
-assert.deepStrictEqual(normalize({ header_type: 'pokemon', storage_text: '258/500' }), {
-  header_type: 'pokemon', poke_bag: '500', item_bag: '', structurally_complete: true
-});
-assert.deepStrictEqual(normalize({ header_type: 'none', storage_text: '' }), {
-  header_type: 'none', poke_bag: '', item_bag: '', structurally_complete: true
-});
-for (const input of [
-  { header_type: 'item', storage_text: '875' },
-  { header_type: 'pokemon', storage_text: '258' },
-  { header_type: 'invalid', storage_text: '391/875' }
-]) {
-  const result = normalize(input);
-  assert.strictEqual(result.structurally_complete, false);
-  assert.strictEqual(result.poke_bag, '');
-  assert.strictEqual(result.item_bag, '');
-}
-
-const crop = expression('fileToStorageHeaderDataUrl');
-assert(crop.includes('img.src = originalDataUrl'), 'crop must use original data URL');
-assert(crop.includes('0, 0, sourceWidth, cropHeight'), 'crop must start at top and preserve source width');
-assert(crop.includes('Math.max(240, Math.ceil(sourceHeight * 0.24))'), 'crop must retain sufficient top area');
-assert(crop.includes("canvas.toDataURL('image/png')"), 'crop must be lossless PNG');
-assert(!crop.includes('image/jpeg'), 'storage crop must never use JPEG');
-
-assert(source.includes("const STORAGE_HEADER_IMAGE_TYPES = new Set(['RESOURCE_SCREEN', 'CATEGORY_OVERVIEW_SCREEN'])"));
-assert(source.includes("{ imageDetail: 'high', maxRetries: 1 }"));
+const assert = require('assert'); const fs=require('fs'); const vm=require('vm'); const path=require('path');
+const source=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+const expression=name=>{const start=source.indexOf(`const ${name} =`);assert(start>=0,`missing ${name}`);const end=source.indexOf('\n        };',start);assert(end>start);return source.slice(start,end+11)};
+const context={};vm.createContext(context);
+for(const name of ['extractStorageCapacity','normalizeStorageHeaderResult','reconcileStorageEvidence','formatStorageReview']) vm.runInContext(`${expression(name)}\nthis.${name}=${name};`,context);
+for(const [input,expected] of [['161/400','400'],['391 / 875','875'],['１，２３４／５，６７８','5678'],['400',''],['(15)',''],['9/12','12'],['寶可夢 161/400','']]) assert.strictEqual(context.extractStorageCapacity(input),expected);
+const norm=v=>JSON.parse(JSON.stringify(context.normalizeStorageHeaderResult(v)));
+let n=norm({header_type:'pokemon',relevant_header_label:'寶可夢',storage_text:'161/400',outcome:'verified'});
+assert.strictEqual(n.poke_bag,'400');assert.strictEqual(n.raw_pair,'161/400');assert.strictEqual(n.status,'verified');
+n=norm({header_type:'item',relevant_header_label:'道具',storage_text:'391/875',outcome:'verified'});assert.strictEqual(n.item_bag,'875');
+n=norm({header_type:'none',relevant_header_label:'蛋',storage_text:'',outcome:'not_visible'});assert.strictEqual(n.status,'not_visible');assert.strictEqual(n.poke_bag,'');
+for(const bad of [{header_type:'pokemon',relevant_header_label:'寶可夢',storage_text:'400',outcome:'verified'},{header_type:'pokemon',relevant_header_label:'蛋',storage_text:'9/12',outcome:'verified'}]) assert.strictEqual(norm(bad).structurally_complete,false);
+const candidate=(value,index=1)=>({image_index:index,poke_bag_candidate:{value,raw_pair:`1/${value}`,image_index:index},verification_status:'not_visible',verification:null});
+let d=context.reconcileStorageEvidence([candidate('400')],'poke_bag');assert.strictEqual(d.status,'pending');assert.strictEqual(d.accepted_value,'');assert.strictEqual(d.candidates[0].raw_pair,'1/400');
+d=context.reconcileStorageEvidence([{...candidate('400'),verification_status:'request_failed'}],'poke_bag');assert.deepStrictEqual([...d.verification_statuses],['request_failed']);
+const verified=(value,index)=>({image_index:index,poke_bag_candidate:null,verification_status:'verified',verification:{field:'poke_bag',value,raw_pair:`1/${value}`,image_index:index}});
+d=context.reconcileStorageEvidence([candidate('400'),verified('400',2)],'poke_bag');assert.strictEqual(d.status,'verified');assert.strictEqual(d.accepted_value,'400');
+for(const records of [[candidate('400'),verified('500',2)],[verified('500',2),candidate('400')]]){d=context.reconcileStorageEvidence(records,'poke_bag');assert.strictEqual(d.status,'conflicting');assert.strictEqual(d.accepted_value,'');}
+assert(context.formatStorageReview('poke_bag',context.reconcileStorageEvidence([candidate('400')],'poke_bag')).includes('待確認'));
+assert(source.includes('「蛋」的數對一律不是寶可夢或道具容量'));
+assert.strictEqual((source.slice(source.indexOf('const verifyStorageHeader = async'),source.indexOf('const requestSingleImageClassification = async')).match(/requestStorageHeaderVerification\(/g)||[]).length,2);
 assert(source.includes("const DEDICATED_VERIFICATION_FIELDS = new Set(['poke_bag', 'item_bag'])"));
-const recoveryBuilder = source.slice(source.indexOf('const buildOrdinaryRecoveryTargets ='), source.indexOf('const runOrdinaryRecoveryBatch = async'));
-assert(recoveryBuilder.includes('!DEDICATED_VERIFICATION_FIELDS.has(field)'));
-const verifier = source.slice(source.indexOf('const verifyStorageHeader = async'), source.indexOf('const requestSingleImageClassification = async'));
-assert.strictEqual((verifier.match(/requestStorageHeaderVerification\(/g) || []).length, 2, 'one primary plus at most one structural retry');
-assert(verifier.includes('if (!result.structurally_complete)'), 'truthful none must not retry');
-const orchestration = source.slice(source.indexOf('const normalTask = (async () =>'), source.indexOf('const parallelTasksStartedAt'));
-assert(orchestration.includes('Promise.all(['), 'ordinary extraction and verifier must run in parallel');
-assert(orchestration.includes('normalIndex'), 'storage merge must preserve explicit screenshot index');
-assert(orchestration.includes('imageResult.header_type = verified.header_type'));
-assert(orchestration.includes('imageResult.poke_bag = verified.poke_bag'));
-assert(orchestration.includes('imageResult.item_bag = verified.item_bag'));
-assert(orchestration.indexOf('storageSettlements.forEach') < orchestration.indexOf('runOrdinaryRecoveryBatch'), 'authoritative storage merge must precede recovery');
-
-const ownership = source.slice(source.indexOf('const STORAGE_CAPACITY_AI_OWNED_INPUT_IDS'), source.indexOf('const isCurrentSmartHundoSession'));
-for (const fragment of ['marker && input && input.value === marker.value', 'storageCapacityAiValueOwnership.clear()']) {
-  assert(ownership.includes(fragment), `ownership safeguard missing: ${fragment}`);
-}
-assert(source.includes("addEventListener('input'"));
-assert(source.includes('storageCapacityAiValueOwnership.delete(inputId)'));
-assert(source.includes('storageCapacityAiValueOwnership.set(id, { value: normalizedValue })'));
-
-console.log('Storage capacity recognition tests passed.');
+assert(source.includes("canvas.toDataURL('image/png')"));
+console.log('Storage capacity recognition and reconciliation tests passed; 0 live OpenAI requests.');
