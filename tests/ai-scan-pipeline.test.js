@@ -34,7 +34,7 @@ for (const fragment of [
   "const HUNDO_COUNT_MODEL = 'gpt-5.6-luna'",
   "const HUNDO_COUNT_REASONING_EFFORT = 'medium'",
   "const HUNDO_SMART_MODEL = 'gpt-5.6-sol'",
-  "const HUNDO_SMART_REASONING_EFFORT = 'high'",
+  "const HUNDO_SMART_REASONING_EFFORT = 'medium'",
   "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-sol'",
   "const HUNDO_FORM_VERIFY_REASONING_EFFORT = 'high'",
   'requestHundoCountExtraction(',
