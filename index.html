@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <script src="smart-hundo-visual-rules.js"></script>
     <script src="smart-hundo-helpers.js"></script>
     <script src="hundo-list-count.js"></script>
     <script src="smart-hundo-form-verifier.js"></script>
@@ -2594,51 +2595,8 @@ ${outputTemplate}
 這張圖片已確認為 HUNDO_LEGENDARY_SCREEN，搜尋條件已確認為「${HUNDO_LEGENDARY_FILTER}」。禁止重新分類或更改搜尋條件。一次處理整張原始圖片，不得拆成每隻寶可夢的個別操作。
 
 【直接視覺辨識原則】
-
-你是 Pokémon GO 百神清單專用圖片辨識模型。請直接觀看完整原始圖片，辨識每一張卡片實際顯示的是哪一隻寶可夢，以及它的精確型態。
-
-主要答案必須來自你對圖片中 Pokémon GO 3D 寶可夢本體的直接視覺辨識。不要只抄寫 visible_label，也不要因為文字只顯示基礎物種名稱，就自動選擇普通型態。
-
-visible_label、CP、自訂暱稱、151515、100、96%、地名、縮寫與其他文字只能當作次要輔助證據。
-
-請直接辨識基礎物種、地區型態、起源型態、劍盾王之型態、奈克洛茲瑪合體型態、基格爾德百分比型態與酋雷姆融合型態。
-
-外觀描述只負責提醒容易混淆之處。外觀描述不是機械式分類規則，也不是 JavaScript 判斷公式。最終 form_id 必須來自你對實際圖片中寶可夢本體的整體辨識。
-
-若無法可靠確認型態：
-
-form_id = "uncertain"
-
-不得因為 visible_label 只顯示基礎物種，就退回 standard 或 base。
-
-【直接辨識失敗案例】
-
-【藏瑪然特】
-沒有巨大盾牌式頭頸鬃甲：form_id = zamazenta_standard
-具有巨大盾牌式頭頸和胸前裝甲：form_id = zamazenta_crowned
-不得只因紅、藍、金色就判成 Crowned。
-
-【背景圖示】
-只依同卡右下徽章的形狀與完整卡片脈絡分類，不可只看顏色或「附近有東西」。location/globe-style 徽章是 commemorative_location_badge + location_style_background；blue flower-pattern 徽章是 special_background_badge + event_special_background。粉紅 Dynamax X、左下淨化星芒及 other 都不是背景。Dynamax 與真正背景可共存，必須檢查整個徽章區。區域清楚且無背景才可 none；裁切、遮擋或關聯不明一律 uncertain。
-
-【蒼響】
-劍之王必須清楚看見口中長劍、頭頸胸裝甲及完整身體；一般形態必須清楚看見一般狼形的嘴、頭頸與身體，不能只因沒看到劍而判一般。嘴或身體裁切、遮擋或特徵衝突必須 uncertain。
-
-【帝牙盧卡】
-文字即使只寫「帝牙盧卡」，圖片若為起源型態：form_id = dialga_origin
-不得被 visible_label 帶回 dialga_standard。
-
-【帕路奇亞】
-文字即使只寫「帕路奇亞」，仍須直接辨識 palkia_standard 或 palkia_origin。
-
-【奈克洛茲瑪】
-文字可能全部只寫「奈克洛茲瑪」。普通：form_id = necrozma_base；四足獅型索爾迦雷歐合體：form_id = necrozma_dusk_mane；巨大月翼／露奈雅拉合體：form_id = necrozma_dawn_wings。
-
-【酋雷姆】
-文字可能只寫「酋雷姆」。普通：kyurem_base；萊希拉姆融合：kyurem_white；捷克羅姆融合：kyurem_black。看到黑色大型手臂、捷克羅姆式裝甲與發電機融合構造時，應辨識為 kyurem_black。
-
-【伽勒爾三神鳥】
-即使文字只顯示基礎名稱，仍須從圖片辨識普通或伽勒爾型態。
+主要答案來自本體直接視覺辨識；文字只能當作次要輔助證據。
+${globalThis.SmartHundoVisualRules.buildPrimaryVisualRules()}
 
 【A. 完整卡片列舉與位置】
 掃描全圖由上到下、每列由左到右；超過 10 張仍必須繼續掃描到底部邊緣。完整可見與部分可見（包括任一邊緣被裁切）的卡片，每一張都各自輸出。detected_card_count 必須等於所有完整與部分可見卡片的總數；只有確實掃描完整張圖片才可填 scan_complete=true，只有確實檢查圖片最底部邊緣才可填 bottom_edge_checked=true。
@@ -2658,156 +2616,7 @@ official_name 必須是可靠辨識後的官方繁體中文名稱；visible_labe
 例如標籤「GLO蒼響151515」不得成為 official_name；只有外觀可靠支持時才可輸出「蒼響」。保留可靠可辨識的型態，例如焰白酋雷姆、闇黑酋雷姆、蒼響劍王（蒼響／劍之王）、藏瑪然特盾王（藏瑪然特／盾之王）、起源型態與融合型態。
 
 【B2. 基礎物種與型態辨識】
-
-每張卡片都必須先辨識 base_species，再辨識 form_id。你是直接觀看完整原始圖片中的寶可夢外觀，不是只抄寫 visible_label，也不是只根據單一顏色判斷。
-
-型態判斷可綜合：
-
-- 整體身體結構
-- 頭部
-- 翅膀
-- 尾巴
-- 四肢
-- 武器
-- 裝甲
-- 姿勢
-- 身體比例
-- 型態專屬部位
-- 顏色分布
-- visible_label 作為次要核對證據
-
-visible_label 可能只是基礎物種名稱、自訂暱稱、IV 數字、151515、100、百分比、縮寫、招式或其他使用者符號。
-
-例如畫面文字只寫「火焰鳥」，但圖片中是黑色本體與桃紅／深紅火焰狀翅膀的伽勒爾外觀時：
-
-base_species = "火焰鳥"
-form_id = "moltres_galarian"
-
-不得因 visible_label 只有「火焰鳥」就自動回傳 moltres_standard。
-
-對以下十個 base_species，form_id 必須從相容白名單中選擇：
-
-急凍鳥：
-articuno_standard / articuno_galarian
-
-閃電鳥：
-zapdos_standard / zapdos_galarian
-
-火焰鳥：
-moltres_standard / moltres_galarian
-
-蒼響：
-zacian_standard / zacian_crowned
-
-藏瑪然特：
-zamazenta_standard / zamazenta_crowned
-
-帝牙盧卡：
-dialga_standard / dialga_origin
-
-帕路奇亞：
-palkia_standard / palkia_origin
-
-基格爾德：
-zygarde_10 / zygarde_50 / zygarde_complete
-
-奈克洛茲瑪：
-necrozma_base / necrozma_dusk_mane / necrozma_dawn_wings
-
-酋雷姆：
-kyurem_base / kyurem_white / kyurem_black
-
-型態辨識細節：
-
-1. articuno_standard：
-   藍色冰鳥、寬大藍翼、長條帶狀尾羽與冰系羽毛特徵。
-
-2. articuno_galarian：
-   深紫／黑紫色系，眼部有明顯面罩感，羽翼、頭冠與尾部結構不同於一般急凍鳥。不能只因為紫色就判定。
-
-3. zapdos_standard：
-   黃色尖刺羽毛、黑色鋸齒狀翼尾、標準飛鳥輪廓。
-
-4. zapdos_galarian：
-   橘紅色系、雙腿特別長而強壯、接近陸行／奔跑鳥姿態。腿部與身體結構比顏色更重要。
-
-5. moltres_standard：
-   黃橘色鳥體，橘紅色真正火焰構成頭冠、翅膀與尾部。
-
-6. moltres_galarian：
-   黑色／深色鳥體，桃紅、洋紅、深紅色氣場式火焰翅膀與尾部。不能只看深色或紅色。
-
-7. zacian_standard：
-   蒼響狼型本體，沒有嘴持大型劍，也沒有完整劍之王裝甲。
-
-8. zacian_crowned：
-   嘴中明確持有大型劍，具有金藍色劍之王武裝與裝甲。
-
-9. zamazenta_standard：
-   藏瑪然特狼型本體，沒有完整盾之王大型盾牌鬃甲。
-
-10. zamazenta_crowned：
-    頭頸與胸前具有巨大盾牌式鬃甲及金紅藍防禦裝甲。
-
-11. dialga_standard：
-    標準帝牙盧卡四足龍型，身體較厚實，四肢、頸部及胸部為一般型態比例。
-
-12. dialga_origin：
-    身體比例明顯拉長，偏馬型／起源四足結構，頸胸、喉部與四肢構造不同於一般帝牙盧卡。
-
-13. palkia_standard：
-    標準直立／雙足龍型，可看見一般型態手臂與腿部結構。
-
-14. palkia_origin：
-    接近四足／半人馬式起源結構，肢體與軀幹配置和一般型態差異明顯。
-
-15. zygarde_10：
-    四足犬型，身體低而長，呈黑綠色狗型結構。
-
-16. zygarde_50：
-    長條蛇型／眼鏡蛇型，上半身直立，下半身為蛇形。
-
-17. zygarde_complete：
-    巨大直立人形／機甲型，中央軀幹與左右大型延伸構造明顯。
-
-18. necrozma_base：
-    黑色結晶狀直立本體，不是四足獅型，也不是大型翼型。
-
-19. necrozma_dusk_mane：
-    以索爾迦雷歐般四足獅型為主，覆蓋奈克洛茲瑪黑色結晶裝甲。
-
-20. necrozma_dawn_wings：
-    以露奈雅拉般巨大蝙蝠／月翼型為主，覆蓋奈克洛茲瑪黑色結晶構造。
-
-21. kyurem_base：
-    灰色冰晶龍型，沒有完整萊希拉姆或捷克羅姆融合結構。
-
-22. kyurem_white：
-    整體偏白，具有萊希拉姆相關白色羽毛、翼狀與融合結構，同時保留酋雷姆特徵。
-
-23. kyurem_black：
-    整體偏黑，具有捷克羅姆相關黑色裝甲、大型手臂及發電機式融合構造，同時保留酋雷姆特徵。
-
-不得只靠顏色判定任何型態。必須綜合基礎物種、身體結構、型態專屬部位與完整視覺外觀。
-
-若主要外觀區域看不清楚、被裁切、被遮擋，或無法可靠區分普通／特殊型態：
-
-form_id = "uncertain"
-
-不得自動退回 standard。
-
-若只靠 visible_label，沒有足夠圖片證據：
-
-recognition_basis = "label_only"
-form_id = "uncertain"
-
-若圖片顯示白名單以外的型態，例如本版不支援的究極奈克洛茲瑪：
-
-form_id = "unsupported"
-
-對不在十個型態白名單中的其他寶可夢：
-
-form_id = "not_applicable"
+使用上方共享視覺規則中的 23 個支援 form_id。只依實際可見結構選擇；證據不足用 uncertain，白名單外用 unsupported，其他物種用 not_applicable。
 
 【B3. form_evidence】
 
@@ -2997,40 +2806,16 @@ The model_team_candidate is diagnostic only. Body color must never override fixe
                 .map(formId => {
                     const evidence = globalThis.SmartHundoFormVerifier.REQUIRED_VERIFIED_FORM_EVIDENCE[formId];
                     return `${formId} | 視覺規則=${evidence.visual_rule} | body_plan=${evidence.body_plan} | limb_layout=${evidence.limb_layout} | fusion_host=${evidence.fusion_host} | decisive_feature=${evidence.decisive_feature}`;
-                })).join('\n');
+                })).filter((line, index, lines) => lines.indexOf(line) === index).join('\n');
+            const requestedDimensions = new Set(verificationJobs.flatMap(job => job.requested_dimensions));
+            const candidateIds = [...new Set(verificationJobs.flatMap(job => job.candidate_form_ids).filter(id => id !== 'uncertain'))];
+            const scopedRules = [
+                requestedDimensions.has('form') ? `【形態共同規則】\n${globalThis.SmartHundoVisualRules.FORM_VERIFICATION_RULES.join('\n')}\n【候選家族比較】\n${globalThis.SmartHundoVisualRules.familyRulesForFormIds(candidateIds)}` : '',
+                requestedDimensions.has('background') ? `【背景徽章比較】\n${Object.values(globalThis.SmartHundoVisualRules.BACKGROUND_RULES).join('\n')}` : ''
+            ].filter(Boolean).join('\n\n');
             return `你是寶可夢 GO 指定形態的嚴格視覺驗證器。
 
-【通則】
-每個 tile 只處理 requested_dimensions。未要求的維度回傳 uncertain 證據，絕不可改寫。背景檢查須觀看完整卡片與右下徽章區；形態檢查須觀看完整本體。
-只從放大的寶可夢本體裁切圖辨識形態；每個 tile 都只有一個已知 base species。形態不得由 CP、名稱、異色、幸運、最愛、火箭隊狀態或背景推論。忽略殘留的 CP、地點、151515、96% 與暱稱文字。
-形態判定權威是本體結構、姿勢、四肢、手臂、比例、頸胸、獅子／月翼／結晶宿主、融合宿主及形態特有部位。顏色只能作為輔助，絕不可作為決定性依據。不清楚、太小或被裁切的決定性區域必須回傳 uncertain；絕不可因已知 base species 就預設為 standard 或 base。
-不得使用 CP、不得使用 暱稱、不得使用 visible label、不得使用 異色、不得使用 color shortcut。帝牙盧卡與帕路奇亞的顏色或異色絕不可作為形態捷徑；它們的顏色只能是輔助，絕不覆蓋本體結構證據。
-
-【背景圖示】
-只依同卡右下徽章的形狀與完整卡片脈絡分類，不可只看顏色或「附近有東西」。location/globe-style 徽章是 commemorative_location_badge + location_style_background；blue flower-pattern 徽章是 special_background_badge + event_special_background。粉紅 Dynamax X、左下淨化星芒及 other 都不是背景。Dynamax 與真正背景可共存，必須檢查整個徽章區。區域清楚且無背景才可 none；裁切、遮擋或關聯不明一律 uncertain。
-
-【蒼響】
-劍之王必須清楚看見口中長劍、頭頸胸裝甲及完整身體；一般形態必須清楚看見一般狼形的嘴、頭頸與身體，不能只因沒看到劍而判一般。嘴或身體裁切、遮擋或特徵衝突必須 uncertain。
-
-【帝牙盧卡】
-帝牙盧卡一般形態：粗壯、寬闊的四足身體，標準四腿，判斷頸部與胸部的厚實結構。短而緊湊的軀幹，不是高而窄的馬型身體；確認寬闊白色肩部／背部結構與正常頸胸比例。
-dialga_standard | body_plan=dialga_stocky_wide_quadruped | limb_layout=four_standard_legs | fusion_host=not_applicable | decisive_feature=dialga_standard_stocky_neck_chest
-帝牙盧卡起源形態：修長的馬型四足身體，四條長腿，判斷拉長的頸部與胸部結構。高而窄的馬型坐騎四足身體，長而細的肢體；確認拉長的頸部、喉部與胸部，不是粗壯緊湊身體。
-dialga_origin | body_plan=dialga_elongated_equine_quadruped | limb_layout=four_long_legs | fusion_host=not_applicable | decisive_feature=dialga_origin_elongated_neck_chest
-
-【帕路奇亞】
-帕路奇亞一般形態：直立雙足且有可見手臂，判斷兩手臂與兩腿。確認兩隻明顯正常手臂與兩隻腿，高度大於寬度，不是四足半人馬。
-palkia_standard | body_plan=palkia_upright_biped_with_arms | limb_layout=two_arms_two_legs | fusion_host=not_applicable | decisive_feature=palkia_standard_visible_arms
-帕路奇亞起源形態：半人馬式四足身體，四腿且沒有一般形態的手臂。確認四隻明顯腿、水平身體配置，沒有兩隻一般形態手臂，軀幹與四肢明顯不同。
-palkia_origin | body_plan=palkia_centaur_quadruped | limb_layout=four_legs_no_standard_arms | fusion_host=not_applicable | decisive_feature=palkia_origin_centaur_body
-
-【奈克洛茲瑪】
-奈克洛茲瑪一般形態：直立的結晶身體與直立結晶肢體。確認狹窄黑色結晶宿主與直立結晶肢體，不是獅子，沒有巨大的側向月翼。
-necrozma_base | body_plan=necrozma_upright_crystalline | limb_layout=upright_crystalline_limbs | fusion_host=none | decisive_feature=necrozma_base_crystal_body
-奈克洛茲瑪黃昏之鬃：四足獅子身體、獅子結晶裝甲，融合宿主是索爾迦雷歐。確認低而寬的四足獅子、四隻腿、黑色奈克洛茲瑪結晶裝甲，不是直立，沒有巨大翅膀。
-necrozma_dusk_mane | body_plan=necrozma_quadruped_lion | limb_layout=quadruped_lion | fusion_host=solgaleo | decisive_feature=necrozma_dusk_mane_lion_crystal_armor
-奈克洛茲瑪拂曉之翼：寬大的月翼、沒有獅子身體，融合宿主是露奈雅拉。確認巨大的側向蝙蝠／月翼主導寬度、露奈雅拉宿主、小型中央身體與黑色結晶結構，不是獅子也不是直立。
-necrozma_dawn_wings | body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings
+${scopedRules}
 
 只輸出符合 schema 的 cards。每張卡必須逐字回傳 tile_id、card_id、screenshot_index、requested_dimensions、base_species 與所有證據欄位；只能從該 tile 的 candidates 選擇 verified_form_id 或 uncertain。
 本次 candidates 涵蓋的任何支援家族都必須依裁切圖直接比較各候選形態。只有決定性外觀清楚且信心達標時才可選形態；無法確定時必須選 uncertain，絕不可默認 standard/base。

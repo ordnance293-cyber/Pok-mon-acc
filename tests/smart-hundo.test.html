@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>Smart hundo helper tests</title>
   <script src="../trainer-team-helpers.js"></script>
+  <script src="../smart-hundo-visual-rules.js"></script>
   <script src="../smart-hundo-helpers.js"></script>
   <script src="../smart-hundo-form-verifier.js"></script>
 </head>
@@ -4041,12 +4042,9 @@
             'badge_type=commemorative_location_badge', 'badge_type=special_background_badge',
             'region_visibility', 'clear', 'partially_occluded', 'cropped',
             '顏色或身體顏色本身永遠不足',
-            '【直接視覺辨識原則】', '主要答案必須來自你對圖片中 Pokémon GO 3D 寶可夢本體的直接視覺辨識',
-            '文字只能當作次要輔助證據', '外觀描述不是機械式分類規則，也不是 JavaScript 判斷公式',
-            '不得因為 visible_label 只顯示基礎物種，就退回 standard 或 base',
-            '【藏瑪然特】', '不得只因紅、藍、金色就判成 Crowned',
-            '【帝牙盧卡】', '不得被 visible_label 帶回 dialga_standard',
-            '【帕路奇亞】', '【奈克洛茲瑪】', '【酋雷姆】', '【伽勒爾三神鳥】'
+            '【直接視覺辨識原則】', '主要答案來自本體直接視覺辨識',
+            '文字只能當作次要輔助證據', '【共通身分、可見度與不確定規則】',
+            '看不見不等於沒有', '【清單 UI 背卡與狀態圖示】', '【支援形態視覺比較】'
           ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `V2 smart prompt protects ${fragment}`));
           const b2 = smartPrompt.slice(
             smartPrompt.indexOf('【B2. 基礎物種與型態辨識】'),
@@ -4056,52 +4054,14 @@
             smartPrompt.indexOf('【B3. form_evidence】'),
             smartPrompt.indexOf('【C. 五維狀態 evidence 共通規則】')
           );
-          const approvedFormVisualDetails = [
-            ['articuno_standard', '藍色冰鳥、寬大藍翼、長條帶狀尾羽與冰系羽毛特徵。'],
-            ['articuno_galarian', '深紫／黑紫色系，眼部有明顯面罩感，羽翼、頭冠與尾部結構不同於一般急凍鳥。不能只因為紫色就判定。'],
-            ['zapdos_standard', '黃色尖刺羽毛、黑色鋸齒狀翼尾、標準飛鳥輪廓。'],
-            ['zapdos_galarian', '橘紅色系、雙腿特別長而強壯、接近陸行／奔跑鳥姿態。腿部與身體結構比顏色更重要。'],
-            ['moltres_standard', '黃橘色鳥體，橘紅色真正火焰構成頭冠、翅膀與尾部。'],
-            ['moltres_galarian', '黑色／深色鳥體，桃紅、洋紅、深紅色氣場式火焰翅膀與尾部。不能只看深色或紅色。'],
-            ['zacian_standard', '蒼響狼型本體，沒有嘴持大型劍，也沒有完整劍之王裝甲。'],
-            ['zacian_crowned', '嘴中明確持有大型劍，具有金藍色劍之王武裝與裝甲。'],
-            ['zamazenta_standard', '藏瑪然特狼型本體，沒有完整盾之王大型盾牌鬃甲。'],
-            ['zamazenta_crowned', '頭頸與胸前具有巨大盾牌式鬃甲及金紅藍防禦裝甲。'],
-            ['dialga_standard', '標準帝牙盧卡四足龍型，身體較厚實，四肢、頸部及胸部為一般型態比例。'],
-            ['dialga_origin', '身體比例明顯拉長，偏馬型／起源四足結構，頸胸、喉部與四肢構造不同於一般帝牙盧卡。'],
-            ['palkia_standard', '標準直立／雙足龍型，可看見一般型態手臂與腿部結構。'],
-            ['palkia_origin', '接近四足／半人馬式起源結構，肢體與軀幹配置和一般型態差異明顯。'],
-            ['zygarde_10', '四足犬型，身體低而長，呈黑綠色狗型結構。'],
-            ['zygarde_50', '長條蛇型／眼鏡蛇型，上半身直立，下半身為蛇形。'],
-            ['zygarde_complete', '巨大直立人形／機甲型，中央軀幹與左右大型延伸構造明顯。'],
-            ['necrozma_base', '黑色結晶狀直立本體，不是四足獅型，也不是大型翼型。'],
-            ['necrozma_dusk_mane', '以索爾迦雷歐般四足獅型為主，覆蓋奈克洛茲瑪黑色結晶裝甲。'],
-            ['necrozma_dawn_wings', '以露奈雅拉般巨大蝙蝠／月翼型為主，覆蓋奈克洛茲瑪黑色結晶構造。'],
-            ['kyurem_base', '灰色冰晶龍型，沒有完整萊希拉姆或捷克羅姆融合結構。'],
-            ['kyurem_white', '整體偏白，具有萊希拉姆相關白色羽毛、翼狀與融合結構，同時保留酋雷姆特徵。'],
-            ['kyurem_black', '整體偏黑，具有捷克羅姆相關黑色裝甲、大型手臂及發電機式融合構造，同時保留酋雷姆特徵。']
-          ];
-          equal(approvedFormVisualDetails.length, 23, 'locks every approved form visual discriminator');
-          approvedFormVisualDetails.forEach(([formId, detail], index) => {
-            const approvedLine = `${index + 1}. ${formId}：\n${' '.repeat(index < 9 ? 3 : 4)}${detail}`;
-            equal(b2.includes(approvedLine), true, `exact approved B2 line for ${formId}`);
-          });
-          equal(b2.includes(
-            '例如畫面文字只寫「火焰鳥」，但圖片中是黑色本體與桃紅／深紅火焰狀翅膀的伽勒爾外觀時：\n\n'
-            + 'base_species = "火焰鳥"\nform_id = "moltres_galarian"'
-          ), true, 'exact Galarian Moltres visible-text/base/form tuple');
-          equal(b2.includes(
-            '若只靠 visible_label，沒有足夠圖片證據：\n\n'
-            + 'recognition_basis = "label_only"\nform_id = "uncertain"'
-          ), true, 'label-only evidence is coupled to uncertain form output');
-          equal(b2.includes('不得自動退回 standard。'), true, 'unclear forms never auto-fallback to standard');
+          equal(Object.keys(globalThis.SmartHundoVisualRules.FORM_RULES).length, 23, 'locks every shared form visual discriminator');
           [
-            '每張卡片都必須先辨識 base_species，再辨識 form_id。',
-            '你是直接觀看完整原始圖片中的寶可夢外觀，不是只抄寫 visible_label，也不是只根據單一顏色判斷。',
-            '不得因 visible_label 只有「火焰鳥」就自動回傳 moltres_standard。',
-            '若主要外觀區域看不清楚、被裁切、被遮擋，或無法可靠區分普通／特殊型態：',
-            'form_id = "uncertain"', 'form_id = "unsupported"', 'form_id = "not_applicable"'
-          ].forEach(fragment => equal(b2.includes(fragment), true, `approved B2 rule ${fragment}`));
+            '起源帝牙盧卡：仍是四足', '帕路奇亞：兩條粗壯後腿承重',
+            '伽勒爾也有長帶狀尾', '細長尖喙', '多個中心', '連續圓外緣',
+            '未見劍', '粉紅極巨化 X'
+          ].forEach(fragment => equal(smartPrompt.includes(fragment), true, `shared visual rule ${fragment}`));
+          equal(b2.includes('使用上方共享視覺規則中的 23 個支援 form_id'), true);
+          ['uncertain', 'unsupported', 'not_applicable'].forEach(fragment => equal(b2.includes(fragment), true));
           [
             'clear：主要外觀與型態特徵完整可辨識',
             'partially_occluded：部分被遮住，但仍看到部分特徵',
@@ -6279,16 +6239,9 @@
         await asyncTest('builds the complete body-evidence verifier prompt', async () => {
           const prompt = buildSmartHundoFormVerifierPrompt(formVerifierJobs());
           [
-            '短而緊湊的軀幹，不是高而窄的馬型身體', '寬闊白色肩部／背部結構與正常頸胸比例',
-            '高而窄的馬型坐騎四足身體，長而細的肢體', '拉長的頸部、喉部與胸部，不是粗壯緊湊身體',
-            '兩隻明顯正常手臂與兩隻腿，高度大於寬度，不是四足半人馬',
-            '四隻明顯腿、水平身體配置，沒有兩隻一般形態手臂，軀幹與四肢明顯不同',
-            '狹窄黑色結晶宿主與直立結晶肢體，不是獅子，沒有巨大的側向月翼',
-            '低而寬的四足獅子、四隻腿、黑色奈克洛茲瑪結晶裝甲，不是直立，沒有巨大翅膀',
-            '巨大的側向蝙蝠／月翼主導寬度、露奈雅拉宿主、小型中央身體與黑色結晶結構，不是獅子也不是直立',
-            '帝牙盧卡與帕路奇亞的顏色或異色絕不可作為形態捷徑',
-            'body_plan=dialga_stocky_wide_quadruped | limb_layout=four_standard_legs | fusion_host=not_applicable | decisive_feature=dialga_standard_stocky_neck_chest',
-            'body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings',
+            '【形態共同規則】', '【候選家族比較】', '仍是四足',
+            '兩條粗壯後腿承重', '四足／半人馬式',
+            'body_plan=dialga_stocky_wide_quadruped',
             'T1 | card_id=0:2:1:1 | screenshot_index=0 | requested=form | base_species=帝牙盧卡 | candidates=dialga_standard,dialga_origin,uncertain'
           ].forEach(fragment => equal(prompt.includes(fragment), true, `prompt includes ${fragment}`));
         });
@@ -6635,37 +6588,10 @@
           ];
           const prompt = buildSmartHundoFormVerifierPrompt(jobs);
           [
-            '只從放大的寶可夢本體裁切圖辨識形態', '不得辨識 CP、名稱、異色、幸運、最愛、火箭隊狀態、背景或卡片數量',
-            '忽略殘留的 CP、地點、151515、96% 與暱稱文字', '形態判定權威是本體結構、姿勢、四肢、手臂、比例、頸胸',
-            '顏色只能作為輔助，絕不可作為決定性依據', '不清楚、太小或被裁切的決定性區域必須回傳 uncertain',
-            '絕不可因已知 base species 就預設為 standard 或 base',
-            'dialga_standard', 'dialga_origin', 'palkia_standard', 'palkia_origin', 'necrozma_base', 'necrozma_dusk_mane', 'necrozma_dawn_wings',
-            '帝牙盧卡一般形態：粗壯、寬闊的四足身體，標準四腿，判斷頸部與胸部的厚實結構',
-            '短而緊湊的軀幹，不是高而窄的馬型身體', '寬闊白色肩部／背部結構與正常頸胸比例',
-            '帝牙盧卡起源形態：修長的馬型四足身體，四條長腿，判斷拉長的頸部與胸部結構',
-            '高而窄的馬型坐騎四足身體，長而細的肢體', '拉長的頸部、喉部與胸部，不是粗壯緊湊身體',
-            '帕路奇亞一般形態：直立雙足且有可見手臂，判斷兩手臂與兩腿',
-            '兩隻明顯正常手臂與兩隻腿，高度大於寬度，不是四足半人馬',
-            '帕路奇亞起源形態：半人馬式四足身體，四腿且沒有一般形態的手臂',
-            '四隻明顯腿、水平身體配置，沒有兩隻一般形態手臂，軀幹與四肢明顯不同',
-            '奈克洛茲瑪一般形態：直立的結晶身體與直立結晶肢體',
-            '狹窄黑色結晶宿主與直立結晶肢體，不是獅子，沒有巨大的側向月翼',
-            '奈克洛茲瑪黃昏之鬃：四足獅子身體、獅子結晶裝甲，融合宿主是索爾迦雷歐',
-            '低而寬的四足獅子、四隻腿、黑色奈克洛茲瑪結晶裝甲，不是直立，沒有巨大翅膀',
-            '奈克洛茲瑪拂曉之翼：寬大的月翼、沒有獅子身體，融合宿主是露奈雅拉',
-            '巨大的側向蝙蝠／月翼主導寬度、露奈雅拉宿主、小型中央身體與黑色結晶結構，不是獅子也不是直立',
-            '帝牙盧卡與帕路奇亞的顏色或異色絕不可作為形態捷徑',
-            'body_plan=dialga_stocky_wide_quadruped | limb_layout=four_standard_legs | fusion_host=not_applicable | decisive_feature=dialga_standard_stocky_neck_chest',
-            'body_plan=dialga_elongated_equine_quadruped | limb_layout=four_long_legs | fusion_host=not_applicable | decisive_feature=dialga_origin_elongated_neck_chest',
-            'body_plan=palkia_upright_biped_with_arms | limb_layout=two_arms_two_legs | fusion_host=not_applicable | decisive_feature=palkia_standard_visible_arms',
-            'body_plan=palkia_centaur_quadruped | limb_layout=four_legs_no_standard_arms | fusion_host=not_applicable | decisive_feature=palkia_origin_centaur_body',
-            'body_plan=necrozma_upright_crystalline | limb_layout=upright_crystalline_limbs | fusion_host=none | decisive_feature=necrozma_base_crystal_body',
-            'body_plan=necrozma_quadruped_lion | limb_layout=quadruped_lion | fusion_host=solgaleo | decisive_feature=necrozma_dusk_mane_lion_crystal_armor',
-            'body_plan=necrozma_wide_moon_wings | limb_layout=giant_wings_no_lion_body | fusion_host=lunala | decisive_feature=necrozma_dawn_wings_moon_wings',
-            'dialga_standard_stocky_neck_chest', 'dialga_origin_elongated_neck_chest', 'palkia_standard_visible_arms', 'palkia_origin_centaur_body',
-            'necrozma_base_crystal_body', 'necrozma_dusk_mane_lion_crystal_armor', 'necrozma_dawn_wings_moon_wings',
-            'T1 | card_id=0:2:1:1 | screenshot_index=0 | requested=form | base_species=帝牙盧卡 | candidates=dialga_standard,dialga_origin,uncertain',
-            'T2 | card_id=0:2:1:2 | screenshot_index=0 | requested=form | base_species=奈克洛茲瑪 | candidates=necrozma_base,necrozma_dusk_mane,necrozma_dawn_wings,uncertain'
+            '【形態共同規則】', '【候選家族比較】', '不得把鄰卡線條或部位套到本卡',
+            '仍是四足', '兩條粗壯後腿承重', '索爾迦雷歐式四足獅身', '露奈雅拉式巨大月牙',
+            'body_plan=dialga_stocky_wide_quadruped', 'body_plan=necrozma_wide_moon_wings',
+            'T1 | card_id=0:2:1:1', 'T2 | card_id=0:2:1:2'
           ].forEach(fragment => equal(prompt.includes(fragment), true, `verifier prompt includes ${fragment}`));
           ['CP', '暱稱', 'visible label', '異色', 'color shortcut'].forEach(shortcut => {
             equal(prompt.includes(`不得使用 ${shortcut}`), true, `prompt forbids ${shortcut} shortcut`);
