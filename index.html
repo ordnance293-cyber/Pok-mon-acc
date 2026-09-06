@@ -2014,7 +2014,7 @@
 
         const normalizeParenthesizedSearchCount = value => {
             const raw = String(value ?? '').trim().replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xFF10));
-            const match = raw.match(/^[（(]\s*(\d+)\s*[）)]$/);
+            const match = raw.match(/^(?:寶可夢\s*)?[（(]\s*(\d+)\s*[）)]$/);
             return match ? match[1] : '';
         };
 
