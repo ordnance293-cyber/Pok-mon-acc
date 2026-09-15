@@ -14,7 +14,6 @@
     <script src="trainer-team-helpers.js"></script>
     <script src="sold-account-cleanup.js"></script>
     <script src="simple-account-fulfillment-helpers.js"></script>
-    <script src="ai-scan-queue.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -804,14 +803,14 @@
         };
         const clearAiFieldReviews = () => AI_REVIEW_FIELD_IDS.forEach(id => setAiFieldReview(id, ''));
 
-        const beginAutoScanRun = (preserveForm = false) => {
-            if (!preserveForm) clearAiFieldReviews();
-            if (!preserveForm) STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
+        const beginAutoScanRun = () => {
+            clearAiFieldReviews();
+            STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
                 const marker = storageCapacityAiValueOwnership.get(inputId);
                 const input = document.getElementById(inputId);
                 if (marker && input && input.value === marker.value) input.value = '';
             });
-            if (!preserveForm) storageCapacityAiValueOwnership.clear();
+            storageCapacityAiValueOwnership.clear();
             autoScanRunCounter += 1;
             activeAutoScanRunId = autoScanRunCounter;
             return activeAutoScanRunId;
@@ -993,17 +992,16 @@
             return activeTrainerTeamScanId;
         };
 
-        const beginTrainerTeamScan = (preserveForm = false) => {
+        const beginTrainerTeamScan = () => {
             const teamInput = document.getElementById('g_team');
             if (
-                !preserveForm
-                && trainerTeamAiValueOwnership
+                trainerTeamAiValueOwnership
                 && teamInput
                 && teamInput.value === trainerTeamAiValueOwnership.value
             ) {
                 teamInput.value = '';
             }
-            if (!preserveForm) trainerTeamAiValueOwnership = null;
+            trainerTeamAiValueOwnership = null;
             invalidateTrainerTeamScan();
             return activeTrainerTeamScanId;
         };
@@ -1062,21 +1060,19 @@
             return true;
         };
 
-        const beginSmartHundoScanSession = (preserveForm = false) => {
+        const beginSmartHundoScanSession = () => {
             smartHundoSessionCounter += 1;
             activeSmartHundoSessionId = smartHundoSessionCounter;
             activeSmartHundoStartRevision = smartHundoManualRevision;
 
-            if (!preserveForm) SMART_HUNDO_AI_OWNED_INPUT_IDS.forEach(inputId => {
+            SMART_HUNDO_AI_OWNED_INPUT_IDS.forEach(inputId => {
                 const marker = smartHundoAiValueOwnership.get(inputId);
                 const input = document.getElementById(inputId);
                 if (marker && input && input.value === marker.value) input.value = '';
             });
-            if (!preserveForm) {
-                smartHundoAiValueOwnership.clear();
-                currentHundoScreenshotEvidence = null;
-                window.updateHundoCount();
-            }
+            smartHundoAiValueOwnership.clear();
+            currentHundoScreenshotEvidence = null;
+            window.updateHundoCount();
 
             window.lastSmartHundoDiagnostics = null;
             window.lastSmartHundoScanResult = null;
@@ -4123,10 +4119,12 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             statusWriter
         });
 
-        const executeAiScan = async ({ apiKey, files, onStatus = () => {} }) => {
-            if (!apiKey) throw new Error('請先儲存 OPENAI_API_KEY。');
-            if (!files || files.length === 0) throw new Error('掃描工作沒有截圖。');
-            const scanRunId = beginAutoScanRun(true);
+        window.autoScan = async function() {
+            const apiKey = document.getElementById('openaiApiKey').value.trim();
+            const files = document.getElementById('imageInput').files;
+            if(!apiKey) { alert("請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！"); return; }
+            if(files.length === 0) return;
+            const scanRunId = beginAutoScanRun();
             const totalFiles = files.length;
             const scanStartedAt = aiScanNow();
             const diagnostics = createAiScanDiagnostics(totalFiles);
@@ -4134,10 +4132,11 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             activeAiScanDiagnostics = diagnostics;
             let smartSessionId = 0;
             let trainerTeamScanId = 0;
-            const queuedResult = { aiResult: {}, reviews: {}, trainerTeam: null, smartHundo: null, diagnostics: null, notices: [] };
+            const trainerTeamContextIdAtStart = activeTrainerTeamScanId;
+            const trainerTeamManualRevisionAtStart = trainerTeamManualRevision;
             const writeRunStatus = (statusHtml) => {
                 if (!isCurrentAutoScanRun(scanRunId)) return false;
-                onStatus(String(statusHtml).replace(/<[^>]*>/g, '').trim());
+                setAiActionButtonStatus(statusHtml);
                 return true;
             };
             const progress = createAiScanProgress(scanRunId, writeRunStatus);
@@ -4145,6 +4144,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 isCurrentAutoScanRun(scanRunId)
                 && isCurrentSmartHundoSession(smartSessionId)
             );
+            setAiActionButtonsDisabled(true);
             writeRunStatus(`<i class="fas fa-spinner fa-spin"></i> ${AI_SCAN_STATUS_LABEL} 準備圖片 0/${totalFiles}`);
             try {
                 const helpers = globalThis.SmartHundoHelpers;
@@ -4223,7 +4223,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     if (batchSmartJobs.length === 0) continue;
 
                     diagnostics.smart_hundo_priority_trigger_count += 1;
-                    if (!smartSessionId) smartSessionId = beginSmartHundoScanSession(true);
+                    if (!smartSessionId) smartSessionId = beginSmartHundoScanSession();
                     for (const job of batchSmartJobs) {
                         discoveredSmartHundoJobs.push(job);
                         processedSmartIndexes.add(job.index);
@@ -4277,11 +4277,13 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 }
                 diagnostics.normal_files = normalJobs.length;
                 diagnostics.smart_hundo_files = smartHundoJobs.length;
-                const trainerTeamJobs = normalJobs.filter(
-                    job => job.classification.image_type === 'TRAINER_PROFILE_SCREEN'
-                );
+                const trainerTeamJobs = activeTrainerTeamScanId === trainerTeamContextIdAtStart
+                    ? normalJobs.filter(
+                        job => job.classification.image_type === 'TRAINER_PROFILE_SCREEN'
+                    )
+                    : [];
                 if (trainerTeamJobs.length > 0) {
-                    trainerTeamScanId = beginTrainerTeamScan(true);
+                    trainerTeamScanId = beginTrainerTeamScan();
                 }
                 const normalDataUrls = await Promise.all(normalJobs.map(async job => {
                     if (job.classification.image_type !== 'SHINY_LEGENDARY_SCREEN') return job.classificationDataUrl;
@@ -4522,13 +4524,13 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 const finalMergeStartedAt = aiScanNow();
                 progress.update('finalMerge', 0, 0);
                 const countReconciliation = reconcileShinyLegendaryCounts(normalMergedResult, ordinaryAllResults);
-                queuedResult.aiResult = { ...countReconciliation.result };
-                queuedResult.reviews.st_shiny_leg = formatCountConsistencyReview(countReconciliation);
-                queuedResult.reviews.st_shiny = countReconciliation.conflicts.some(conflict => conflict.field === 'shiny') ? formatCountConsistencyReview(countReconciliation) : '';
-                queuedResult.reviews.st_legend = countReconciliation.conflicts.some(conflict => conflict.field === 'legendary') ? formatCountConsistencyReview(countReconciliation) : '';
+                applyAiResultToForm(countReconciliation.result);
+                setAiFieldReview('st_shiny_leg', formatCountConsistencyReview(countReconciliation));
+                setAiFieldReview('st_shiny', countReconciliation.conflicts.some(conflict => conflict.field === 'shiny') ? formatCountConsistencyReview(countReconciliation) : '');
+                setAiFieldReview('st_legend', countReconciliation.conflicts.some(conflict => conflict.field === 'legendary') ? formatCountConsistencyReview(countReconciliation) : '');
                 diagnostics.count_consistency = sanitizeAiScanDiagnostics(countReconciliation);
-                queuedResult.reviews.st_poke_bag = formatStorageReview('poke_bag', storageDecisions.poke_bag);
-                queuedResult.reviews.st_item_bag = formatStorageReview('item_bag', storageDecisions.item_bag);
+                setAiFieldReview('st_poke_bag', formatStorageReview('poke_bag', storageDecisions.poke_bag));
+                setAiFieldReview('st_item_bag', formatStorageReview('item_bag', storageDecisions.item_bag));
 
                 if (trainerTeamJobs.length > 0) {
                     const teamHelpers = globalThis.TrainerTeamHelpers;
@@ -4553,9 +4555,19 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                         }
                     ));
                     const mergedTrainerTeam = teamHelpers.mergeTrainerTeamResults(trainerTeamResults);
-                    const appliedToForm = false;
-                    const manualSelectionPreserved = false;
-                    queuedResult.trainerTeam = mergedTrainerTeam.valid ? mergedTrainerTeam.effective_team : null;
+                    const appliedToForm = (
+                        mergedTrainerTeam.valid
+                        && isCurrentAutoScanRun(scanRunId)
+                        && markTrainerTeamAiValue(
+                            mergedTrainerTeam.effective_team,
+                            trainerTeamScanId,
+                            trainerTeamManualRevisionAtStart
+                        )
+                    );
+                    const manualSelectionPreserved = (
+                        mergedTrainerTeam.valid
+                        && trainerTeamManualRevisionAtStart !== trainerTeamManualRevision
+                    );
                     const trainerTeamDiagnostics = {
                         scan_id: String(trainerTeamScanId),
                         screenshots: trainerTeamResults.map(result => ({
@@ -4578,7 +4590,12 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                         trainerTeamScanId,
                         trainerTeamDiagnostics
                     );
-                    queuedResult.trainerTeamStatus = teamHelpers.formatTrainerTeamStatus(mergedTrainerTeam);
+                    setTrainerTeamStatus(
+                        trainerTeamScanId,
+                        manualSelectionPreserved
+                            ? '隊伍已保留手動選擇'
+                            : teamHelpers.formatTrainerTeamStatus(mergedTrainerTeam)
+                    );
                 }
 
                 if (smartHundoJobs.length > 0) {
@@ -4739,14 +4756,29 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     if (!isCurrentSmartRun()) return;
                     publishSmartHundoDiagnostics(smartSessionId, smartHundoDiagnostics);
 
-                    queuedResult.smartHundo = {
-                        count: String(countMerge.hundo_leg ?? '') === '' ? null : Number(countMerge.hundo_leg),
-                        conflicting: Boolean(countMerge.conflict),
-                        replaceList: Boolean(shouldReplaceSmartList),
-                        pokemonList: conversion.pokemon_list || '',
-                        status: formatSmartHundoStatus({ countMerge, conversion, detectedCardCount, reviewSummary, formVerificationMetrics }),
-                        diagnostics: smartHundoDiagnostics
-                    };
+                    if (countMerge.conflict || String(countMerge.hundo_leg ?? '') !== '') {
+                        if (!isCurrentSmartRun()) return;
+                        currentHundoScreenshotEvidence = {
+                            sessionId: smartSessionId,
+                            count: String(countMerge.hundo_leg ?? '') === '' ? null : Number(countMerge.hundo_leg),
+                            conflicting: Boolean(countMerge.conflict)
+                        };
+                    }
+                    if (shouldReplaceSmartList) {
+                        if (!isCurrentSmartRun()) return;
+                        if (markSmartHundoAiValue('g_hundos', conversion.pokemon_list, smartSessionId)) {
+                            window.updateHundoCount();
+                        }
+                    }
+                    window.updateHundoCount();
+                    if (!isCurrentSmartRun()) return;
+                    setSmartHundoStatus(smartSessionId, formatSmartHundoStatus({
+                        countMerge,
+                        conversion,
+                        detectedCardCount,
+                        reviewSummary,
+                        formVerificationMetrics
+                    }));
                 }
 
                 if (!isCurrentAutoScanRun(scanRunId)) return;
@@ -4767,7 +4799,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 if (missingMessages.length > 0) {
                     if (!isCurrentAutoScanRun(scanRunId)) return;
                     console.warn('AI required field validation result:', finalCoverage);
-                    queuedResult.notices.push(`以下欄位已逐一驗證，但本次仍未能自動填入：\n${missingMessages.join('\n')}`);
+                    alert(`以下欄位已逐一驗證，但本次仍未能自動填入：\n${missingMessages.join('\n')}`);
                 }
                 const smartFailureCount = smartSettlements.filter(settlement => settlement.status === 'rejected').length;
                 const totalFailureCount = classificationFailureCount + normalFailureCount + smartFailureCount;
@@ -4783,173 +4815,36 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 } else if (smartHundoJobs.length === 0) {
                     writeRunStatus(`AI掃描完成｜${totalFiles}張圖片｜補掃${diagnostics.ordinary_recovery_request_count}張｜${(diagnostics.total_duration_ms / 1000).toFixed(1)}秒`);
                 }
-                queuedResult.diagnostics = sanitizeAiScanDiagnostics(diagnostics);
-                return queuedResult;
             } catch (error) {
-                if (!isCurrentAutoScanRun(scanRunId)) throw error;
+                if (!isCurrentAutoScanRun(scanRunId)) return;
+                alert("GPT 解析失敗，請稍後再試");
                 const summary = safeSmartHundoErrorSummary(error, 'auto_scan', 'auto_scan_failed');
                 console.warn('AI scan failed', summary);
                 diagnostics.total_duration_ms = aiScanNow() - scanStartedAt;
                 diagnostics.failure = safeAiFailure(error, 'auto_scan');
                 publishAiScanDiagnostics(diagnostics);
                 const failureStatus = `<i class="fas fa-exclamation-triangle text-red-600"></i> ${AI_SCAN_STATUS_LABEL} 失敗，請稍後再試`;
-                writeRunStatus(failureStatus);
-                throw error;
+                if (smartSessionId) {
+                    if (isCurrentSmartRun()) setSmartHundoStatus(smartSessionId, failureStatus);
+                } else {
+                    writeRunStatus(failureStatus);
+                }
             } finally {
                 if (activeAiScanDiagnostics === diagnostics) activeAiScanDiagnostics = null;
-            }
-        };
-
-        let aiScanQueueController = null;
-        const scanQueueStatusMeta = {
-            queued: ['⏳', '等待'], processing: ['🤖', '掃描中'],
-            completed: ['✅', '完成'], failed: ['❌', '失敗'],
-            interrupted: ['⚠️', '先前掃描已中斷']
-        };
-        const renderAiScanQueue = jobs => {
-            const list = document.getElementById('aiScanQueueList');
-            const empty = document.getElementById('aiScanQueueEmpty');
-            if (!list || !empty) return;
-            list.replaceChildren();
-            empty.classList.toggle('hidden', jobs.length > 0);
-            const scanInProgress = jobs.some(item => item.status === 'processing');
-            jobs.forEach(job => {
-                const row = document.createElement('div');
-                row.className = 'rounded-lg border border-indigo-100 bg-white p-2 text-[10px] shadow-sm';
-                const top = document.createElement('div');
-                top.className = 'flex items-center justify-between gap-2';
-                const identity = document.createElement('div');
-                identity.className = 'min-w-0 font-bold text-gray-700 truncate';
-                identity.textContent = `${job.label || `#${job.id.slice(-6)}`} · ${new Date(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-                const state = document.createElement('span');
-                state.className = 'shrink-0 font-bold text-indigo-700';
-                const meta = scanQueueStatusMeta[job.status] || ['', job.status];
-                state.textContent = `${meta[0]} ${meta[1]}`;
-                top.append(identity, state);
-                const progress = document.createElement('p');
-                progress.className = 'mt-1 break-words text-gray-500';
-                progress.textContent = job.error?.message || job.progress || '';
-                const actions = document.createElement('div');
-                actions.className = 'flex gap-1 mt-1 justify-end';
-                const action = (label, className, handler) => {
-                    const button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = `${className} px-2 py-1 rounded font-bold`;
-                    button.textContent = label;
-                    button.addEventListener('click', handler);
-                    actions.appendChild(button);
-                };
-                if (['failed', 'interrupted'].includes(job.status)) action('重試', 'bg-amber-500 text-white', () => window.retryScanJob(job.id));
-                if (job.status === 'completed') {
-                    action(scanInProgress ? '掃描結束後載入' : '載入結果', scanInProgress ? 'bg-gray-200 text-gray-500' : 'bg-indigo-600 text-white', () => window.applyCompletedScanResult(job.id));
-                    actions.lastElementChild.disabled = scanInProgress;
+                if (
+                    isCurrentAutoScanRun(scanRunId)
+                    && (!smartSessionId || isCurrentSmartHundoSession(smartSessionId))
+                ) {
+                    const aiButton = document.getElementById(AI_ACTION_BUTTON_ID);
+                    if (aiButton) {
+                        aiButton.disabled = false;
+                        aiButton.innerHTML = AI_SCAN_BUTTON_LABEL;
+                    }
                 }
-                if (job.status !== 'processing') action('刪除', 'bg-gray-100 text-gray-600', () => window.deleteScanJob(job.id));
-                row.append(top, progress, actions);
-                list.appendChild(row);
-            });
+            }
         };
 
-        const applyQueuedScanResult = result => {
-            clearAiFieldReviews();
-            applyAiResultToForm(result.aiResult || {});
-            Object.entries(result.reviews || {}).forEach(([id, message]) => setAiFieldReview(id, message));
-            if (result.trainerTeam) {
-                const scanId = beginTrainerTeamScan();
-                markTrainerTeamAiValue(result.trainerTeam, scanId, trainerTeamManualRevision);
-                setTrainerTeamStatus(scanId, result.trainerTeamStatus || '已載入掃描隊伍');
-            }
-            if (result.smartHundo) {
-                const sessionId = beginSmartHundoScanSession();
-                const smart = result.smartHundo;
-                if (smart.count === null) {
-                    currentHundoScreenshotEvidence = null;
-                } else {
-                    currentHundoScreenshotEvidence = {
-                        sessionId, count: smart.count, conflicting: smart.conflicting
-                    };
-                }
-                if (smart.replaceList) markSmartHundoAiValue('g_hundos', smart.pokemonList, sessionId);
-                setSmartHundoStatus(sessionId, smart.status || '已載入百神掃描結果');
-                if (smart.diagnostics) publishSmartHundoDiagnostics(sessionId, smart.diagnostics);
-            }
-            window.updateHundoCount();
-            if (result.diagnostics) publishAiScanDiagnostics(result.diagnostics);
-            if (result.notices?.length) alert(result.notices.join('\n'));
-        };
-
-        const initializeAiScanQueue = async () => {
-            if (aiScanQueueController) return aiScanQueueController;
-            aiScanQueueController = new globalThis.AiScanQueue.ScanQueue({
-                runner: (job, onStatus) => executeAiScan({
-                    files: job.files,
-                    apiKey: document.getElementById('openaiApiKey').value.trim(),
-                    onStatus
-                }),
-                isOnline: () => navigator.onLine,
-                onChange: jobs => renderAiScanQueue(jobs)
-            });
-            await aiScanQueueController.initialize();
-            aiScanQueueController.process();
-            return aiScanQueueController;
-        };
-
-        window.autoScan = async function() {
-            // The queued runner reuses executeAiScan, whose Smart Hundo route remains smartHundoScan({.
-            const input = document.getElementById('imageInput');
-            const files = Array.from(input.files || []);
-            if (!document.getElementById('openaiApiKey').value.trim()) {
-                alert('請先在頂部貼上你的 OPENAI_API_KEY 並按儲存設定！');
-                return;
-            }
-            if (files.length === 0) return;
-            const button = document.getElementById(AI_ACTION_BUTTON_ID);
-            if (button) button.disabled = true;
-            try {
-                const queue = await initializeAiScanQueue();
-                await queue.enqueue(files, { label: document.getElementById('g_id')?.value.trim() });
-                input.value = '';
-                document.getElementById('imagePreviewContainer').replaceChildren();
-                toggleAiActionButtons(false);
-                const notice = document.getElementById('aiQueueNotice');
-                if (notice) notice.textContent = '✅ 掃描已加入佇列。你可以準備下一個帳號。';
-            } catch (error) {
-                alert(`無法儲存掃描工作：${error.message}`);
-            } finally {
-                if (button) button.disabled = false;
-            }
-        };
         window.analyzeMultipleImages = window.autoScan;
-        window.retryScanJob = id => aiScanQueueController?.retry(id);
-        window.deleteScanJob = async id => {
-            if (!confirm('確定要刪除此掃描工作與保存的截圖嗎？')) return;
-            await aiScanQueueController?.remove(id);
-        };
-        window.applyCompletedScanResult = id => {
-            if (aiScanQueueController?.jobs.some(item => item.status === 'processing')) return;
-            const job = aiScanQueueController?.jobs.find(item => item.id === id && item.status === 'completed');
-            if (!job) return;
-            applyQueuedScanResult(job.result);
-            const notice = document.getElementById('aiQueueNotice');
-            if (notice) notice.textContent = `✅ 已載入 ${job.label || `#${job.id.slice(-6)}`} 的掃描結果。`;
-        };
-
-        document.addEventListener('DOMContentLoaded', () => initializeAiScanQueue().catch(error => {
-            const safeQueueFailure = { name: String(error?.name || 'Error'), message: String(error?.message || '').slice(0, 240) };
-            console.warn('AI scan queue initialization failed', safeQueueFailure);
-            const notice = document.getElementById('aiQueueNotice');
-            if (notice) notice.textContent = `⚠️ 無法開啟持久掃描佇列：${error.message}`;
-        }));
-        const resumeAiScanQueue = async () => {
-            if (document.visibilityState === 'hidden') return;
-            const queue = await initializeAiScanQueue();
-            await queue.refresh();
-            queue.process();
-        };
-        document.addEventListener('visibilitychange', resumeAiScanQueue);
-        window.addEventListener('pageshow', resumeAiScanQueue);
-        window.addEventListener('focus', resumeAiScanQueue);
-        window.addEventListener('online', resumeAiScanQueue);
 
         window.togglePage = function(pageNumber) {
             const page1 = document.getElementById('mainPage1');
@@ -5203,16 +5098,6 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                                 <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；只有命中「傳說的寶可夢,幻,究極異獸&amp;4*」的圖片才會辨識百神清單，其餘圖片只讀對應欄位，最後統一回填。</p>
                             </div>
                         </div>
-
-                        <section id="aiScanQueue" class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-2" aria-labelledby="aiScanQueueTitle">
-                            <div class="flex items-center justify-between gap-2">
-                                <h3 id="aiScanQueueTitle" class="text-[11px] md:text-xs font-bold text-indigo-800">AI 掃描佇列</h3>
-                                <span class="text-[9px] text-gray-500">一次處理 1 個工作</span>
-                            </div>
-                            <p id="aiQueueNotice" class="mt-1 min-h-[1rem] text-[10px] font-bold text-green-700" aria-live="polite"></p>
-                            <p id="aiScanQueueEmpty" class="py-2 text-center text-[10px] text-gray-400">尚無掃描工作</p>
-                            <div id="aiScanQueueList" class="mt-1 space-y-1"></div>
-                        </section>
 
                         <div class="space-y-2 md:space-y-3">
                             <textarea id="g_rare_list" placeholder="稀有怪..." class="w-full p-1.5 border border-gray-200 rounded-lg text-[10px] md:text-xs h-12 md:h-16 bg-white outline-none focus:ring-2 focus:ring-gray-300"></textarea>
