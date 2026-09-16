@@ -35,6 +35,20 @@ for (const button of copyModalMarkup.match(/<button\b[\s\S]*?<\/button>/g) || []
 }
 assert.match(source, /window\.copyModalMessage/);
 assert.match(source, /【安全改綁流程】/);
+const handoverCopyButton = source.match(/<button\b[^>]*\bid=["']copyHandoverBtn["'][^>]*>[\s\S]*?<\/button>/);
+assert.ok(handoverCopyButton, 'quick-entry area must expose a handover-message copy button');
+assert.match(handoverCopyButton[0], /複製交接說明/);
+assert.match(handoverCopyButton[0], /onclick=["']window\.copyModalMessage\(this\)["']/);
+assert.equal(
+  (source.match(/⭐️寶可夢訓練家中央站登入⭐️/g) || []).length,
+  3,
+  'the quick-entry button must reuse the existing message rather than duplicate its text'
+);
+assert.match(
+  source,
+  /快速建檔區[\s\S]*?<div class=["'][^"']*\bflex-wrap\b[^"']*["'][^>]*>[\s\S]*?id=["']copyHandoverBtn["']/,
+  'quick-entry actions must wrap on narrow screens'
+);
 assert.doesNotMatch(source, /(?:copy|複製)[A-Za-z_$]*(?:combined|both|all)[A-Za-z_$]*(?:credential|account|password)/i);
 
 assert.match(source, /<script\s+src=["']simple-account-fulfillment-helpers\.js["']/);

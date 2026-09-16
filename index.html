@@ -5042,9 +5042,10 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
         <div id="mainPage1" class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
             <div class="flex justify-between items-center mb-6 border-b pb-4">
                 <h2 class="text-lg font-bold text-gray-800">快速建檔區</h2>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                     <button type="button" onclick="window.togglePage(3)" class="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-emerald-700 transition transform active:scale-95">⚡ 簡帳自動出貨</button>
                     <button type="button" onclick="window.togglePage(2)" class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95">📋 前往雲端清單</button>
+                    <button type="button" id="copyHandoverBtn" onclick="window.copyModalMessage(this)" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 px-4 py-2 rounded-xl font-bold shadow-md transition transform active:scale-95">📋 複製交接說明</button>
                     <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold transition">🧹 清除</button>
                     <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md transition">取消編輯</button>
                     <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
