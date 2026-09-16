@@ -461,6 +461,28 @@
             setTimeout(() => btn.innerHTML = old, 1500);
         };
 
+        window.copyStoreMessage = function(btn) {
+            const msg = `✅ 您的專屬賣場已開設完成！
+
+💰 此價格已包含 8591 平台收取的 6% 手續費，並非刻意哄抬價格，還請見諒與理解，謝謝您 🙏`;
+            const fallbackCopy = () => {
+                const area = document.getElementById('hiddenCopyArea');
+                area.style.display = 'block';
+                area.value = msg;
+                area.select();
+                document.execCommand('copy');
+                area.style.display = 'none';
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(msg).catch(fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+            const old = btn.innerHTML;
+            btn.innerHTML = '✅ 已複製';
+            setTimeout(() => btn.innerHTML = old, 1500);
+        };
+
         window.restoreAccount = async function(uid, accountId, btn) {
             if(!confirm(`確定要恢復為現貨嗎？`)) return;
             await update(ref(db, `inventory/${uid}`), { status: 'active', soldAt: null, deleteAt: null });
@@ -5046,6 +5068,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     <button type="button" onclick="window.togglePage(3)" class="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-emerald-700 transition transform active:scale-95">⚡ 簡帳自動出貨</button>
                     <button type="button" onclick="window.togglePage(2)" class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95">📋 前往雲端清單</button>
                     <button type="button" id="copyHandoverBtn" onclick="window.copyModalMessage(this)" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 px-4 py-2 rounded-xl font-bold shadow-md transition transform active:scale-95">📋 複製交接說明</button>
+                    <button type="button" id="copyStoreMessageBtn" onclick="window.copyStoreMessage(this)" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-bold shadow-md transition transform active:scale-95">💰 複製專屬賣場說明</button>
                     <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold transition">🧹 清除</button>
                     <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md transition">取消編輯</button>
                     <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>

@@ -39,6 +39,16 @@ const handoverCopyButton = source.match(/<button\b[^>]*\bid=["']copyHandoverBtn[
 assert.ok(handoverCopyButton, 'quick-entry area must expose a handover-message copy button');
 assert.match(handoverCopyButton[0], /複製交接說明/);
 assert.match(handoverCopyButton[0], /onclick=["']window\.copyModalMessage\(this\)["']/);
+const storeMessageCopyButton = source.match(/<button\b[^>]*\bid=["']copyStoreMessageBtn["'][^>]*>[\s\S]*?<\/button>/);
+assert.ok(storeMessageCopyButton, 'quick-entry area must expose a store-message copy button');
+assert.match(storeMessageCopyButton[0], /複製專屬賣場說明/);
+assert.match(storeMessageCopyButton[0], /onclick=["']window\.copyStoreMessage\(this\)["']/);
+assert.doesNotMatch(storeMessageCopyButton[0], /window\.copyModalMessage/);
+assert.doesNotMatch(handoverCopyButton[0], /window\.copyStoreMessage/);
+assert.match(source, /window\.copyStoreMessage\s*=\s*function\s*\(btn\)/);
+assert.match(source, /您的專屬賣場已開設完成/);
+assert.match(source, /8591 平台收取的 6% 手續費/);
+assert.match(source, /並非刻意哄抬價格/);
 assert.equal(
   (source.match(/⭐️寶可夢訓練家中央站登入⭐️/g) || []).length,
   3,
@@ -46,7 +56,7 @@ assert.equal(
 );
 assert.match(
   source,
-  /快速建檔區[\s\S]*?<div class=["'][^"']*\bflex-wrap\b[^"']*["'][^>]*>[\s\S]*?id=["']copyHandoverBtn["']/,
+  /快速建檔區[\s\S]*?<div class=["'][^"']*\bflex-wrap\b[^"']*["'][^>]*>[\s\S]*?id=["']copyHandoverBtn["'][\s\S]*?id=["']copyStoreMessageBtn["']/,
   'quick-entry actions must wrap on narrow screens'
 );
 assert.doesNotMatch(source, /(?:copy|複製)[A-Za-z_$]*(?:combined|both|all)[A-Za-z_$]*(?:credential|account|password)/i);
