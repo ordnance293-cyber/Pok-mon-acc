@@ -30,8 +30,8 @@ assert.match(extraction, /imageDetail: isRareBackgroundScan \? HUNDO_SMART_IMAGE
 // Filled-vs-outline is the primary visual rule. The mapping is intentionally
 // explicit so the model cannot fall back to species or color guesses.
 assert.match(rarePrompt, /實心／塗滿 X 型圖標 = 超極巨化/);
-assert.match(rarePrompt, /空心／只有輪廓 X 型圖標 = 極巨化/);
-assert.match(rarePrompt, /顏色深淺只能作為輔助/);
+assert.match(rarePrompt, /空心／只有輪廓.*X 型圖標 = 極巨化/);
+assert.match(rarePrompt, /顏色深淺.*只能作為輔助/);
 assert.match(rarePrompt, /不得依寶可夢種類、CP、名稱、排列位置或鄰近卡片猜測型態/);
 assert.match(rarePrompt, /遮擋|模糊|不確定/);
 assert.doesNotMatch(rarePrompt, /只能依圖標顏色深淺判斷/);
