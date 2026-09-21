@@ -5035,15 +5035,22 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 .map(line => line.trim())
                 .filter(Boolean);
 
-            if (!existing.includes(preset)) {
-                input.value = existing.length ? `${existing.join('\n')}\n${preset}` : preset;
-                input.dispatchEvent(new Event('input', { bubbles: true }));
+            const presetIndex = existing.indexOf(preset);
+            const isRemoving = presetIndex >= 0;
+
+            if (isRemoving) {
+                existing.splice(presetIndex, 1);
+            } else {
+                existing.push(preset);
             }
 
+            input.value = existing.join('\n');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
             input.focus();
+
             const oldT = btn?.innerHTML;
             if (btn) {
-                btn.innerHTML = '✅ 已加入';
+                btn.innerHTML = isRemoving ? '↩️ 已取消' : '✅ 已加入';
                 setTimeout(() => { btn.innerHTML = oldT; }, 900);
             }
         };
