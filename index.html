@@ -5063,18 +5063,17 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
 
         <div id="mainPage1" class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
             <div class="mb-5 border-b pb-4">
-                <div class="flex items-center justify-between gap-3 mb-3">
+                <div class="flex items-center gap-3 mb-3">
                     <h2 class="text-lg font-bold text-gray-800">快速建檔區</h2>
-                    <span class="text-[11px] font-bold tracking-wide text-gray-400">QUICK ACTIONS</span>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button type="button" onclick="window.togglePage(3)" aria-label="簡帳自動出貨" title="簡帳自動出貨" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-emerald-600 text-white h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-emerald-700 transition transform active:scale-95">⚡ 出貨</button>
-                    <button type="button" onclick="window.togglePage(2)" aria-label="前往雲端清單" title="前往雲端清單" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-indigo-600 text-white h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-indigo-700 transition transform active:scale-95">☁️ 清單</button>
-                    <button type="button" id="copyHandoverBtn" onclick="window.copyModalMessage(this)" aria-label="複製交接說明" title="複製交接說明" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-white border border-yellow-300 text-yellow-800 h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-yellow-50 transition transform active:scale-95">📋 交接</button>
-                    <button type="button" id="copyStoreMessageBtn" onclick="window.copyStoreMessage(this)" aria-label="複製專屬賣場說明" title="複製專屬賣場說明" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-white border border-amber-300 text-amber-800 h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-amber-50 transition transform active:scale-95">💰 賣場</button>
-                    <button type="button" onclick="window.resetForm()" aria-label="清除表單" title="清除表單" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-gray-100 text-gray-600 h-11 px-3 rounded-xl text-sm font-bold hover:bg-gray-200 transition">🧹 清空</button>
+                    <button type="button" onclick="window.togglePage(3)" aria-label="簡帳自動出貨" title="簡帳自動出貨" class="flex-1 basis-[45%] sm:basis-auto bg-emerald-600 text-white h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-emerald-700 transition transform active:scale-95">⚡ 出貨</button>
+                    <button type="button" onclick="window.togglePage(2)" aria-label="前往雲端清單" title="前往雲端清單" class="flex-1 basis-[45%] sm:basis-auto bg-white border border-indigo-200 text-indigo-700 h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-indigo-50 transition transform active:scale-95">☁️ 清單</button>
+                    <button type="button" id="copyHandoverBtn" onclick="window.copyModalMessage(this)" aria-label="複製交接說明" title="複製交接說明" class="flex-1 basis-[45%] sm:basis-auto bg-white border border-yellow-300 text-yellow-800 h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-yellow-50 transition transform active:scale-95">📋 交接</button>
+                    <button type="button" id="copyStoreMessageBtn" onclick="window.copyStoreMessage(this)" aria-label="複製專屬賣場說明" title="複製專屬賣場說明" class="flex-1 basis-[45%] sm:basis-auto bg-white border border-amber-300 text-amber-800 h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-amber-50 transition transform active:scale-95">💰 賣場</button>
+                    <button type="button" onclick="window.resetForm()" aria-label="清除表單" title="清除表單" class="flex-1 basis-[45%] sm:basis-auto bg-gray-100 text-gray-600 h-11 px-3 rounded-xl text-sm font-bold hover:bg-gray-200 transition">🧹 清空</button>
                     <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden w-full sm:w-auto bg-gray-500 text-white h-11 px-4 rounded-xl text-sm font-bold shadow-sm transition">取消編輯</button>
-                    <button type="button" id="submitBtn" onclick="saveAccountToInventory()" aria-label="同步至雲端列表" title="同步至雲端列表" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-red-600 text-white h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-red-700 transition transform active:scale-95">☁️ 建檔</button>
+                    <button type="button" id="submitBtn" onclick="saveAccountToInventory()" aria-label="同步至雲端列表" title="同步至雲端列表" class="flex-1 basis-[45%] sm:basis-auto bg-indigo-700 text-white h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-indigo-800 transition transform active:scale-95">☁️ 建檔</button>
                 </div>
             </div>
 
