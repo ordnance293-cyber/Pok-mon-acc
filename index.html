@@ -5062,41 +5062,47 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
     <main class="max-w-7xl mx-auto p-4 py-8">
 
         <div id="mainPage1" class="bg-white rounded-2xl shadow-sm border p-6 mb-8 relative">
-            <div class="flex justify-between items-center mb-6 border-b pb-4">
-                <h2 class="text-lg font-bold text-gray-800">快速建檔區</h2>
+            <div class="mb-5 border-b pb-4">
+                <div class="flex items-center justify-between gap-3 mb-3">
+                    <h2 class="text-lg font-bold text-gray-800">快速建檔區</h2>
+                    <span class="text-[11px] font-bold tracking-wide text-gray-400">QUICK ACTIONS</span>
+                </div>
                 <div class="flex flex-wrap gap-2">
-                    <button type="button" onclick="window.togglePage(3)" class="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-emerald-700 transition transform active:scale-95">⚡ 簡帳自動出貨</button>
-                    <button type="button" onclick="window.togglePage(2)" class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95">📋 前往雲端清單</button>
-                    <button type="button" id="copyHandoverBtn" onclick="window.copyModalMessage(this)" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 px-4 py-2 rounded-xl font-bold shadow-md transition transform active:scale-95">📋 複製交接說明</button>
-                    <button type="button" id="copyStoreMessageBtn" onclick="window.copyStoreMessage(this)" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-bold shadow-md transition transform active:scale-95">💰 複製專屬賣場說明</button>
-                    <button type="button" onclick="window.resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold transition">🧹 清除</button>
-                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden bg-gray-500 text-white px-4 py-2 rounded-xl font-bold shadow-md transition">取消編輯</button>
-                    <button type="button" id="submitBtn" onclick="saveAccountToInventory()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-red-700 transition transform active:scale-95">同步至雲端列表</button>
+                    <button type="button" onclick="window.togglePage(3)" aria-label="簡帳自動出貨" title="簡帳自動出貨" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-emerald-600 text-white h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-emerald-700 transition transform active:scale-95">⚡ 出貨</button>
+                    <button type="button" onclick="window.togglePage(2)" aria-label="前往雲端清單" title="前往雲端清單" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-indigo-600 text-white h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-indigo-700 transition transform active:scale-95">☁️ 清單</button>
+                    <button type="button" id="copyHandoverBtn" onclick="window.copyModalMessage(this)" aria-label="複製交接說明" title="複製交接說明" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-white border border-yellow-300 text-yellow-800 h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-yellow-50 transition transform active:scale-95">📋 交接</button>
+                    <button type="button" id="copyStoreMessageBtn" onclick="window.copyStoreMessage(this)" aria-label="複製專屬賣場說明" title="複製專屬賣場說明" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-white border border-amber-300 text-amber-800 h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-amber-50 transition transform active:scale-95">💰 賣場</button>
+                    <button type="button" onclick="window.resetForm()" aria-label="清除表單" title="清除表單" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-gray-100 text-gray-600 h-11 px-3 rounded-xl text-sm font-bold hover:bg-gray-200 transition">🧹 清空</button>
+                    <button type="button" id="cancelEditBtn" onclick="window.resetForm()" class="hidden w-full sm:w-auto bg-gray-500 text-white h-11 px-4 rounded-xl text-sm font-bold shadow-sm transition">取消編輯</button>
+                    <button type="button" id="submitBtn" onclick="saveAccountToInventory()" aria-label="同步至雲端列表" title="同步至雲端列表" class="w-[calc(50%-0.25rem)] sm:w-auto sm:flex-1 bg-red-600 text-white h-11 px-3 rounded-xl text-sm font-bold shadow-sm hover:bg-red-700 transition transform active:scale-95">☁️ 建檔</button>
                 </div>
             </div>
 
             <form id="pokeInputForm" class="space-y-5">
 
-                <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100 shadow-sm">
-                    <label class="text-sm font-bold text-blue-800 border-b border-blue-200 block pb-2 mb-3">
-                        <i class="fas fa-id-card"></i> 帳號代碼
-                    </label>
-                    <input type="text" id="g_id" placeholder="例如：AB1234" class="w-full p-3 border border-blue-200 rounded-lg font-bold text-base outline-none focus:ring-2 focus:ring-blue-400 shadow-inner" oninput="this.value = this.value.replace(/\s+/g, ';')">
+                <div class="bg-blue-50/50 p-3 md:p-4 rounded-xl border border-blue-100 shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <label for="g_id" class="shrink-0 text-sm font-bold text-blue-800">
+                            <i class="fas fa-id-card mr-1"></i> 帳號
+                        </label>
+                        <input type="text" id="g_id" placeholder="AB1234" class="min-w-0 flex-1 p-3 border border-blue-200 rounded-lg font-bold text-base outline-none focus:ring-2 focus:ring-blue-400 bg-white" oninput="this.value = this.value.replace(/\s+/g, ';')">
+                    </div>
                 </div>
 
-                <div class="flex flex-wrap gap-2 items-center text-[11px] bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-sm">
-                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">神獸總數</button>
-                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">完美神獸</button>
-                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">色違神獸</button>
-                    <button type="button" onclick="window.copySimpleText('年16-20', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">年16-20</button>
-                    <button type="button" onclick="window.copySimpleText('年16-20&傳說的寶可夢,幻,究極異獸', this)" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded shadow-sm font-bold transition-all active:scale-95">16-20神獸</button>
+                <div class="flex flex-wrap gap-2 items-center bg-gray-50 p-2.5 rounded-xl border border-gray-200">
+                    <span class="text-[10px] font-bold text-gray-400 mr-1">搜尋</span>
+                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" title="神獸總數" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">神獸</button>
+                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" title="完美神獸" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">百神</button>
+                    <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" title="色違神獸" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">色神</button>
+                    <button type="button" onclick="window.copySimpleText('年16-20', this)" title="年16-20" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">16–20</button>
+                    <button type="button" onclick="window.copySimpleText('年16-20&傳說的寶可夢,幻,究極異獸', this)" title="16-20神獸" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">16–20神</button>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2 md:gap-4">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
 
                     <div class="flex flex-col gap-3 bg-green-50/30 p-3 md:p-4 rounded-xl border border-green-100 shadow-sm h-full">
-                        <label class="text-xs md:text-sm font-bold text-green-800 border-b border-green-200 block pb-1 md:pb-2 truncate"><i class="fas fa-box-open text-green-600"></i> 資源數據</label>
-                        <div class="grid grid-cols-1 lg:grid-cols-4 gap-1 md:gap-3 text-[10px] md:text-[11px]">
+                        <label class="text-xs md:text-sm font-bold text-green-800 border-b border-green-200 block pb-1 md:pb-2"><i class="fas fa-box-open text-green-600"></i> 資源</label>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3 text-[10px] md:text-[11px]">
                             <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">16-20怪</label><input type="number" id="st_old_poke" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
                             <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">16-20神</label><input type="number" id="st_old_leg" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
                             <div><label class="block text-gray-600 mb-0.5 md:mb-1 font-bold">大師球</label><input type="number" id="st_masterball" class="w-full p-1 md:p-2 border rounded-md outline-none"></div>
@@ -5109,7 +5115,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     </div>
 
                     <div class="flex flex-col gap-3 bg-gray-50/80 p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm h-full">
-                        <label class="text-xs md:text-sm font-bold text-gray-700 border-b block pb-1 md:pb-2 truncate"><i class="fas fa-robot text-gray-500"></i> AI 解析清單</label>
+                        <label class="text-xs md:text-sm font-bold text-gray-700 border-b block pb-1 md:pb-2"><i class="fas fa-robot text-gray-500"></i> AI 解析</label>
 
                         <div class="bg-white p-2 md:p-3 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center relative">
                             <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="previewImages(event)">
@@ -5144,7 +5150,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2 md:gap-4">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
 
                     <div class="bg-red-50/30 p-3 md:p-4 rounded-xl border border-red-100 space-y-3 shadow-sm">
                         <label class="text-xs md:text-sm font-bold text-red-800 border-b border-red-200 block pb-1 truncate"><i class="fas fa-fire"></i> 特殊調查</label>
