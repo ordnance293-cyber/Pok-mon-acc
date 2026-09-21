@@ -6,8 +6,9 @@ const {
     isRareBackgroundSearchQuery,
     normalizeRareBackgroundList,
     mergeRareBackgroundLists,
-    insertRarePresetAtCaret
-} = require('./rare-bg-scan-helpers.js');
+    insertRarePresetAtCaret,
+    removeRarePresetLine
+} = require('../rare-bg-scan-helpers.js');
 
 assert.equal(RARE_BACKGROUND_SEARCH_FILTER, '極巨化,超極巨化&背卡');
 assert.equal(isRareBackgroundSearchQuery('極巨化,超極巨化&背卡'), true);
@@ -62,6 +63,26 @@ assert.deepEqual(
         value: '稀有無極汰那\n第二行',
         selectionStart: 6,
         selectionEnd: 6
+    }
+);
+
+assert.deepEqual(
+    removeRarePresetLine('稀有無極汰那\n第二行', '稀有無極汰那', 9),
+    {
+        value: '第二行',
+        selectionStart: 2,
+        selectionEnd: 2,
+        removed: true
+    }
+);
+
+assert.deepEqual(
+    removeRarePresetLine('第一行\n稀有無極汰那', '稀有無極汰那', 4),
+    {
+        value: '第一行',
+        selectionStart: 3,
+        selectionEnd: 3,
+        removed: true
     }
 );
 
