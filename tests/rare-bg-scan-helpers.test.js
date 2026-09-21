@@ -5,7 +5,9 @@ const {
     RARE_BACKGROUND_SEARCH_FILTER,
     isRareBackgroundSearchQuery,
     normalizeRareBackgroundList,
-    mergeRareBackgroundLists
+    mergeRareBackgroundLists,
+    insertRarePresetAtCaret,
+    removeRarePresetLine
 } = require('../rare-bg-scan-helpers.js');
 
 assert.equal(RARE_BACKGROUND_SEARCH_FILTER, '極巨化,超極巨化&背卡');
@@ -35,6 +37,53 @@ assert.equal(
         '稀有紫黑背卡:超極巨化妙蛙花,極巨化水箭龜*2'
     ]),
     '稀有紫黑背卡:超極巨化妙蛙花*3,極巨化噴火龍,極巨化水箭龜*2'
+);
+
+assert.deepEqual(
+    insertRarePresetAtCaret('稀有紫黑背卡:超極巨化妙蛙花*3', '稀有無極汰那', 0, 0),
+    {
+        value: '稀有無極汰那\n稀有紫黑背卡:超極巨化妙蛙花*3',
+        selectionStart: 6,
+        selectionEnd: 6
+    }
+);
+
+assert.deepEqual(
+    insertRarePresetAtCaret('第一行\n第二行', '稀有無極汰那', 4, 4),
+    {
+        value: '第一行\n稀有無極汰那\n第二行',
+        selectionStart: 10,
+        selectionEnd: 10
+    }
+);
+
+assert.deepEqual(
+    insertRarePresetAtCaret('第一行\n第二行', '稀有無極汰那', 0, 3),
+    {
+        value: '稀有無極汰那\n第二行',
+        selectionStart: 6,
+        selectionEnd: 6
+    }
+);
+
+assert.deepEqual(
+    removeRarePresetLine('稀有無極汰那\n第二行', '稀有無極汰那', 9),
+    {
+        value: '第二行',
+        selectionStart: 2,
+        selectionEnd: 2,
+        removed: true
+    }
+);
+
+assert.deepEqual(
+    removeRarePresetLine('第一行\n稀有無極汰那', '稀有無極汰那', 4),
+    {
+        value: '第一行',
+        selectionStart: 3,
+        selectionEnd: 3,
+        removed: true
+    }
 );
 
 console.log('PASS rare background scan helper tests');
