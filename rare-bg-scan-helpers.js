@@ -90,13 +90,72 @@
         return { value: nextValue, selectionStart: caret, selectionEnd: caret };
     };
 
+    const removeRarePresetLine = (value, preset, selectionStart) => {
+        const source = String(value ?? '');
+        const target = String(preset ?? '').trim();
+        const clampPosition = position => Math.max(
+            0,
+            Math.min(source.length, Number.isFinite(Number(position)) ? Math.trunc(Number(position)) : source.length)
+        );
+        const point = clampPosition(selectionStart);
+        if (!target) {
+            return { value: source, selectionStart: point, selectionEnd: point, removed: false };
+        }
+
+        const lines = source.split(/\r?\n/);
+        let offset = 0;
+        let removeStart = -1;
+        let removeEnd = -1;
+        for (let index = 0; index < lines.length; index += 1) {
+            const line = lines[index];
+            const lineStart = offset;
+            const lineEnd = lineStart + line.length;
+            const hasFollowingBreak = index < lines.length - 1;
+            const separatorLength = hasFollowingBreak
+                ? (source.slice(lineEnd, lineEnd + 2) === '\r\n' ? 2 : 1)
+                : 0;
+            if (line.trim() === target) {
+                if (hasFollowingBreak) {
+                    removeStart = lineStart;
+                    removeEnd = lineEnd + separatorLength;
+                } else if (lineStart > 0) {
+                    const newlineIndex = source.lastIndexOf('\n', lineStart - 1);
+                    const previousBreakStart = newlineIndex > 0 && source[newlineIndex - 1] === '\r'
+                        ? newlineIndex - 1
+                        : newlineIndex;
+                    removeStart = previousBreakStart;
+                    removeEnd = lineEnd;
+                } else {
+                    removeStart = lineStart;
+                    removeEnd = lineEnd;
+                }
+                break;
+            }
+            offset = lineEnd + separatorLength;
+        }
+
+        if (removeStart < 0) {
+            return { value: source, selectionStart: point, selectionEnd: point, removed: false };
+        }
+
+        const nextValue = source.slice(0, removeStart) + source.slice(removeEnd);
+        const nextCaret = point <= removeStart
+            ? point
+            : point >= removeEnd
+                ? point - (removeEnd - removeStart)
+                : removeStart;
+        const caret = Math.min(nextCaret, nextValue.length);
+        return { value: nextValue, selectionStart: caret, selectionEnd: caret, removed: true };
+    };
+
     const api = {
         RARE_BACKGROUND_SEARCH_FILTER,
         RARE_BACKGROUND_PREFIX,
         isRareBackgroundSearchQuery,
         normalizeRareBackgroundList,
         mergeRareBackgroundLists,
-        insertRarePresetAtCaret
+        insertRarePresetAtCaret,
+        removeRarePresetLine
     };
 
     if (globalScope) globalScope.RareBackgroundScanHelpers = api;
