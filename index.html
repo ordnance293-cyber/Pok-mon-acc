@@ -9,6 +9,7 @@
     
     <script src="smart-hundo-visual-rules.js"></script>
     <script src="smart-hundo-helpers.js"></script>
+    <script src="rare-bg-scan-helpers.js"></script>
     <script src="hundo-list-count.js"></script>
     <script src="smart-hundo-form-verifier.js"></script>
     <script src="trainer-team-helpers.js"></script>
@@ -1189,6 +1190,7 @@
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
+        const RARE_BACKGROUND_SEARCH_FILTER = globalThis.RareBackgroundScanHelpers?.RARE_BACKGROUND_SEARCH_FILTER || '極巨化,超極巨化&背卡';
         const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
         const OLD_POKEMON_FILTER = '年16-20';
         const OLD_LEGENDARY_FILTER = `${OLD_POKEMON_FILTER}&${LEGENDARY_FILTER}`;
@@ -1216,12 +1218,14 @@
             'BG_SPECIAL_CATEGORY_SCREEN',
             'DYNA_CATEGORY_SCREEN',
             'GIGA_CATEGORY_SCREEN',
+            'RARE_BACKGROUND_SCREEN',
             'TRAINER_PROFILE_SCREEN',
             'POKEMON_DETAIL_SCREEN',
             'RESOURCE_SCREEN',
             'OTHER'
         ]);
         const AI_SEARCH_QUERY_IMAGE_TYPES = [
+            { query: RARE_BACKGROUND_SEARCH_FILTER, imageType: 'RARE_BACKGROUND_SCREEN' },
             { query: HUNDO_LEGENDARY_FILTER, imageType: 'HUNDO_LEGENDARY_SCREEN' },
             { query: SHINY_LEGENDARY_FILTER, imageType: 'SHINY_LEGENDARY_SCREEN' },
             { query: OLD_LEGENDARY_FILTER, imageType: 'OLD_LEGENDARY_SCREEN' },
@@ -1236,7 +1240,7 @@
             'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume', 'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
             'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag', 'level'
         ];
-        const AI_TEXT_RESULT_FIELDS = [];
+        const AI_TEXT_RESULT_FIELDS = ['rare_list'];
         const AI_WAN_RESULT_FIELDS = ['xp', 'stardust'];
         const AI_IMAGE_RESULT_FIELDS = [...AI_NUMERIC_RESULT_FIELDS, ...AI_TEXT_RESULT_FIELDS, ...AI_WAN_RESULT_FIELDS];
         const AI_MERGED_RESULT_FIELDS = [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'];
@@ -1253,6 +1257,7 @@
             BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
+            RARE_BACKGROUND_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
@@ -1271,6 +1276,7 @@
             BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
+            RARE_BACKGROUND_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
@@ -1289,6 +1295,7 @@
             BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
+            RARE_BACKGROUND_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag']
@@ -1303,6 +1310,7 @@
             bg_special: { CATEGORY_OVERVIEW_SCREEN: 1, BG_SPECIAL_CATEGORY_SCREEN: 2 },
             dyna: { CATEGORY_OVERVIEW_SCREEN: 1, DYNA_CATEGORY_SCREEN: 2 },
             giga: { CATEGORY_OVERVIEW_SCREEN: 1, GIGA_CATEGORY_SCREEN: 2 },
+            rare_list: { RARE_BACKGROUND_SCREEN: 1 },
             perfect: { CATEGORY_OVERVIEW_SCREEN: 1 },
             old_poke: { OLD_POKEMON_SCREEN: 1 },
             old_leg: { OLD_LEGENDARY_SCREEN: 1 },
@@ -1326,6 +1334,7 @@
             bg_special: '特別卡',
             dyna: '極巨化',
             giga: '超極巨',
+            rare_list: '稀有紫黑背卡',
             perfect: '完美數',
             old_poke: '16-20怪',
             old_leg: '16-20神',
@@ -1374,6 +1383,7 @@
                             'BG_SPECIAL_CATEGORY_SCREEN',
                             'DYNA_CATEGORY_SCREEN',
                             'GIGA_CATEGORY_SCREEN',
+                    'RARE_BACKGROUND_SCREEN',            'RARE_BACKGROUND_SCREEN',
                             'TRAINER_PROFILE_SCREEN',
                             'POKEMON_DETAIL_SCREEN',
                             'RESOURCE_SCREEN',
@@ -1414,14 +1424,15 @@
                     level: { type: 'string' },
                     xp: { type: 'string' },
                     stardust: { type: 'string' },
-                    pokemon_list: { type: 'string' }
+                    pokemon_list: { type: 'string' },
+                    rare_list: { type: 'string' }
                 },
                 required: [
                     'header_type',
                     'legendary', 'hundo_leg', 'shiny', 'shiny_leg', 'costume',
                     'bg_comm', 'bg_special', 'dyna', 'giga', 'perfect',
                     'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin',
-                    'poke_bag', 'item_bag', 'level', 'xp', 'stardust', 'pokemon_list'
+                    'poke_bag', 'item_bag', 'level', 'xp', 'stardust', 'pokemon_list', 'rare_list'
                 ]
             }
         };
@@ -1754,6 +1765,7 @@
             costume: 'st_costume',
             bg_comm: 'st_bg_comm',
             bg_special: 'st_bg_special',
+            rare_list: 'g_rare_list',
             dyna: 'st_dyna',
             giga: 'st_giga',
             perfect: 'st_perfect'
@@ -2015,7 +2027,8 @@
             level: '',
             xp: '',
             stardust: '',
-            pokemon_list: ''
+            pokemon_list: '',
+            rare_list: ''
         });
 
         const inferImageTypeFromSearchQuery = (searchQuery) => {
@@ -2053,7 +2066,8 @@
             level: '',
             xp: '',
             stardust: '',
-            pokemon_list: ''
+            pokemon_list: '',
+            rare_list: ''
         });
 
         const normalizeAiClassification = (result = {}) => {
@@ -2129,6 +2143,9 @@
             normalized.xp = normalizeWanValue(extractSlashSideNumber(result?.xp, 'left'));
             normalized.stardust = normalizeWanValue(result?.stardust);
             normalized.pokemon_list = normalizePokemonList(result?.pokemon_list);
+            normalized.rare_list = normalized.image_type === 'RARE_BACKGROUND_SCREEN'
+                ? (globalThis.RareBackgroundScanHelpers?.normalizeRareBackgroundList(result?.rare_list) || '')
+                : '';
 
             const allowedFieldSet = new Set(Array.isArray(allowedFields) ? allowedFields : (AI_IMAGE_TYPE_ALLOWED_FIELDS[normalized.image_type] || []));
             [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'].forEach(field => {
@@ -2330,6 +2347,7 @@ image_type 只能是：
 - BG_SPECIAL_CATEGORY_SCREEN
 - DYNA_CATEGORY_SCREEN
 - GIGA_CATEGORY_SCREEN
+- RARE_BACKGROUND_SCREEN
 - TRAINER_PROFILE_SCREEN
 - POKEMON_DETAIL_SCREEN
 - RESOURCE_SCREEN
@@ -2337,73 +2355,78 @@ image_type 只能是：
 
 【分類規則】
 先檢查搜尋欄。只有搜尋欄「完全符合」以下字串，才可判成對應搜尋頁：
-1. 若搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」
+1. 若搜尋欄完全符合「${RARE_BACKGROUND_SEARCH_FILTER}」
+   - image_type = RARE_BACKGROUND_SCREEN
+   - search_query = "${RARE_BACKGROUND_SEARCH_FILTER}"
+
+   這是極巨化／超極巨化加背卡的寶可夢清單頁，必須保留所有可見寶可夢名稱，並根據右上方圖標區分極巨化與超極巨化；不要把這張圖當成一般分類統計頁。
+2. 若搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」
    - image_type = HUNDO_LEGENDARY_SCREEN
    - search_query = "${HUNDO_LEGENDARY_FILTER}"
 
-2. 若搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」
+3. 若搜尋欄完全符合「${SHINY_LEGENDARY_FILTER}」
    - image_type = SHINY_LEGENDARY_SCREEN
    - search_query = "${SHINY_LEGENDARY_FILTER}"
 
-3. 若搜尋欄完全符合「${OLD_LEGENDARY_FILTER}」
+4. 若搜尋欄完全符合「${OLD_LEGENDARY_FILTER}」
    - image_type = OLD_LEGENDARY_SCREEN
    - search_query = "${OLD_LEGENDARY_FILTER}"
 
-4. 若搜尋欄完全符合「${OLD_POKEMON_FILTER}」
+5. 若搜尋欄完全符合「${OLD_POKEMON_FILTER}」
    - image_type = OLD_POKEMON_SCREEN
    - search_query = "${OLD_POKEMON_FILTER}"
 
-5. 若搜尋欄完全符合「${LEGENDARY_FILTER}」
+6. 若搜尋欄完全符合「${LEGENDARY_FILTER}」
    - image_type = LEGENDARY_TOTAL_SCREEN
    - search_query = "${LEGENDARY_FILTER}"
 
 若不是上述搜尋頁，則判斷頁面用途：
-6. 若是個人檔案頁，且可看到左下角超大等級數字、下方有「等級」、以及訓練家背景／經驗條
+7. 若是個人檔案頁，且可看到左下角超大等級數字、下方有「等級」、以及訓練家背景／經驗條
    - image_type = TRAINER_PROFILE_SCREEN
    - search_query = ""
 
-7. 若是寶可夢資訊頁，且可看到「星星沙子」數字
+8. 若是寶可夢資訊頁，且可看到「星星沙子」數字
    - image_type = POKEMON_DETAIL_SCREEN
    - search_query = ""
 
-8. 若是資源頁／背包頁，並可看到寶可幣、寶可夢包、道具背包、神奇糖果、大師球或綠票
+9. 若是資源頁／背包頁，並可看到寶可幣、寶可夢包、道具背包、神奇糖果、大師球或綠票
    - image_type = RESOURCE_SCREEN
    - search_query = ""
 
-9. 若是分類總覽頁，而且同一張圖同時看得到多個分類統計（例如異色、活動、紀念背卡、特別背卡、極巨化、超極巨化、完美中的多個）
+10. 若是分類總覽頁，而且同一張圖同時看得到多個分類統計（例如異色、活動、紀念背卡、特別背卡、極巨化、超極巨化、完美中的多個）
    - image_type = CATEGORY_OVERVIEW_SCREEN
    - search_query = ""
 
-10. 若是異色分類頁，只對應色違總
+11. 若是異色分類頁，只對應色違總
    - image_type = SHINY_CATEGORY_SCREEN
    - search_query = ""
 
-11. 若是活動分類頁，只對應活動總
+12. 若是活動分類頁，只對應活動總
    - image_type = COSTUME_CATEGORY_SCREEN
    - search_query = ""
 
-12. 若是紀念背卡分類頁，只對應紀念卡
+13. 若是紀念背卡分類頁，只對應紀念卡
    - image_type = BG_COMM_CATEGORY_SCREEN
    - search_query = ""
 
-13. 若是特別背卡分類頁，只對應特別卡
+14. 若是特別背卡分類頁，只對應特別卡
    - image_type = BG_SPECIAL_CATEGORY_SCREEN
    - search_query = ""
 
-14. 若是極巨化分類頁，只對應極巨化
+15. 若是極巨化分類頁，只對應極巨化
    - image_type = DYNA_CATEGORY_SCREEN
    - search_query = ""
 
-15. 若是超極巨化分類頁，只對應超極巨化
+16. 若是超極巨化分類頁，只對應超極巨化
    - image_type = GIGA_CATEGORY_SCREEN
    - search_query = ""
 
-16. 其他任何圖片
+17. 其他任何圖片
    - image_type = OTHER
    - 若看得到搜尋欄文字，就把實際搜尋字串填入 search_query；若看不到則填 ""
 
 【重要】
-1. 只有搜尋欄「完全符合」上述 5 種查詢時，才可判成對應搜尋頁。
+1. 只有搜尋欄「完全符合」上述 6 種查詢時，才可判成對應搜尋頁。
 2. 例如「年16-20&異色」「年16-20&4*」「${LEGENDARY_FILTER}&異色&4*」「異色」都不是允許的搜尋頁，必須判成 OTHER。
 3. CATEGORY_OVERVIEW_SCREEN 優先於單一分類頁；若同時看得到多個分類統計，必須判成 CATEGORY_OVERVIEW_SCREEN。
 4. 只有 HUNDO_LEGENDARY_SCREEN 且搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」之後，才可能啟用百神清單辨識；其他任何類型都不能當作百神清單圖。
@@ -2435,7 +2458,8 @@ image_type 只能是：
   "level": "",
   "xp": "",
   "stardust": "",
-  "pokemon_list": ""
+  "pokemon_list": "",
+  "rare_list": ""
 }`;
             const retryRules = retry_fields.length
                 ? `
@@ -2585,6 +2609,22 @@ ${outputTemplate}
 3. 禁止從個人檔案頁、分類頁、搜尋頁或資源頁推測 stardust。
 
 除了 stardust 之外，其餘欄位都必須留空字串。`;
+                case 'RARE_BACKGROUND_SCREEN':
+                    return `${baseRules}
+
+這是一張「極巨化,超極巨化&背卡」搜尋結果頁。只處理稀有紫黑背卡清單，所有其他欄位都必須留空字串。
+
+【辨識規則】
+1. 由上到下、每列由左到右，讀取每一張目前可見的寶可夢卡片；同一物種出現多次要合併數量。
+2. 右上方淡粉色／淺粉紫色的 X 型圖標 = 極巨化，輸出「極巨化」前綴。
+3. 右上方深紫色／深粉紫色的 X 型圖標 = 超極巨化，輸出「超極巨化」前綴。
+4. 只能依圖標顏色深淺判斷，不能依寶可夢物種猜測型態；看不清楚圖標或名稱時不要猜。
+5. rare_list 必須使用以下格式，使用半形逗號分隔：
+   稀有紫黑背卡:超極巨化千面避役,超極巨化巨鉗蟹,超極巨化妙蛙花*3,超極巨化顫弦蠑螈
+6. 同一個「型態＋寶可夢」重複出現時合併為 *數量；數量為 1 時不要寫 *1。
+7. 若沒有任何能清楚辨識的卡片，rare_list 留空字串。
+
+除了 rare_list 之外，其餘欄位（包含 pokemon_list）都必須留空字串。`;
                 case 'RESOURCE_SCREEN':
                     return `${baseRules}
 
