@@ -36,17 +36,18 @@
         return { type: typeMatch[1], name, count };
     };
 
-    const normalizeRareBackgroundList = value => {
+    const parseEntries = value => {
         const raw = stripCodeFence(value)
             .replace(/^稀有紫黑背卡\s*[:：]\s*/u, '');
-        if (!raw) return '';
-
-        const entries = raw
+        if (!raw) return [];
+        return raw
             .split(/[,，、\n]+/)
             .map(parseEntry)
             .filter(Boolean);
-        if (entries.length === 0) return '';
+    };
 
+    const formatEntries = entries => {
+        if (!entries.length) return '';
         const grouped = new Map();
         entries.forEach(entry => {
             const key = entry.type + '|' + entry.name;
@@ -61,11 +62,18 @@
         return formatted ? RARE_BACKGROUND_PREFIX + formatted : '';
     };
 
+    const normalizeRareBackgroundList = value => formatEntries(parseEntries(value));
+
+    const mergeRareBackgroundLists = values => formatEntries(
+        (Array.isArray(values) ? values : [values]).flatMap(parseEntries)
+    );
+
     const api = {
         RARE_BACKGROUND_SEARCH_FILTER,
         RARE_BACKGROUND_PREFIX,
         isRareBackgroundSearchQuery,
-        normalizeRareBackgroundList
+        normalizeRareBackgroundList,
+        mergeRareBackgroundLists
     };
 
     if (globalScope) globalScope.RareBackgroundScanHelpers = api;
