@@ -5099,23 +5099,57 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             const preset = String(text || '').trim();
             if (!preset) return;
 
+            const selectionStart = Number.isInteger(input.selectionStart)
+                ? input.selectionStart
+                : input.value.length;
+            const selectionEnd = Number.isInteger(input.selectionEnd)
+                ? input.selectionEnd
+                : selectionStart;
             const existing = input.value
                 .split(/\r?\n/)
                 .map(line => line.trim())
                 .filter(Boolean);
-
             const presetIndex = existing.indexOf(preset);
             const isRemoving = presetIndex >= 0;
 
+            let nextValue = input.value;
+            let nextCaret = selectionStart;
             if (isRemoving) {
                 existing.splice(presetIndex, 1);
+                nextValue = existing.join('\n');
+                nextCaret = Math.min(selectionStart, nextValue.length);
             } else {
-                existing.push(preset);
+                const helpers = window.RareBackgroundScanHelpers;
+                if (helpers && typeof helpers.insertRarePresetAtCaret === 'function') {
+                    const result = helpers.insertRarePresetAtCaret(
+                        input.value,
+                        preset,
+                        selectionStart,
+                        selectionEnd
+                    );
+                    nextValue = result.value;
+                    nextCaret = result.selectionStart;
+                } else {
+                    const before = input.value.slice(0, selectionStart);
+                    const after = input.value.slice(selectionEnd);
+                    const beforeSeparator = before && !/(?:\r\n|\n)$/.test(before) ? '\n' : '';
+                    const afterSeparator = after && !/^(?:\r\n|\n)/.test(after) ? '\n' : '';
+                    nextValue = before + beforeSeparator + preset + afterSeparator + after;
+                    nextCaret = selectionStart + beforeSeparator.length + preset.length;
+                }
             }
 
-            input.value = existing.join('\n');
+            input.value = nextValue;
             input.dispatchEvent(new Event('input', { bubbles: true }));
-            input.focus();
+            try {
+                input.focus({ preventScroll: true });
+            } catch (error) {
+                input.focus();
+            }
+            if (typeof input.setSelectionRange === 'function') {
+                const caret = Math.max(0, Math.min(input.value.length, nextCaret));
+                input.setSelectionRange(caret, caret);
+            }
 
             const oldT = btn?.innerHTML;
             if (btn) {
