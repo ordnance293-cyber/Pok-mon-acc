@@ -2234,6 +2234,7 @@
 
             results.forEach(result => {
                 Object.keys(AI_FIELD_SOURCE_PRIORITY).forEach(field => {
+                    if (field === 'rare_list') return;
                     assignPreferred(field, result[field], result.image_type);
                 });
                 if (result.image_type === 'HUNDO_LEGENDARY_SCREEN') {
@@ -2245,11 +2246,25 @@
                 }
             });
 
+            const rareLists = results
+                .filter(result => result.image_type === 'RARE_BACKGROUND_SCREEN')
+                .map(result => result.rare_list)
+                .filter(value => String(value || '').trim() !== '');
+            if (rareLists.length) {
+                merged.rare_list = globalThis.RareBackgroundScanHelpers?.mergeRareBackgroundLists(rareLists)
+                    || rareLists[0];
+            }
+
             return merged;
         };
 
         const isPopulatedAiValue = (value) => String(value || '').trim() !== '';
-        const getRequiredValidationFields = () => [...AI_REQUIRED_VALIDATION_FIELDS];
+        const getRequiredValidationFields = (classifications = []) => [
+            ...AI_REQUIRED_VALIDATION_FIELDS,
+            ...(classifications.some(classification => classification.image_type === 'RARE_BACKGROUND_SCREEN')
+                ? ['rare_list']
+                : [])
+        ];
         const getCandidateImageIndexesForField = (field, classifications = [], taskResults = []) => {
             const candidateTypes = new Set(AI_FIELD_TO_IMAGE_TYPES[field] || []);
             const resultsByIndex = new Map(taskResults.map(task => [task.imageIndex, task.imageResult]));
