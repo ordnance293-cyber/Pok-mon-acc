@@ -7,6 +7,7 @@
   <script src="../smart-hundo-visual-rules.js"></script>
   <script src="../smart-hundo-helpers.js"></script>
   <script src="../smart-hundo-form-verifier.js"></script>
+  <script src="../rare-bg-scan-helpers.js"></script>
 </head>
 <body data-test-status="running">
   <pre id="results"></pre>
@@ -3172,6 +3173,7 @@
             normalizeAiClassification,
             normalizeAiExtraction,
             mergeAiResults,
+            evaluateRequiredFieldCoverage: typeof evaluateRequiredFieldCoverage === 'undefined' ? undefined : evaluateRequiredFieldCoverage,
             getRetryableMissingFields,
             beginSmartHundoScanSession,
             markSmartHundoAiValue,
@@ -4304,6 +4306,28 @@
           equal(getRetryableMissingFields({ header_type: 'none', poke_bag: '', item_bag: '' }, ['poke_bag', 'item_bag']).length, 0);
         });
 
+        test('retries every empty rare-background page even when another page has results', () => {
+          const classifications = [
+            { image_type: 'RARE_BACKGROUND_SCREEN', search_query: '極巨化,超極巨化&背卡' },
+            { image_type: 'RARE_BACKGROUND_SCREEN', search_query: '極巨化,超極巨化&背卡' }
+          ];
+          const first = normalizeAiExtraction(ordinaryModelResult({
+            rare_list: '稀有紫黑背卡:超極巨化妙蛙花'
+          }), classifications[0]);
+          const second = normalizeAiExtraction(ordinaryModelResult(), classifications[1]);
+          const coverage = evaluateRequiredFieldCoverage(
+            mergeAiResults([first, second]),
+            classifications,
+            [
+              { imageIndex: 0, imageResult: first },
+              { imageIndex: 1, imageResult: second }
+            ]
+          );
+          deepEqual(coverage.missingWithScreens, [
+            { field: 'rare_list', candidateIndexes: [1] }
+          ]);
+        });
+
         test('clears only unchanged AI-owned hundo values when a new session begins', () => {
           document.getElementById('g_hundos').value = '';
           document.getElementById('st_hundo_leg').value = '';
@@ -4567,7 +4591,7 @@
           legendary: '', hundo_leg: '', shiny: '', shiny_leg: '', costume: '',
           bg_comm: '', bg_special: '', dyna: '', giga: '', perfect: '',
           old_poke: '', old_leg: '', masterball: '', greenpass: '', rarecandy: '', coin: '',
-          poke_bag: '', item_bag: '', level: '', xp: '', stardust: '', pokemon_list: '',
+          poke_bag: '', item_bag: '', level: '', xp: '', stardust: '', pokemon_list: '', rare_list: '',
           ...overrides
         });
         const extractionForPrompt = (prompt) => {
