@@ -68,12 +68,35 @@
         (Array.isArray(values) ? values : [values]).flatMap(parseEntries)
     );
 
+    const insertRarePresetAtCaret = (value, preset, selectionStart, selectionEnd) => {
+        const source = String(value ?? '');
+        const target = String(preset ?? '').trim();
+        const clampPosition = position => Math.max(
+            0,
+            Math.min(source.length, Number.isFinite(Number(position)) ? Math.trunc(Number(position)) : source.length)
+        );
+        const start = clampPosition(selectionStart);
+        const end = Math.max(start, clampPosition(selectionEnd));
+        if (!target) {
+            return { value: source, selectionStart: start, selectionEnd: start };
+        }
+
+        const before = source.slice(0, start);
+        const after = source.slice(end);
+        const beforeSeparator = before && !/(?:\r\n|\n)$/.test(before) ? '\n' : '';
+        const afterSeparator = after && !/^(?:\r\n|\n)/.test(after) ? '\n' : '';
+        const nextValue = before + beforeSeparator + target + afterSeparator + after;
+        const caret = start + beforeSeparator.length + target.length;
+        return { value: nextValue, selectionStart: caret, selectionEnd: caret };
+    };
+
     const api = {
         RARE_BACKGROUND_SEARCH_FILTER,
         RARE_BACKGROUND_PREFIX,
         isRareBackgroundSearchQuery,
         normalizeRareBackgroundList,
-        mergeRareBackgroundLists
+        mergeRareBackgroundLists,
+        insertRarePresetAtCaret
     };
 
     if (globalScope) globalScope.RareBackgroundScanHelpers = api;
