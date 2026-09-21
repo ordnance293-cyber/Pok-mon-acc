@@ -2282,7 +2282,17 @@
         const evaluateRequiredFieldCoverage = (mergedResult = {}, classifications = [], taskResults = []) => {
             const missingWithScreens = [];
             const missingWithoutScreens = [];
+            const resultsByIndex = new Map(taskResults.map(task => [Number(task.imageIndex), task.imageResult]));
             getRequiredValidationFields(classifications).forEach(field => {
+                if (field === 'rare_list' && taskResults.length > 0) {
+                    classifications.forEach((classification, index) => {
+                        if (classification.image_type !== 'RARE_BACKGROUND_SCREEN') return;
+                        if (!isPopulatedAiValue(resultsByIndex.get(index)?.rare_list)) {
+                            missingWithScreens.push({ field, candidateIndexes: [index] });
+                        }
+                    });
+                    return;
+                }
                 if (isPopulatedAiValue(mergedResult[field])) return;
                 const candidateIndexes = getCandidateImageIndexesForField(field, classifications, taskResults);
                 if (candidateIndexes.length > 0) {
