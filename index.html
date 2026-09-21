@@ -2384,7 +2384,8 @@ image_type 只能是：
    - image_type = RARE_BACKGROUND_SCREEN
    - search_query = "${RARE_BACKGROUND_SEARCH_FILTER}"
 
-   這是極巨化／超極巨化加背卡的寶可夢清單頁，必須保留所有可見寶可夢名稱，並根據右上方圖標區分極巨化與超極巨化；不要把這張圖當成一般分類統計頁。
+   這是極巨化／超極巨化加背卡的寶可夢清單頁，必須保留所有可見寶可夢名稱，並根據每張卡右上方、位於寶可夢背後的 X 型圖標區分型態；不要把這張圖當成一般分類統計頁。
+   圖標判定以形狀填充狀態為最高優先級：實心／塗滿 X 型圖標 = 超極巨化；空心／只有輪廓 X 型圖標 = 極巨化。顏色深淺只能作為輔助，不能取代實心／空心判定；圖標被遮擋或看不清楚時不可猜測。
 2. 若搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」
    - image_type = HUNDO_LEGENDARY_SCREEN
    - search_query = "${HUNDO_LEGENDARY_FILTER}"
@@ -2639,15 +2640,18 @@ ${outputTemplate}
 
 這是一張「極巨化,超極巨化&背卡」搜尋結果頁。只處理稀有紫黑背卡清單，所有其他欄位都必須留空字串。
 
-【辨識規則】
-1. 由上到下、每列由左到右，讀取每一張目前可見的寶可夢卡片；同一物種出現多次要合併數量。
-2. 右上方淡粉色／淺粉紫色的 X 型圖標 = 極巨化，輸出「極巨化」前綴。
-3. 右上方深紫色／深粉紫色的 X 型圖標 = 超極巨化，輸出「超極巨化」前綴。
-4. 只能依圖標顏色深淺判斷，不能依寶可夢物種猜測型態；看不清楚圖標或名稱時不要猜。
+【辨識規則：實心／空心圖標優先】
+1. 由上到下、每列由左到右，逐張讀取目前可見的寶可夢卡片；每張卡片都必須獨立判定，不能把相鄰卡片的圖標、顏色或型態轉移過來；同一物種出現多次要合併數量。
+2. 先檢查本卡寶可夢右上方、位於本體背後的 X 型圖標，並以「筆畫是否塗滿」作為最高優先級：
+   - 實心／塗滿 X 型圖標 = 超極巨化，輸出「超極巨化」前綴。
+   - 空心／只有輪廓、內部可見背景留白的 X 型圖標 = 極巨化，輸出「極巨化」前綴。
+   判斷實心時要確認 X 的筆畫內部大部分沒有背景透出；判斷空心時要確認是連續輪廓而不是壓縮造成的斷裂。不要只看整體深淺。
+3. 顏色深淺、圖標大小與位置只能作為輔助驗證，不能取代實心／空心判定；絕對不得依寶可夢種類、CP、名稱、排列位置或鄰近卡片猜測型態。
+4. 若圖標被寶可夢遮擋、超出畫面、解析度不足、模糊，或實心／空心無法確認，將該卡視為不確定；不要把不確定卡片硬分成極巨化或超極巨化，也不要為了湊數量猜測。
 5. rare_list 必須使用以下格式，使用半形逗號分隔：
    稀有紫黑背卡:超極巨化千面避役,超極巨化巨鉗蟹,超極巨化妙蛙花*3,超極巨化顫弦蠑螈
-6. 同一個「型態＋寶可夢」重複出現時合併為 *數量；數量為 1 時不要寫 *1。
-7. 若沒有任何能清楚辨識的卡片，rare_list 留空字串。
+6. 同一個「型態＋寶可夢」重複出現時合併為 *數量；數量為 1 時不要寫 *1。只有型態與名稱都清楚的卡片才可合併。
+7. 若沒有任何能清楚辨識的卡片，或所有可見卡片的圖標都不確定，rare_list 留空字串。
 
 除了 rare_list 之外，其餘欄位（包含 pokemon_list）都必須留空字串。`;
                 case 'RESOURCE_SCREEN':
@@ -3997,6 +4001,16 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
         };
 
         const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = [], diagnosticRequestType = 'ordinary_primary') => {
+            const isRareBackgroundScan = classification.image_type === 'RARE_BACKGROUND_SCREEN';
+            const requestOptions = {
+                imageDetail: isRareBackgroundScan ? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL,
+                diagnosticRequestType
+            };
+            if (isRareBackgroundScan) {
+                requestOptions.model = HUNDO_SMART_MODEL;
+                requestOptions.reasoningEffort = HUNDO_SMART_REASONING_EFFORT;
+            }
+
             const rawResult = await requestOpenAiJsonSchema(
                 apiKey,
                 buildAiExtractionPrompt({
@@ -4006,10 +4020,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 dataUrl,
                 classification.image_type === 'SHINY_LEGENDARY_SCREEN' ? SHINY_LEGENDARY_JSON_SCHEMA : OPENAI_EXTRACTION_JSON_SCHEMA,
                 statusUpdater,
-                {
-                    imageDetail: classification.image_type === 'RARE_BACKGROUND_SCREEN' ? 'high' : AI_IMAGE_DETAIL,
-                    diagnosticRequestType
-                }
+                requestOptions
             );
             return normalizeAiExtraction(rawResult, classification, extractionFields);
         };
