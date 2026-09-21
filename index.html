@@ -5109,34 +5109,40 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 .split(/\r?\n/)
                 .map(line => line.trim())
                 .filter(Boolean);
+            const helpers = window.RareBackgroundScanHelpers;
+            const removalResult = helpers && typeof helpers.removeRarePresetLine === 'function'
+                ? helpers.removeRarePresetLine(input.value, preset, selectionStart)
+                : null;
             const presetIndex = existing.indexOf(preset);
-            const isRemoving = presetIndex >= 0;
+            const isRemoving = removalResult ? removalResult.removed : presetIndex >= 0;
 
             let nextValue = input.value;
             let nextCaret = selectionStart;
             if (isRemoving) {
-                existing.splice(presetIndex, 1);
-                nextValue = existing.join('\n');
-                nextCaret = Math.min(selectionStart, nextValue.length);
-            } else {
-                const helpers = window.RareBackgroundScanHelpers;
-                if (helpers && typeof helpers.insertRarePresetAtCaret === 'function') {
-                    const result = helpers.insertRarePresetAtCaret(
-                        input.value,
-                        preset,
-                        selectionStart,
-                        selectionEnd
-                    );
-                    nextValue = result.value;
-                    nextCaret = result.selectionStart;
+                if (removalResult) {
+                    nextValue = removalResult.value;
+                    nextCaret = removalResult.selectionStart;
                 } else {
-                    const before = input.value.slice(0, selectionStart);
-                    const after = input.value.slice(selectionEnd);
-                    const beforeSeparator = before && !/(?:\r\n|\n)$/.test(before) ? '\n' : '';
-                    const afterSeparator = after && !/^(?:\r\n|\n)/.test(after) ? '\n' : '';
-                    nextValue = before + beforeSeparator + preset + afterSeparator + after;
-                    nextCaret = selectionStart + beforeSeparator.length + preset.length;
+                    existing.splice(presetIndex, 1);
+                    nextValue = existing.join('\n');
+                    nextCaret = Math.min(selectionStart, nextValue.length);
                 }
+            } else if (helpers && typeof helpers.insertRarePresetAtCaret === 'function') {
+                const result = helpers.insertRarePresetAtCaret(
+                    input.value,
+                    preset,
+                    selectionStart,
+                    selectionEnd
+                );
+                nextValue = result.value;
+                nextCaret = result.selectionStart;
+            } else {
+                const before = input.value.slice(0, selectionStart);
+                const after = input.value.slice(selectionEnd);
+                const beforeSeparator = before && !/(?:\r\n|\n)$/.test(before) ? '\n' : '';
+                const afterSeparator = after && !/^(?:\r\n|\n)/.test(after) ? '\n' : '';
+                nextValue = before + beforeSeparator + preset + afterSeparator + after;
+                nextCaret = selectionStart + beforeSeparator.length + preset.length;
             }
 
             input.value = nextValue;
