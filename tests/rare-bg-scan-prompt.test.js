@@ -23,8 +23,8 @@ const classificationPrompt = source.slice(classificationStart, classificationEnd
 // The rare-card extractor must use the same model, reasoning budget, and image
 // detail as the Smart Hundo extractor, without changing ordinary scans.
 assert.match(extraction, /const isRareBackgroundScan = classification\.image_type === 'RARE_BACKGROUND_SCREEN';/);
-assert.match(extraction, /model: HUNDO_SMART_MODEL/);
-assert.match(extraction, /reasoningEffort: HUNDO_SMART_REASONING_EFFORT/);
+assert.match(extraction, /requestOptions\.model = HUNDO_SMART_MODEL/);
+assert.match(extraction, /requestOptions\.reasoningEffort = HUNDO_SMART_REASONING_EFFORT/);
 assert.match(extraction, /imageDetail: isRareBackgroundScan \? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL/);
 
 // Filled-vs-outline is the primary visual rule. The mapping is intentionally
