@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const {
     RARE_BACKGROUND_SEARCH_FILTER,
     isRareBackgroundSearchQuery,
-    normalizeRareBackgroundList
+    normalizeRareBackgroundList,
+    mergeRareBackgroundLists
 } = require('../rare-bg-scan-helpers.js');
 
 assert.equal(RARE_BACKGROUND_SEARCH_FILTER, '極巨化,超極巨化&背卡');
@@ -26,6 +27,14 @@ assert.equal(
 assert.equal(
     normalizeRareBackgroundList('稀有紫黑背卡:極巨化噴火龍,超極巨化妙蛙花*1'),
     '稀有紫黑背卡:極巨化噴火龍,超極巨化妙蛙花'
+);
+
+assert.equal(
+    mergeRareBackgroundLists([
+        '稀有紫黑背卡:超極巨化妙蛙花*2,極巨化噴火龍',
+        '稀有紫黑背卡:超極巨化妙蛙花,極巨化水箭龜*2'
+    ]),
+    '稀有紫黑背卡:超極巨化妙蛙花*3,極巨化噴火龍,極巨化水箭龜*2'
 );
 
 console.log('PASS rare background scan helper tests');
