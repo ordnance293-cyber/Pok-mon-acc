@@ -3981,7 +3981,10 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 dataUrl,
                 classification.image_type === 'SHINY_LEGENDARY_SCREEN' ? SHINY_LEGENDARY_JSON_SCHEMA : OPENAI_EXTRACTION_JSON_SCHEMA,
                 statusUpdater,
-                { diagnosticRequestType }
+                {
+                    imageDetail: classification.image_type === 'RARE_BACKGROUND_SCREEN' ? 'high' : AI_IMAGE_DETAIL,
+                    diagnosticRequestType
+                }
             );
             return normalizeAiExtraction(rawResult, classification, extractionFields);
         };
@@ -4348,6 +4351,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     trainerTeamScanId = beginTrainerTeamScan();
                 }
                 const normalDataUrls = await Promise.all(normalJobs.map(async job => {
+                    if (job.classification.image_type === 'RARE_BACKGROUND_SCREEN') return fileToOriginalDataUrl(job.file);
                     if (job.classification.image_type !== 'SHINY_LEGENDARY_SCREEN') return job.classificationDataUrl;
                     const originalDataUrl = await fileToOriginalDataUrl(job.file);
                     return fileToShinyLegendaryEvidenceDataUrl(originalDataUrl);
