@@ -760,8 +760,9 @@
                     : `<button onclick="window.markAsSold('${item.uid}', '${item.accountId}', this)" class="bg-amber-400 text-gray-900 px-2 py-1 rounded text-[10px] shadow-sm font-bold transition transform active:scale-95">💰 售出</button>`;
                 
                 const sId = item.accountId.substring(0, 6).toUpperCase(); const lD = item.level ? `${item.level}等 ` : '';
+                const copyAccountFieldValue = encodeURIComponent(String(item.accountId || '')).replace(/'/g, '%27');
                 
-                nR.innerHTML = `<td class="px-4 py-4"><div class="font-mono font-bold text-base uppercase flex items-center">${sId}${sB}</div><div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div></td><td class="px-4 py-4 text-sm font-bold ${tC}">${lD}${item.team}</td><td class="px-4 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td><td class="px-4 py-4 text-center"><div class="flex gap-1 justify-center flex-wrap"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-2 py-1 rounded text-[10px] shadow-sm">複製</button>${aB}<button onclick="window.editAccount('${item.uid}')" class="bg-blue-500 text-white px-2 py-1 rounded text-[10px] shadow-sm">✏️</button></div></td><td class="px-4 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-300 hover:text-red-600 p-1"><i class="fas fa-trash-alt"></i></button></td>`;
+                nR.innerHTML = `<td class="px-4 py-4"><div class="font-mono font-bold text-base uppercase flex items-center">${sId}${sB}</div><div class="text-[10px] text-gray-400 font-mono mt-0.5 break-all">${item.accountId}</div></td><td class="px-4 py-4 text-sm font-bold ${tC}">${lD}${item.team}</td><td class="px-4 py-4 text-sm text-red-600 font-bold">$ ${item.price}</td><td class="px-4 py-4 text-center"><div class="flex gap-1 justify-center flex-wrap"><button onclick="window.copyInventoryText('${item.fullText}', this)" class="bg-gray-800 text-white px-2 py-1 rounded text-[10px] shadow-sm">複製</button><button onclick="window.copyAccountField('${copyAccountFieldValue}', this)" title="直接複製帳號欄完整內容" class="bg-indigo-600 text-white px-2 py-1 rounded text-[10px] shadow-sm font-bold transition active:scale-95">帳密</button>${aB}<button onclick="window.editAccount('${item.uid}')" class="bg-blue-500 text-white px-2 py-1 rounded text-[10px] shadow-sm">✏️</button></div></td><td class="px-4 py-4 text-center"><button onclick="window.deleteAccount('${item.uid}', '${item.accountId}')" class="text-red-300 hover:text-red-600 p-1"><i class="fas fa-trash-alt"></i></button></td>`;
                 tbody.appendChild(nR);
             });
             const cEl = document.getElementById('inventoryCount'); if(cEl) cEl.innerText = displayData.length;
@@ -5147,6 +5148,30 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             const area = document.getElementById('hiddenCopyArea'); area.style.display = 'block'; area.value = decodeURIComponent(txt);
             area.select(); document.execCommand('copy'); area.style.display = 'none';
             btn.innerHTML = '已複製'; setTimeout(() => btn.innerHTML = '複製', 1500);
+        };
+
+        window.copyAccountField = function(encodedAccountId, btn) {
+            const text = decodeURIComponent(String(encodedAccountId || ''));
+            if (!text) return;
+
+            const fallbackCopy = () => {
+                const area = document.getElementById('hiddenCopyArea');
+                area.style.display = 'block';
+                area.value = text;
+                area.select();
+                document.execCommand('copy');
+                area.style.display = 'none';
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).catch(fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+
+            const oldText = btn.innerHTML;
+            btn.innerHTML = '✅';
+            setTimeout(() => { btn.innerHTML = oldText; }, 1200);
         };
 
         window.addRarePreset = function(text, btn) {
