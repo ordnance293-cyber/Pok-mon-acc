@@ -68,13 +68,13 @@ assert.match(
   source,
   /onclick="window\.copyAccountField\('\$\{copyAccountFieldValue\}', this\)"[^>]*title="直接複製帳號欄完整內容"[^>]*>帳密<\/button>/
 );
-const copyAccountFieldFunction = source.match(
-  /window\.copyAccountField\s*=\s*function\s*\(encodedAccountId, btn\)\s*\{[\s\S]*?\n\s*\};/
-);
-assert.ok(copyAccountFieldFunction, 'cloud inventory combined account-field copy helper must exist');
-assert.match(copyAccountFieldFunction[0], /decodeURIComponent\(String\(encodedAccountId \|\| ''\)\)/);
-assert.match(copyAccountFieldFunction[0], /navigator\.clipboard\.writeText\(text\)/);
-assert.doesNotMatch(copyAccountFieldFunction[0], /split\(['"];/, 'combined copy must not split account and password');
+const copyAccountFieldStart = source.indexOf('        window.copyAccountField = function');
+const copyAccountFieldEnd = source.indexOf('        window.addRarePreset = function', copyAccountFieldStart);
+assert.ok(copyAccountFieldStart >= 0 && copyAccountFieldEnd > copyAccountFieldStart, 'cloud inventory combined account-field copy helper must exist');
+const copyAccountFieldFunction = source.slice(copyAccountFieldStart, copyAccountFieldEnd);
+assert.match(copyAccountFieldFunction, /decodeURIComponent\(String\(encodedAccountId \|\| ''\)\)/);
+assert.match(copyAccountFieldFunction, /navigator\.clipboard\.writeText\(text\)/);
+assert.doesNotMatch(copyAccountFieldFunction, /split\(['"];/, 'combined copy must not split account and password');
 
 assert.match(source, /<script\s+src=["']simple-account-fulfillment-helpers\.js["']/);
 for (const [id, label] of [
