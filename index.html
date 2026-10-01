@@ -5025,12 +5025,8 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             let isBelow60 = false;
             if (valid(v('g_level'))) {
                 const lvlNum = parseInt(v('g_level'), 10);
-                if (lvlNum < 60) {
-                    lvlStr = `${lvlNum}等(免費練到60) `;
-                    isBelow60 = true;
-                } else {
-                    lvlStr = `${lvlNum}等 `;
-                }
+                lvlStr = `${lvlNum}等 `;
+                isBelow60 = lvlNum < 60;
             }
             res.push(`${lvlStr}${v('g_team')}`);
             
