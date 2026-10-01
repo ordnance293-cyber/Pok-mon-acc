@@ -3,6 +3,8 @@
 (function attachRareBackgroundScanHelpers(globalScope) {
     const RARE_BACKGROUND_SEARCH_FILTER = '極巨化,超極巨化&背卡';
     const RARE_BACKGROUND_PREFIX = '稀有紫黑背卡:';
+    const ARMORED_MEWTWO_SEARCH_FILTER = '特殊&傳說的寶可夢,幻,究極異獸';
+    const ARMORED_MEWTWO_PREFIX = '稀有裝甲超夢';
 
     const normalizeSearchQuery = value => String(value ?? '')
         .trim()
@@ -10,6 +12,10 @@
 
     const isRareBackgroundSearchQuery = value => (
         normalizeSearchQuery(value) === RARE_BACKGROUND_SEARCH_FILTER
+    );
+
+    const isArmoredMewtwoSearchQuery = value => (
+        normalizeSearchQuery(value) === ARMORED_MEWTWO_SEARCH_FILTER
     );
 
     const stripCodeFence = value => String(value ?? '')
@@ -67,6 +73,31 @@
     const mergeRareBackgroundLists = values => formatEntries(
         (Array.isArray(values) ? values : [values]).flatMap(parseEntries)
     );
+
+    const parseArmoredMewtwoCount = value => {
+        const raw = stripCodeFence(value).trim();
+        if (!raw) return 0;
+
+        const normalized = raw.replace(/\s+/g, '');
+        const labeledMatch = normalized.match(/^(?:稀有)?裝甲超夢[:：]?(?:[*xX×])?(\d+)隻?$/u);
+        const numericMatch = normalized.match(/^(\d+)$/);
+        const match = labeledMatch || numericMatch;
+        if (!match) return 0;
+
+        const count = Number(match[1]);
+        return Number.isInteger(count) && count > 0 ? count : 0;
+    };
+
+    const normalizeArmoredMewtwoRareList = value => {
+        const count = parseArmoredMewtwoCount(value);
+        return count > 0 ? `${ARMORED_MEWTWO_PREFIX}${count}隻` : '';
+    };
+
+    const mergeArmoredMewtwoRareLists = values => {
+        const count = (Array.isArray(values) ? values : [values])
+            .reduce((sum, value) => sum + parseArmoredMewtwoCount(value), 0);
+        return count > 0 ? `${ARMORED_MEWTWO_PREFIX}${count}隻` : '';
+    };
 
     const insertRarePresetAtCaret = (value, preset, selectionStart, selectionEnd) => {
         const source = String(value ?? '');
@@ -151,9 +182,14 @@
     const api = {
         RARE_BACKGROUND_SEARCH_FILTER,
         RARE_BACKGROUND_PREFIX,
+        ARMORED_MEWTWO_SEARCH_FILTER,
+        ARMORED_MEWTWO_PREFIX,
         isRareBackgroundSearchQuery,
+        isArmoredMewtwoSearchQuery,
         normalizeRareBackgroundList,
         mergeRareBackgroundLists,
+        normalizeArmoredMewtwoRareList,
+        mergeArmoredMewtwoRareLists,
         insertRarePresetAtCaret,
         removeRarePresetLine
     };
