@@ -1191,6 +1191,7 @@
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
         const RARE_BACKGROUND_SEARCH_FILTER = globalThis.RareBackgroundScanHelpers?.RARE_BACKGROUND_SEARCH_FILTER || '極巨化,超極巨化&背卡';
+        const ARMORED_MEWTWO_FILTER = globalThis.RareBackgroundScanHelpers?.ARMORED_MEWTWO_SEARCH_FILTER || '特殊&傳說的寶可夢,幻,究極異獸';
         const SHINY_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&異色`;
         const OLD_POKEMON_FILTER = '年16-20';
         const OLD_LEGENDARY_FILTER = `${OLD_POKEMON_FILTER}&${LEGENDARY_FILTER}`;
@@ -1219,6 +1220,7 @@
             'DYNA_CATEGORY_SCREEN',
             'GIGA_CATEGORY_SCREEN',
             'RARE_BACKGROUND_SCREEN',
+            'ARMORED_MEWTWO_SCREEN',
             'TRAINER_PROFILE_SCREEN',
             'POKEMON_DETAIL_SCREEN',
             'RESOURCE_SCREEN',
@@ -1226,6 +1228,7 @@
         ]);
         const AI_SEARCH_QUERY_IMAGE_TYPES = [
             { query: RARE_BACKGROUND_SEARCH_FILTER, imageType: 'RARE_BACKGROUND_SCREEN' },
+            { query: ARMORED_MEWTWO_FILTER, imageType: 'ARMORED_MEWTWO_SCREEN' },
             { query: HUNDO_LEGENDARY_FILTER, imageType: 'HUNDO_LEGENDARY_SCREEN' },
             { query: SHINY_LEGENDARY_FILTER, imageType: 'SHINY_LEGENDARY_SCREEN' },
             { query: OLD_LEGENDARY_FILTER, imageType: 'OLD_LEGENDARY_SCREEN' },
@@ -1258,6 +1261,7 @@
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
             RARE_BACKGROUND_SCREEN: ['rare_list'],
+            ARMORED_MEWTWO_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
@@ -1277,6 +1281,7 @@
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
             RARE_BACKGROUND_SCREEN: ['rare_list'],
+            ARMORED_MEWTWO_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
@@ -1296,6 +1301,7 @@
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
             RARE_BACKGROUND_SCREEN: ['rare_list'],
+            ARMORED_MEWTWO_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag']
@@ -1310,7 +1316,7 @@
             bg_special: { CATEGORY_OVERVIEW_SCREEN: 1, BG_SPECIAL_CATEGORY_SCREEN: 2 },
             dyna: { CATEGORY_OVERVIEW_SCREEN: 1, DYNA_CATEGORY_SCREEN: 2 },
             giga: { CATEGORY_OVERVIEW_SCREEN: 1, GIGA_CATEGORY_SCREEN: 2 },
-            rare_list: { RARE_BACKGROUND_SCREEN: 1 },
+            rare_list: { RARE_BACKGROUND_SCREEN: 1, ARMORED_MEWTWO_SCREEN: 1 },
             perfect: { CATEGORY_OVERVIEW_SCREEN: 1 },
             old_poke: { OLD_POKEMON_SCREEN: 1 },
             old_leg: { OLD_LEGENDARY_SCREEN: 1 },
@@ -1384,6 +1390,7 @@
                             'DYNA_CATEGORY_SCREEN',
                             'GIGA_CATEGORY_SCREEN',
                             'RARE_BACKGROUND_SCREEN',
+                            'ARMORED_MEWTWO_SCREEN',
                             'TRAINER_PROFILE_SCREEN',
                             'POKEMON_DETAIL_SCREEN',
                             'RESOURCE_SCREEN',
@@ -2143,9 +2150,13 @@
             normalized.xp = normalizeWanValue(extractSlashSideNumber(result?.xp, 'left'));
             normalized.stardust = normalizeWanValue(result?.stardust);
             normalized.pokemon_list = normalizePokemonList(result?.pokemon_list);
-            normalized.rare_list = normalized.image_type === 'RARE_BACKGROUND_SCREEN'
-                ? (globalThis.RareBackgroundScanHelpers?.normalizeRareBackgroundList(result?.rare_list) || '')
-                : '';
+            if (normalized.image_type === 'RARE_BACKGROUND_SCREEN') {
+                normalized.rare_list = globalThis.RareBackgroundScanHelpers?.normalizeRareBackgroundList(result?.rare_list) || '';
+            } else if (normalized.image_type === 'ARMORED_MEWTWO_SCREEN') {
+                normalized.rare_list = globalThis.RareBackgroundScanHelpers?.normalizeArmoredMewtwoRareList(result?.rare_list) || '';
+            } else {
+                normalized.rare_list = '';
+            }
 
             const allowedFieldSet = new Set(Array.isArray(allowedFields) ? allowedFields : (AI_IMAGE_TYPE_ALLOWED_FIELDS[normalized.image_type] || []));
             [...AI_IMAGE_RESULT_FIELDS, 'pokemon_list'].forEach(field => {
@@ -2246,22 +2257,38 @@
                 }
             });
 
-            const rareLists = results
+            const rareBackgroundLists = results
                 .filter(result => result.image_type === 'RARE_BACKGROUND_SCREEN')
                 .map(result => result.rare_list)
                 .filter(value => String(value || '').trim() !== '');
-            if (rareLists.length) {
-                merged.rare_list = globalThis.RareBackgroundScanHelpers?.mergeRareBackgroundLists(rareLists)
-                    || rareLists[0];
+            const armoredMewtwoLists = results
+                .filter(result => result.image_type === 'ARMORED_MEWTWO_SCREEN')
+                .map(result => result.rare_list)
+                .filter(value => String(value || '').trim() !== '');
+
+            const rareLines = [];
+            if (rareBackgroundLists.length) {
+                rareLines.push(
+                    globalThis.RareBackgroundScanHelpers?.mergeRareBackgroundLists(rareBackgroundLists)
+                    || rareBackgroundLists[0]
+                );
             }
+            if (armoredMewtwoLists.length) {
+                rareLines.push(
+                    globalThis.RareBackgroundScanHelpers?.mergeArmoredMewtwoRareLists(armoredMewtwoLists)
+                    || armoredMewtwoLists[0]
+                );
+            }
+            merged.rare_list = rareLines.filter(Boolean).join('\n');
 
             return merged;
         };
 
         const isPopulatedAiValue = (value) => String(value || '').trim() !== '';
+        const RARE_LIST_IMAGE_TYPES = new Set(['RARE_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN']);
         const getRequiredValidationFields = (classifications = []) => [
             ...AI_REQUIRED_VALIDATION_FIELDS,
-            ...(classifications.some(classification => classification.image_type === 'RARE_BACKGROUND_SCREEN')
+            ...(classifications.some(classification => RARE_LIST_IMAGE_TYPES.has(classification.image_type))
                 ? ['rare_list']
                 : [])
         ];
@@ -2286,7 +2313,7 @@
             getRequiredValidationFields(classifications).forEach(field => {
                 if (field === 'rare_list' && taskResults.length > 0) {
                     classifications.forEach((classification, index) => {
-                        if (classification.image_type !== 'RARE_BACKGROUND_SCREEN') return;
+                        if (!RARE_LIST_IMAGE_TYPES.has(classification.image_type)) return;
                         if (!isPopulatedAiValue(resultsByIndex.get(index)?.rare_list)) {
                             missingWithScreens.push({ field, candidateIndexes: [index] });
                         }
@@ -2373,6 +2400,7 @@ image_type 只能是：
 - DYNA_CATEGORY_SCREEN
 - GIGA_CATEGORY_SCREEN
 - RARE_BACKGROUND_SCREEN
+- ARMORED_MEWTWO_SCREEN
 - TRAINER_PROFILE_SCREEN
 - POKEMON_DETAIL_SCREEN
 - RESOURCE_SCREEN
@@ -2386,6 +2414,11 @@ image_type 只能是：
 
    這是極巨化／超極巨化加背卡的寶可夢清單頁，必須保留所有可見寶可夢名稱，並根據每張卡右上方、位於寶可夢背後的 X 型圖標區分型態；不要把這張圖當成一般分類統計頁。
    圖標判定以形狀填充狀態為最高優先級：實心／塗滿 X 型圖標 = 超極巨化；空心／只有輪廓 X 型圖標 = 極巨化。顏色深淺只能作為輔助，不能取代實心／空心判定；圖標被遮擋或看不清楚時不可猜測。
+1A. 若搜尋欄完全符合「${ARMORED_MEWTWO_FILTER}」
+   - image_type = ARMORED_MEWTWO_SCREEN
+   - search_query = "${ARMORED_MEWTWO_FILTER}"
+
+   這是「特殊」傳說／幻／究極異獸搜尋頁，專門用來辨識裝甲超夢。不要把「名稱顯示為超夢」直接當成裝甲超夢；必須依寶可夢本體外觀確認是否為裝甲型態。
 2. 若搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」
    - image_type = HUNDO_LEGENDARY_SCREEN
    - search_query = "${HUNDO_LEGENDARY_FILTER}"
@@ -2452,7 +2485,7 @@ image_type 只能是：
    - 若看得到搜尋欄文字，就把實際搜尋字串填入 search_query；若看不到則填 ""
 
 【重要】
-1. 只有搜尋欄「完全符合」上述 6 種查詢時，才可判成對應搜尋頁。
+1. 只有搜尋欄「完全符合」上述 7 種查詢時，才可判成對應搜尋頁。
 2. 例如「年16-20&異色」「年16-20&4*」「${LEGENDARY_FILTER}&異色&4*」「異色」都不是允許的搜尋頁，必須判成 OTHER。
 3. CATEGORY_OVERVIEW_SCREEN 優先於單一分類頁；若同時看得到多個分類統計，必須判成 CATEGORY_OVERVIEW_SCREEN。
 4. 只有 HUNDO_LEGENDARY_SCREEN 且搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」之後，才可能啟用百神清單辨識；其他任何類型都不能當作百神清單圖。
@@ -2652,6 +2685,22 @@ ${outputTemplate}
    稀有紫黑背卡:超極巨化千面避役,超極巨化巨鉗蟹,超極巨化妙蛙花*3,超極巨化顫弦蠑螈
 6. 同一個「型態＋寶可夢」重複出現時合併為 *數量；數量為 1 時不要寫 *1。只有型態與名稱都清楚的卡片才可合併。
 7. 若沒有任何能清楚辨識的卡片，或所有可見卡片的圖標都不確定，rare_list 留空字串。
+
+除了 rare_list 之外，其餘欄位（包含 pokemon_list）都必須留空字串。`;
+                case 'ARMORED_MEWTWO_SCREEN':
+                    return `${baseRules}
+
+這是一張「${ARMORED_MEWTWO_FILTER}」搜尋結果頁。只處理裝甲超夢數量，所有其他欄位都必須留空字串。
+
+【裝甲超夢辨識規則】
+1. 由上到下、每列由左到右，逐張檢查目前可見的寶可夢卡片，每張卡片最多計數 1 次。
+2. 只計入「本體外觀可明確辨識為裝甲超夢」的卡片。名稱顯示「超夢」只能當輔助，不能單靠名稱計數。
+3. 必須排除普通超夢、Mega 超夢 X、Mega 超夢 Y，以及其他傳說／幻／究極異獸。若外觀被遮擋、太小、模糊或無法確認是否為裝甲型態，就不要計入。
+4. 頂部「寶可夢 (N)」只能用來交叉檢查，不得在看不清卡片時直接把 N 當成裝甲超夢數量。
+5. rare_list 必須只輸出一行，格式固定為「稀有裝甲超夢N隻」，N 為本張圖中清楚辨識到的裝甲超夢卡片數。例如清楚看到 4 隻時輸出：
+   稀有裝甲超夢4隻
+6. 若沒有任何能清楚辨識的裝甲超夢，rare_list 留空字串。
+7. 此分支明確允許為 rare_list 辨識「裝甲超夢」外觀；通用規則中禁止輸出寶可夢名稱的限制不適用於這個 rare_list。
 
 除了 rare_list 之外，其餘欄位（包含 pokemon_list）都必須留空字串。`;
                 case 'RESOURCE_SCREEN':
@@ -4001,12 +4050,12 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
         };
 
         const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = [], diagnosticRequestType = 'ordinary_primary') => {
-            const isRareBackgroundScan = classification.image_type === 'RARE_BACKGROUND_SCREEN';
+            const isRareVisualScan = ['RARE_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN'].includes(classification.image_type);
             const requestOptions = {
-                imageDetail: isRareBackgroundScan ? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL,
+                imageDetail: isRareVisualScan ? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL,
                 diagnosticRequestType
             };
-            if (isRareBackgroundScan) {
+            if (isRareVisualScan) {
                 requestOptions.model = HUNDO_SMART_MODEL;
                 requestOptions.reasoningEffort = HUNDO_SMART_REASONING_EFFORT;
             }
@@ -5240,6 +5289,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸', this)" title="神獸總數" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">神獸</button>
                     <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&4*', this)" title="完美神獸" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">百神</button>
                     <button type="button" onclick="window.copySimpleText('傳說的寶可夢,幻,究極異獸&異色', this)" title="色違神獸" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">色神</button>
+                    <button type="button" onclick="window.copySimpleText('特殊&傳說的寶可夢,幻,究極異獸', this)" title="複製：特殊&傳說的寶可夢,幻,究極異獸" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">裝甲超夢</button>
                     <button type="button" onclick="window.copySimpleText('極巨化,超極巨化&背卡', this)" title="複製：極巨化,超極巨化&背卡" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">背卡</button>
                     <button type="button" onclick="window.copySimpleText('年16-20', this)" title="年16-20" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">16–20</button>
                     <button type="button" onclick="window.copySimpleText('年16-20&傳說的寶可夢,幻,究極異獸', this)" title="16-20神獸" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full text-[11px] shadow-sm font-bold transition-all active:scale-95">16–20神</button>
@@ -5272,7 +5322,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                                 <button type="button" id="aiAutoBtn" onclick="autoScan()" class="w-full bg-indigo-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-indigo-700 transition">🤖 AI自動掃描</button>
                                 <button type="button" id="aiDiagnosticsBtn" onclick="openAiDiagnostics()" class="hidden w-full bg-white border border-indigo-200 text-indigo-700 px-2 py-1.5 rounded-lg text-[11px] md:text-sm font-bold hover:bg-indigo-50 transition">📋 AI 診斷</button>
                                 <p id="aiAutoStatus" class="px-1 text-[10px] text-indigo-600 min-h-[1rem] leading-relaxed"></p>
-                                <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；只有命中「傳說的寶可夢,幻,究極異獸&amp;4*」的圖片才會辨識百神清單，其餘圖片只讀對應欄位，最後統一回填。</p>
+                                <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；命中「傳說的寶可夢,幻,究極異獸&amp;4*」時辨識百神清單，命中「特殊&amp;傳說的寶可夢,幻,究極異獸」時辨識裝甲超夢，其餘圖片只讀對應欄位，最後統一回填。</p>
                             </div>
                         </div>
 
