@@ -61,6 +61,21 @@ assert.match(
 );
 assert.doesNotMatch(source, /(?:copy|複製)[A-Za-z_$]*(?:combined|both|all)[A-Za-z_$]*(?:credential|account|password)/i);
 
+// Cloud inventory rows expose a separate one-tap control that copies the
+// complete account field exactly as stored (for example account;password).
+assert.match(source, /const copyAccountFieldValue = encodeURIComponent\(String\(item\.accountId \|\| ''\)\)\.replace\(\/\'\/g, '%27'\);/);
+assert.match(
+  source,
+  /onclick="window\.copyAccountField\('\$\{copyAccountFieldValue\}', this\)"[^>]*title="直接複製帳號欄完整內容"[^>]*>帳密<\/button>/
+);
+const copyAccountFieldFunction = source.match(
+  /window\.copyAccountField\s*=\s*function\s*\(encodedAccountId, btn\)\s*\{[\s\S]*?\n\s*\};/
+);
+assert.ok(copyAccountFieldFunction, 'cloud inventory combined account-field copy helper must exist');
+assert.match(copyAccountFieldFunction[0], /decodeURIComponent\(String\(encodedAccountId \|\| ''\)\)/);
+assert.match(copyAccountFieldFunction[0], /navigator\.clipboard\.writeText\(text\)/);
+assert.doesNotMatch(copyAccountFieldFunction[0], /split\(['"];/, 'combined copy must not split account and password');
+
 assert.match(source, /<script\s+src=["']simple-account-fulfillment-helpers\.js["']/);
 for (const [id, label] of [
   ['simpleAccountSpreadsheetId', '簡帳試算表 ID'],
