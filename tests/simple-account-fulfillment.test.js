@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const Logic = require('../apps-script/simple-account-fulfillment/fulfillment-logic.js');
 const Helpers = require('../simple-account-fulfillment-helpers.js');
 
-const BROWSER_PRODUCTS = ['1百神', '2百神', '3百神', '無極汰那', 'Mega烈空坐'];
+const BROWSER_PRODUCTS = ['1百神', '2百神', '3百神', '無極汰那', 'Mega烈空坐', '舊金山烈空坐'];
 const BROWSER_REQUEST_ID = 'browser-request-id-1234567890';
 
 assert.deepEqual(Helpers.PRODUCTS, BROWSER_PRODUCTS);
@@ -112,7 +112,8 @@ assert.deepEqual(Logic.PRODUCT_SHEET_MAP, {
   '2百神': '2百神',
   '3百神': '3百神',
   '無極汰那': '無極汰那',
-  'Mega烈空坐': 'Mega烈空坐'
+  'Mega烈空坐': 'Mega烈空坐',
+  '舊金山烈空坐': '普色舊金山烈空坐簡帳'
 });
 assert.deepEqual(Logic.ALLOWED_PRODUCTS, Object.keys(Logic.PRODUCT_SHEET_MAP));
 assert.equal(Logic.REQUEST_ID_PATTERN.test('A_valid-request_123456789'), true);
