@@ -5,7 +5,7 @@
 }(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function () {
   'use strict';
 
-  const PRODUCTS = Object.freeze(['1百神', '2百神', '3百神', '無極汰那', 'Mega烈空坐']);
+  const PRODUCTS = Object.freeze(['1百神', '2百神', '3百神', '無極汰那', 'Mega烈空坐', '舊金山烈空坐']);
   const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{20,100}$/;
   const PENDING_STORAGE_KEY = 'simpleAccountPendingFulfillment';
   const CLEAR_CODES = new Set([
