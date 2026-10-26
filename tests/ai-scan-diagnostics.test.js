@@ -48,6 +48,22 @@ assert(!source.includes('window.fetch =') && !source.includes('globalThis.fetch 
 assert.strictEqual((source.match(/id="aiDiagnosticsBtn"/g) || []).length, 1, 'diagnostics button id must be unique');
 assert.strictEqual((source.match(/id="aiDiagnosticsModal"/g) || []).length, 1, 'diagnostics modal id must be unique');
 
+const failureStart = source.indexOf('const safeAiFailure =');
+const failureEnd = source.indexOf('const createAiScanDiagnostics =', failureStart);
+assert(failureStart >= 0 && failureEnd > failureStart, 'safe failure helper must exist');
+vm.runInNewContext(source.slice(failureStart, failureEnd).replace('const safeAiFailure =', 'safeAiFailure ='), context);
+const apiFailure = context.safeAiFailure({
+  reasonCode: 'openai_http_error',
+  message: 'OpenAI request failed',
+  httpStatus: 429,
+  apiErrorCode: 'insufficient_quota',
+  requestModel: 'gpt-6-luna'
+}, 'classification');
+assert.strictEqual(apiFailure.http_status, 429);
+assert.strictEqual(apiFailure.api_error_code, 'insufficient_quota');
+assert.strictEqual(apiFailure.request_model, 'gpt-6-luna');
+assert(!JSON.stringify(apiFailure).includes('sk-'), 'failure diagnostics must not include credentials');
+
 const smartSummaryAssignment = source.indexOf('diagnostics.smart_hundo_summary =');
 const smartDiagnosticsShape = source.indexOf('helpers.shapeSmartHundoDiagnostics({', smartSummaryAssignment);
 const smartDiagnosticsPublish = source.indexOf('publishSmartHundoDiagnostics(smartSessionId,', smartDiagnosticsShape);

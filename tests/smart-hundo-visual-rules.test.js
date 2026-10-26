@@ -49,10 +49,10 @@ const runtime = {
   HUNDO_LEGENDARY_FILTER: '傳說的寶可夢,幻,究極異獸&4*',
   HUNDO_SMART_SCHEMA: { name: 'pokemon_go_smart_hundo_v2' },
   HUNDO_FORM_VERIFIER_SCHEMA: { name: 'pokemon_go_smart_hundo_form_verifier_v2' },
-  HUNDO_SMART_MODEL: 'gpt-5.6-sol',
+  HUNDO_SMART_MODEL: 'gpt-6.1-sol',
   HUNDO_SMART_REASONING_EFFORT: 'medium',
   HUNDO_SMART_IMAGE_DETAIL: 'high',
-  HUNDO_FORM_VERIFY_MODEL: 'gpt-5.6-sol',
+  HUNDO_FORM_VERIFY_MODEL: 'gpt-6.1-sol',
   HUNDO_FORM_VERIFY_REASONING_EFFORT: 'high',
   requestOpenAiJsonSchema: async (...args) => { requests.push(args); return { cards: [] }; }
 };
@@ -96,7 +96,7 @@ assert.ok(!backgroundPrompt.includes('【候選家族比較】'));
     verificationJobs: runtimeFamilyJobs, statusUpdater: () => {} });
   assert.deepEqual(requests.map(call => call[5].diagnosticRequestType),
     ['hundo_card', 'hundo_card_structural_retry', 'hundo_form_verifier']);
-  assert.deepEqual(requests.map(call => call[5].model), ['gpt-5.6-sol', 'gpt-5.6-sol', 'gpt-5.6-sol']);
+  assert.deepEqual(requests.map(call => call[5].model), ['gpt-6.1-sol', 'gpt-6.1-sol', 'gpt-6.1-sol']);
   assert.deepEqual(requests.map(call => call[5].reasoningEffort), ['medium', 'medium', 'high']);
   assert.deepEqual(requests.map(call => call[5].imageDetail), ['high', 'high', 'high']);
   assert.deepEqual(requests.map(call => call[2]), Array(3).fill('data:image/png;base64,AA=='));

@@ -919,7 +919,10 @@
         const safeAiFailure = (error, stage) => ({
             stage,
             reason: String(error?.reasonCode || error?.name || 'request_failed').slice(0, 120),
-            message: String(error?.message || 'request failed').replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]').replace(/data:image\/[^\s]+/gi, '[IMAGE REDACTED]').slice(0, 240)
+            message: String(error?.message || 'request failed').replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]').replace(/data:image\/[^\s]+/gi, '[IMAGE REDACTED]').slice(0, 240),
+            http_status: Number.isInteger(error?.httpStatus) && error.httpStatus >= 100 && error.httpStatus <= 599 ? error.httpStatus : 0,
+            api_error_code: /^[a-zA-Z0-9_-]{1,80}$/.test(String(error?.apiErrorCode || '')) ? error.apiErrorCode : '',
+            request_model: /^[a-zA-Z0-9._-]{1,64}$/.test(String(error?.requestModel || '')) ? error.requestModel : ''
         });
         const createAiScanDiagnostics = totalFiles => ({
             run_id: '',
@@ -1181,12 +1184,13 @@
             if(el) { el.classList.add('ring-2', 'ring-green-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-green-400'), 800); }
         };
 
-        const OPENAI_MODEL = 'gpt-4.1-mini';
-        const HUNDO_COUNT_MODEL = 'gpt-5.6-luna';
+        const OPENAI_MODEL = 'gpt-6-luna';
+        const OPENAI_REASONING_EFFORT = 'none';
+        const HUNDO_COUNT_MODEL = 'gpt-6-luna';
         const HUNDO_COUNT_REASONING_EFFORT = 'medium';
-        const HUNDO_SMART_MODEL = 'gpt-5.6-sol';
+        const HUNDO_SMART_MODEL = 'gpt-6.1-sol';
         const HUNDO_SMART_REASONING_EFFORT = 'medium';
-        const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-sol';
+        const HUNDO_FORM_VERIFY_MODEL = 'gpt-6.1-sol';
         const HUNDO_FORM_VERIFY_REASONING_EFFORT = 'high';
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
@@ -3387,11 +3391,10 @@ ${mappingLines}`;
                     json_schema: jsonSchema
                 }
             };
-            if (Object.hasOwn(options, 'reasoningEffort')) {
-                requestPayload.reasoning_effort = options.reasoningEffort;
-            } else {
-                requestPayload.temperature = options.temperature ?? 0.1;
-            }
+            // GPT-6 reasoning models require compatible reasoning settings.
+            // Routine Luna scans skip reasoning; difficult visual scans use explicit effort.
+            requestPayload.reasoning_effort = options.reasoningEffort ??
+                (requestModel === OPENAI_MODEL ? OPENAI_REASONING_EFFORT : 'medium');
             const payload = JSON.stringify(requestPayload);
 
             const maxRetries = options.maxRetries ?? 3;
@@ -3408,16 +3411,34 @@ ${mappingLines}`;
                     });
 
                     if (!resp.ok) {
-                        if ((resp.status === 429 || resp.status >= 500) && attempt < maxRetries) {
-                            const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
-                            const delay = retryAfter > 0 ? retryAfter * 1000 : 3500;
+                        // Never log or export raw API errors, image data or credentials.
+                        let apiErrorCode = '';
+                        try {
+                            const errorBody = await resp.json();
+                            const code = errorBody?.error?.code;
+                            if (typeof code === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(code)) {
+                                apiErrorCode = code;
+                            }
+                        } catch (_) { /* The HTTP status is still usable. */ }
+                        const requestError = new Error('OpenAI request failed');
+                        requestError.httpStatus = resp.status;
+                        requestError.reasonCode = 'openai_http_error';
+                        requestError.apiErrorCode = apiErrorCode;
+                        requestError.requestModel = requestModel;
+                        const quotaExceeded = ['insufficient_quota', 'billing_hard_limit_reached'].includes(apiErrorCode);
+                        const retryable = !quotaExceeded && (
+                            resp.status === 408 || resp.status === 409 ||
+                            resp.status === 429 || resp.status >= 500
+                        );
+                        if (retryable && attempt < maxRetries) {
+                            const retryAfter = Number(resp.headers.get('Retry-After') || 0);
+                            const delay = Number.isFinite(retryAfter) && retryAfter > 0
+                                ? Math.min(retryAfter * 1000, 30000)
+                                : Math.min(3500 * attempt, 12000);
                             statusUpdater?.(attempt, maxRetries);
                             await new Promise(resolve => setTimeout(resolve, delay));
                             continue;
                         }
-                        const requestError = new Error('OpenAI request failed');
-                        requestError.httpStatus = resp.status;
-                        requestError.reasonCode = 'openai_http_error';
                         throw requestError;
                     }
 
@@ -3438,8 +3459,12 @@ ${mappingLines}`;
                         returned_model: String(data?.model || '')
                     };
                 } catch (error) {
+                    // HTTP retry logic was decided above. Permanent failures stop at once.
+                    if (error?.reasonCode === 'openai_http_error') throw error;
                     if (error?.reasonCode === 'openai_json_parse_error' && options.retryParseErrors === false) throw error;
                     if (attempt === maxRetries) throw error;
+                    statusUpdater?.(attempt, maxRetries);
+                    await new Promise(resolve => setTimeout(resolve, 700 * attempt));
                 }
             }
 

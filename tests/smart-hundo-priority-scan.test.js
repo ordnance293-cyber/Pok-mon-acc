@@ -17,9 +17,9 @@ for (const forbidden of [
   'mergeSmartHundoScreenshotsAdjacent'
 ]) assert(!source.includes(forbidden), `PR #68 logic must remain absent: ${forbidden}`);
 for (const preserved of [
-  "const HUNDO_COUNT_MODEL = 'gpt-5.6-luna';",
-  "const HUNDO_SMART_MODEL = 'gpt-5.6-sol';",
-  "const HUNDO_FORM_VERIFY_MODEL = 'gpt-5.6-sol';",
+  "const HUNDO_COUNT_MODEL = 'gpt-6-luna';",
+  "const HUNDO_SMART_MODEL = 'gpt-6.1-sol';",
+  "const HUNDO_FORM_VERIFY_MODEL = 'gpt-6.1-sol';",
   'helpers.mergeSmartHundoScreenshots(successfulCardScreenshots)',
   'const smartHundoScan = async ({',
   'const runOrdinaryRecoveryBatch = async ({',
