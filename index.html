@@ -924,6 +924,22 @@
             api_error_code: /^[a-zA-Z0-9_-]{1,80}$/.test(String(error?.apiErrorCode || '')) ? error.apiErrorCode : '',
             request_model: /^[a-zA-Z0-9._-]{1,64}$/.test(String(error?.requestModel || '')) ? error.requestModel : ''
         });
+        // Only display categorical API codes, never raw server messages or credentials.
+        const formatAiTransportFailure = error => {
+            const status = Number(error?.httpStatus ?? error?.http_status) || 0;
+            const rawCode = String(error?.apiErrorCode ?? error?.api_error_code ?? '');
+            const code = /^[a-zA-Z0-9_-]{1,80}$/.test(rawCode) ? rawCode : '';
+            const detail = status ? `HTTP ${status}${code ? ` / ${code}` : ''}` : String(error?.reasonCode || 'connection_error');
+            const exhausted = ['insufficient_quota', 'billing_hard_limit_reached', 'credit_balance_exhausted',
+                'organization_usage_limit_exceeded', 'organization_spend_limit_exceeded',
+                'project_spend_limit_exceeded'].includes(code);
+            if (exhausted) return `OpenAI API 額度或餘額不足（${detail}），請檢查 API Billing / Limits。重試無法解決。`;
+            if (status === 429) return `OpenAI API 請求頻率受限（${detail}），請檢查專案 Rate Limits，降低掃描頻率。`;
+            if (status === 401 || status === 403) return `OpenAI API 金鑰或模型存取權限異常（${detail}），請檢查專案金鑰與權限。`;
+            if (status === 400 || status === 404) return `OpenAI API 模型或請求格式不符（${detail}），請提供診斷報告以便檢查。`;
+            if (status >= 500) return `OpenAI API 服務暫時錯誤（${detail}），稍後再試。`;
+            return `OpenAI 圖片辨識失敗（${detail}），請查看 AI 診斷報告。`;
+        };
         const createAiScanDiagnostics = totalFiles => ({
             run_id: '',
             total_files: totalFiles,
@@ -3415,7 +3431,7 @@ ${mappingLines}`;
                         let apiErrorCode = '';
                         try {
                             const errorBody = await resp.json();
-                            const code = errorBody?.error?.code;
+                            const code = errorBody?.error?.code || errorBody?.error?.type;
                             if (typeof code === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(code)) {
                                 apiErrorCode = code;
                             }
@@ -3425,7 +3441,11 @@ ${mappingLines}`;
                         requestError.reasonCode = 'openai_http_error';
                         requestError.apiErrorCode = apiErrorCode;
                         requestError.requestModel = requestModel;
-                        const quotaExceeded = ['insufficient_quota', 'billing_hard_limit_reached'].includes(apiErrorCode);
+                        const quotaExceeded = [
+                            'insufficient_quota', 'billing_hard_limit_reached', 'credit_balance_exhausted',
+                            'organization_usage_limit_exceeded', 'organization_spend_limit_exceeded',
+                            'project_spend_limit_exceeded'
+                        ].includes(apiErrorCode);
                         const retryable = !quotaExceeded && (
                             resp.status === 408 || resp.status === 409 ||
                             resp.status === 429 || resp.status >= 500
@@ -3435,7 +3455,7 @@ ${mappingLines}`;
                             const delay = Number.isFinite(retryAfter) && retryAfter > 0
                                 ? Math.min(retryAfter * 1000, 30000)
                                 : Math.min(3500 * attempt, 12000);
-                            statusUpdater?.(attempt, maxRetries);
+                            statusUpdater?.(attempt, maxRetries, resp.status, apiErrorCode);
                             await new Promise(resolve => setTimeout(resolve, delay));
                             continue;
                         }
@@ -4132,8 +4152,9 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
         const classifySingleAiImage = async ({ apiKey, dataUrl, imageIndex, totalFiles, updateStatus }) => {
             const progressLabel = `${imageIndex + 1}/${totalFiles}`;
             updateStatus(`GPT 第一階段分類中 ${progressLabel}`);
-            const classification = await requestSingleImageClassification(apiKey, dataUrl, (attempt, maxRetries) => {
-                updateStatus(`GPT 第一階段分類中 ${progressLabel}（API 重試 ${attempt}/${maxRetries}）`);
+            const classification = await requestSingleImageClassification(apiKey, dataUrl, (attempt, maxRetries, httpStatus = 0, apiCode = '') => {
+                const category = httpStatus ? `HTTP ${httpStatus}${apiCode ? ` / ${apiCode}` : ''}` : '網路或解析錯誤';
+                updateStatus(`GPT 第一階段分類中 ${progressLabel}（${category}，API 重試 ${attempt}/${maxRetries}）`);
             });
 
             console.log({
@@ -4390,6 +4411,18 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     classificationSettlements.push(...batchSettlements);
                     diagnostics.classification_batches_completed += 1;
                     if (!isCurrentAutoScanRun(scanRunId)) return;
+                    // Stop the batch when the shared API account cannot classify any image.
+                    // Continuing with 10+ screenshots would only repeat the same failure.
+                    if (batchSettlements.length && batchSettlements.every(item => item.status === 'rejected')) {
+                        const errors = batchSettlements.map(item => item.reason);
+                        const first = errors[0];
+                        const http = Number(first?.httpStatus || 0);
+                        if (http && [400, 401, 403, 404, 429].includes(http) &&
+                            errors.every(item => Number(item?.httpStatus || 0) === http &&
+                                item?.apiErrorCode === first?.apiErrorCode)) {
+                            throw first;
+                        }
+                    }
 
                     const batchSmartJobs = batchSettlements
                         .filter(settlement => settlement.status === 'fulfilled')
@@ -4988,19 +5021,22 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 });
                 if (isCurrentAutoScanRun(scanRunId)) publishAiScanDiagnostics(diagnostics);
                 if (totalFailureCount > 0) {
-                    writeRunStatus(`<i class="fas fa-exclamation-triangle text-amber-600"></i> 掃描完成，但有 ${totalFailureCount} 張失敗；成功結果已保留`);
+                    const firstFailure = diagnostics.images.flatMap(image => image.failures)[0];
+                    const hint = classifiedJobs.length === 0 && firstFailure ? `｜${formatAiTransportFailure(firstFailure)}` : '';
+                    writeRunStatus(`<i class="fas fa-exclamation-triangle text-amber-600"></i> 掃描完成，但有 ${totalFailureCount} 張失敗；成功結果已保留${hint}`);
                 } else if (smartHundoJobs.length === 0) {
                     writeRunStatus(`AI掃描完成｜${totalFiles}張圖片｜補掃${diagnostics.ordinary_recovery_request_count}張｜${(diagnostics.total_duration_ms / 1000).toFixed(1)}秒`);
                 }
             } catch (error) {
                 if (!isCurrentAutoScanRun(scanRunId)) return;
-                alert("GPT 解析失敗，請稍後再試");
+                const failureExplanation = formatAiTransportFailure(error);
+                alert(failureExplanation);
                 const summary = safeSmartHundoErrorSummary(error, 'auto_scan', 'auto_scan_failed');
                 console.warn('AI scan failed', summary);
                 diagnostics.total_duration_ms = aiScanNow() - scanStartedAt;
                 diagnostics.failure = safeAiFailure(error, 'auto_scan');
                 publishAiScanDiagnostics(diagnostics);
-                const failureStatus = `<i class="fas fa-exclamation-triangle text-red-600"></i> ${AI_SCAN_STATUS_LABEL} 失敗，請稍後再試`;
+                const failureStatus = `<i class="fas fa-exclamation-triangle text-red-600"></i> ${AI_SCAN_STATUS_LABEL} 失敗：${failureExplanation}`;
                 if (smartSessionId) {
                     if (isCurrentSmartRun()) setSmartHundoStatus(smartSessionId, failureStatus);
                 } else {
