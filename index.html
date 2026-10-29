@@ -671,12 +671,12 @@
 
             const hasHoenn = item.chk_hoenn !== undefined ? item.chk_hoenn : (txt.includes('豐原三神') || txt.includes('豐原雙神') || txt.includes('固拉多可 Mega') || txt.includes('蓋歐卡可 Mega') || txt.includes('烈空坐能量夠Mega'));
             setChk('chk_hoenn', hasHoenn);
-            if(txt.includes('⭐️豐原三神可 Mega⭐️')) setVal('sel_hoenn', '⭐️豐原三神可 Mega⭐️');
+            if(txt.includes('⭐️豐原三神能量夠Mega⭐️') || txt.includes('⭐️豐原三神可 Mega⭐️')) setVal('sel_hoenn', '⭐️豐原三神能量夠Mega⭐️');
             else if(txt.includes('⭐️豐原雙神可 Mega⭐️')) setVal('sel_hoenn', '⭐️豐原雙神可 Mega⭐️');
             else if(txt.includes('⭐️固拉多可 Mega⭐️')) setVal('sel_hoenn', '⭐️固拉多可 Mega⭐️');
             else if(txt.includes('⭐️蓋歐卡可 Mega⭐️')) setVal('sel_hoenn', '⭐️蓋歐卡可 Mega⭐️');
             else if(txt.includes('⭐️烈空坐能量夠Mega⭐️')) setVal('sel_hoenn', '⭐️烈空坐能量夠Mega⭐️');
-            else setVal('sel_hoenn', item.sel_hoenn || '⭐️豐原三神可 Mega⭐️');
+            else setVal('sel_hoenn', item.sel_hoenn === '⭐️豐原三神可 Mega⭐️' ? '⭐️豐原三神能量夠Mega⭐️' : (item.sel_hoenn || '⭐️豐原三神能量夠Mega⭐️'));
 
             setChk('chk_dyna', item.chk_dyna_form !== undefined ? item.chk_dyna_form : txt.includes('✨可打極巨化／超極巨化✨'));
             setChk('chk_groudon', item.chk_groudon !== undefined ? item.chk_groudon : txt.includes('固拉多斷崖之劍'));
@@ -5489,7 +5489,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                             <div class="space-y-1">
                                 <label class="flex items-center gap-1"><input type="checkbox" id="chk_hoenn" onchange="document.getElementById('sel_hoenn').classList.toggle('hidden', !this.checked)">豐原三神 Mega</label>
                                 <select id="sel_hoenn" class="dynamic-select hidden w-full p-1 border rounded bg-white">
-                                    <option value="⭐️豐原三神可 Mega⭐️">豐原三神可 Mega</option>
+                                    <option value="⭐️豐原三神能量夠Mega⭐️">豐原三神能量夠Mega</option>
                                     <option value="⭐️豐原雙神可 Mega⭐️">豐原雙神可 Mega</option>
                                     <option value="⭐️固拉多可 Mega⭐️">固拉多可 Mega</option>
                                     <option value="⭐️蓋歐卡可 Mega⭐️">蓋歐卡可 Mega</option>
