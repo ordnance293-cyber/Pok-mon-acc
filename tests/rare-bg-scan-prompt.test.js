@@ -11,7 +11,10 @@ const extractionEnd = source.indexOf('const applyAiResultToForm =', extractionSt
 assert.ok(extractionStart >= 0 && extractionEnd > extractionStart, 'rare extraction function should remain present');
 const extraction = source.slice(extractionStart, extractionEnd);
 
+const inkStart = source.indexOf("case 'INK_BACKGROUND_SCREEN':");
 const rareStart = source.indexOf("case 'RARE_BACKGROUND_SCREEN':");
+assert.ok(inkStart >= 0 && rareStart > inkStart, 'ink scan prompt must precede purple rare scan prompt');
+const inkPrompt = source.slice(inkStart, rareStart);
 const armoredStart = source.indexOf("case 'ARMORED_MEWTWO_SCREEN':", rareStart);
 const resourceStart = source.indexOf("case 'RESOURCE_SCREEN':", armoredStart);
 assert.ok(rareStart >= 0 && armoredStart > rareStart && resourceStart > armoredStart, 'rare prompt branches should remain present');
@@ -25,7 +28,7 @@ const classificationPrompt = source.slice(classificationStart, classificationEnd
 
 // The rare-card extractor must use the same model, reasoning budget, and image
 // detail as the Smart Hundo extractor, without changing ordinary scans.
-assert.match(extraction, /const isRareVisualScan = \['RARE_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN'\]\.includes\(classification\.image_type\);/);
+assert.match(extraction, /const isRareVisualScan = \['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN'\]\.includes\(classification\.image_type\);/);
 assert.match(extraction, /requestOptions\.model = HUNDO_SMART_MODEL/);
 assert.match(extraction, /requestOptions\.reasoningEffort = HUNDO_SMART_REASONING_EFFORT/);
 assert.match(extraction, /imageDetail: isRareVisualScan \? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL/);
@@ -61,13 +64,26 @@ assert.match(armoredPrompt, /排除普通超夢、Mega 超夢 X、Mega 超夢 Y/
 assert.match(armoredPrompt, /稀有裝甲超夢N隻/);
 assert.match(source, /copySimpleText\('特殊&傳說的寶可夢,幻,究極異獸', this\)[^>]*>裝甲超夢<\/button>/);
 
+// Exact search query is the only entrypoint to ink background extraction.
+assert.equal(rareHelpers.INK_BACKGROUND_SEARCH_FILTER, '384,888,889&特別背卡');
+assert.match(classificationPrompt, /INK_BACKGROUND_SCREEN/);
+assert.match(classificationPrompt, /指定圖鑑編號 384／888／889/);
+assert.match(inkPrompt, /只允許 #384 烈空坐、#888 蒼響、#889 藏瑪然特/);
+assert.match(inkPrompt, /水墨背卡：烈空坐\*3,蒼響\*2,藏瑪然特/);
+assert.match(inkPrompt, /不可加「特別背卡」、「特殊背卡」或「水墨背卡」/);
+assert.match(source, /copySimpleText\('384,888,889&特別背卡', this\)[^>]*>水墨背卡<\/button>/);
+assert.match(source, /INK_BACKGROUND_SCREEN: \['rare_list'\]/);
+assert.match(source, /normalizeInkBackgroundList\(result\?\.rare_list\)/);
+assert.match(source, /mergeInkBackgroundLists\(inkBackgroundLists\)/);
+assert.match(source, /\['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN'\]\.includes\(job\.classification\.image_type\)/);
+
 const mergeStart = source.indexOf('const mergeAiResults =');
 const mergeEnd = source.indexOf('const isPopulatedAiValue =', mergeStart);
 const mergeBlock = source.slice(mergeStart, mergeEnd);
 assert.ok(
-  mergeBlock.indexOf('rareBackgroundLists') < mergeBlock.indexOf('armoredMewtwoLists'),
-  'rare background lines must be merged before Armored Mewtwo lines'
+  mergeBlock.indexOf('inkBackgroundLists') < mergeBlock.indexOf('rareBackgroundLists') && mergeBlock.indexOf('rareBackgroundLists') < mergeBlock.indexOf('armoredMewtwoLists'),
+  'ink background must be above purple background and Armored Mewtwo lines'
 );
 assert.match(mergeBlock, /rareLines\.filter\(Boolean\)\.join\('\\n'\)/);
 
-console.log('PASS rare background and armored Mewtwo scan prompt tests');
+console.log('PASS rare background, ink background and armored Mewtwo scan prompt tests');

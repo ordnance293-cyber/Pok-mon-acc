@@ -3,6 +3,8 @@
 (function attachRareBackgroundScanHelpers(globalScope) {
     const RARE_BACKGROUND_SEARCH_FILTER = '極巨化,超極巨化&背卡';
     const RARE_BACKGROUND_PREFIX = '稀有紫黑背卡:';
+    const INK_BACKGROUND_SEARCH_FILTER = '384,888,889&特別背卡';
+    const INK_BACKGROUND_PREFIX = '水墨背卡：';
     const ARMORED_MEWTWO_SEARCH_FILTER = '特殊&傳說的寶可夢,幻,究極異獸';
     const ARMORED_MEWTWO_PREFIX = '稀有裝甲超夢';
 
@@ -16,6 +18,10 @@
 
     const isArmoredMewtwoSearchQuery = value => (
         normalizeSearchQuery(value) === ARMORED_MEWTWO_SEARCH_FILTER
+    );
+
+    const isInkBackgroundSearchQuery = value => (
+        normalizeSearchQuery(value) === INK_BACKGROUND_SEARCH_FILTER
     );
 
     const stripCodeFence = value => String(value ?? '')
@@ -73,6 +79,81 @@
     const mergeRareBackgroundLists = values => formatEntries(
         (Array.isArray(values) ? values : [values]).flatMap(parseEntries)
     );
+
+    const INK_BACKGROUND_NAME_ALIASES = new Map([
+        ['384', '烈空坐'], ['烈空坐', '烈空坐'], ['rayquaza', '烈空坐'],
+        ['888', '蒼響'], ['蒼響', '蒼響'], ['zacian', '蒼響'],
+        ['蒼響劍王', '蒼響'], ['蒼響劍之王', '蒼響'], ['劍之王蒼響', '蒼響'],
+        ['889', '藏瑪然特'], ['藏瑪然特', '藏瑪然特'], ['zamazenta', '藏瑪然特'],
+        ['藏瑪然特盾王', '藏瑪然特'], ['藏瑪然特盾之王', '藏瑪然特'], ['盾之王藏瑪然特', '藏瑪然特']
+    ]);
+
+    const parseInkBackgroundEntry = value => {
+        let token = String(value ?? '').trim();
+        if (!token) return null;
+        let count = 1;
+        const countMatch = token.match(/\s*\*\s*(\d+)\s*$/);
+        if (countMatch) {
+            count = Number(countMatch[1]);
+            token = token.slice(0, countMatch.index).trim();
+        }
+        if (!Number.isSafeInteger(count) || count < 1) return null;
+        const key = token
+            .replace(/^(?:(?:特別|特殊|水墨)背卡\s*)+/u, '')
+            .replace(/[\s#（）()]/g, '')
+            .toLowerCase();
+        const name = INK_BACKGROUND_NAME_ALIASES.get(key);
+        return name ? { name, count } : null;
+    };
+
+    const parseInkBackgroundEntries = value => {
+        const raw = stripCodeFence(value).replace(/^水墨背卡\s*[:：]\s*/u, '');
+        if (!raw) return [];
+        return raw.split(/[,，、\n]+/).map(parseInkBackgroundEntry).filter(Boolean);
+    };
+
+    const formatInkBackgroundEntries = entries => {
+        const grouped = new Map();
+        entries.forEach(({ name, count }) => {
+            grouped.set(name, (grouped.get(name) || 0) + count);
+        });
+        return grouped.size
+            ? INK_BACKGROUND_PREFIX + [...grouped].map(([name, count]) => name + (count > 1 ? '*' + count : '')).join(',')
+            : '';
+    };
+
+    const normalizeInkBackgroundList = value => formatInkBackgroundEntries(parseInkBackgroundEntries(value));
+    const mergeInkBackgroundLists = values => formatInkBackgroundEntries(
+        (Array.isArray(values) ? values : [values]).flatMap(parseInkBackgroundEntries)
+    );
+
+    const getRareListLineCategory = line => {
+        if (/^水墨背卡\s*[:：]/u.test(line)) return 'ink';
+        if (/^稀有紫黑背卡\s*[:：]/u.test(line)) return 'purple';
+        if (/^稀有裝甲超夢/u.test(line)) return 'armored';
+        return '';
+    };
+
+    // Retain manual rare notes and other background results across separate
+    // scans; replace a re-scanned category instead of double-counting it.
+    const mergeRareListSections = (current, incoming) => {
+        const lines = String(current ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        String(incoming ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).forEach(line => {
+            const category = getRareListLineCategory(line);
+            const matchIndex = category
+                ? lines.findIndex(existing => getRareListLineCategory(existing) === category)
+                : lines.indexOf(line);
+            if (matchIndex >= 0) lines[matchIndex] = line;
+            else lines.push(line);
+        });
+        const inkIndex = lines.findIndex(line => getRareListLineCategory(line) === 'ink');
+        const purpleIndex = lines.findIndex(line => getRareListLineCategory(line) === 'purple');
+        if (purpleIndex >= 0 && inkIndex > purpleIndex) {
+            const [inkLine] = lines.splice(inkIndex, 1);
+            lines.splice(purpleIndex, 0, inkLine);
+        }
+        return lines.join('\n');
+    };
 
     const parseArmoredMewtwoCount = value => {
         const raw = stripCodeFence(value).trim();
@@ -182,12 +263,18 @@
     const api = {
         RARE_BACKGROUND_SEARCH_FILTER,
         RARE_BACKGROUND_PREFIX,
+        INK_BACKGROUND_SEARCH_FILTER,
+        INK_BACKGROUND_PREFIX,
         ARMORED_MEWTWO_SEARCH_FILTER,
         ARMORED_MEWTWO_PREFIX,
         isRareBackgroundSearchQuery,
         isArmoredMewtwoSearchQuery,
+        isInkBackgroundSearchQuery,
         normalizeRareBackgroundList,
         mergeRareBackgroundLists,
+        normalizeInkBackgroundList,
+        mergeInkBackgroundLists,
+        mergeRareListSections,
         normalizeArmoredMewtwoRareList,
         mergeArmoredMewtwoRareLists,
         insertRarePresetAtCaret,
