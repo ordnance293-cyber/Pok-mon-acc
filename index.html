@@ -1212,6 +1212,7 @@
         const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
         const LEGENDARY_FILTER = '傳說的寶可夢,幻,究極異獸';
         const HUNDO_LEGENDARY_FILTER = `${LEGENDARY_FILTER}&4*`;
+        const HUNDO_DYNAMAX_SEARCH_FILTER = globalThis.RareBackgroundScanHelpers?.HUNDO_DYNAMAX_SEARCH_FILTER || '4*&極巨化,超極巨化';
         const RARE_BACKGROUND_SEARCH_FILTER = globalThis.RareBackgroundScanHelpers?.RARE_BACKGROUND_SEARCH_FILTER || '極巨化,超極巨化&背卡';
         const INK_BACKGROUND_SEARCH_FILTER = globalThis.RareBackgroundScanHelpers?.INK_BACKGROUND_SEARCH_FILTER || '384,888,889&特別背卡';
         const ARMORED_MEWTWO_FILTER = globalThis.RareBackgroundScanHelpers?.ARMORED_MEWTWO_SEARCH_FILTER || '特殊&傳說的寶可夢,幻,究極異獸';
@@ -1242,6 +1243,7 @@
             'BG_SPECIAL_CATEGORY_SCREEN',
             'DYNA_CATEGORY_SCREEN',
             'GIGA_CATEGORY_SCREEN',
+            'HUNDO_DYNAMAX_SCREEN',
             'RARE_BACKGROUND_SCREEN',
             'INK_BACKGROUND_SCREEN',
             'ARMORED_MEWTWO_SCREEN',
@@ -1251,6 +1253,7 @@
             'OTHER'
         ]);
         const AI_SEARCH_QUERY_IMAGE_TYPES = [
+            { query: HUNDO_DYNAMAX_SEARCH_FILTER, imageType: 'HUNDO_DYNAMAX_SCREEN' },
             { query: RARE_BACKGROUND_SEARCH_FILTER, imageType: 'RARE_BACKGROUND_SCREEN' },
             { query: INK_BACKGROUND_SEARCH_FILTER, imageType: 'INK_BACKGROUND_SCREEN' },
             { query: ARMORED_MEWTWO_FILTER, imageType: 'ARMORED_MEWTWO_SCREEN' },
@@ -1285,6 +1288,7 @@
             BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
+            HUNDO_DYNAMAX_SCREEN: ['rare_list'],
             RARE_BACKGROUND_SCREEN: ['rare_list'],
             INK_BACKGROUND_SCREEN: ['rare_list'],
             ARMORED_MEWTWO_SCREEN: ['rare_list'],
@@ -1306,6 +1310,7 @@
             BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
+            HUNDO_DYNAMAX_SCREEN: ['rare_list'],
             RARE_BACKGROUND_SCREEN: ['rare_list'],
             INK_BACKGROUND_SCREEN: ['rare_list'],
             ARMORED_MEWTWO_SCREEN: ['rare_list'],
@@ -1327,6 +1332,7 @@
             BG_SPECIAL_CATEGORY_SCREEN: ['bg_special'],
             DYNA_CATEGORY_SCREEN: ['dyna'],
             GIGA_CATEGORY_SCREEN: ['giga'],
+            HUNDO_DYNAMAX_SCREEN: ['rare_list'],
             RARE_BACKGROUND_SCREEN: ['rare_list'],
             INK_BACKGROUND_SCREEN: ['rare_list'],
             ARMORED_MEWTWO_SCREEN: ['rare_list'],
@@ -1344,7 +1350,7 @@
             bg_special: { CATEGORY_OVERVIEW_SCREEN: 1, BG_SPECIAL_CATEGORY_SCREEN: 2 },
             dyna: { CATEGORY_OVERVIEW_SCREEN: 1, DYNA_CATEGORY_SCREEN: 2 },
             giga: { CATEGORY_OVERVIEW_SCREEN: 1, GIGA_CATEGORY_SCREEN: 2 },
-            rare_list: { RARE_BACKGROUND_SCREEN: 1, INK_BACKGROUND_SCREEN: 1, ARMORED_MEWTWO_SCREEN: 1 },
+            rare_list: { HUNDO_DYNAMAX_SCREEN: 1, RARE_BACKGROUND_SCREEN: 1, INK_BACKGROUND_SCREEN: 1, ARMORED_MEWTWO_SCREEN: 1 },
             perfect: { CATEGORY_OVERVIEW_SCREEN: 1 },
             old_poke: { OLD_POKEMON_SCREEN: 1 },
             old_leg: { OLD_LEGENDARY_SCREEN: 1 },
@@ -1417,6 +1423,7 @@
                             'BG_SPECIAL_CATEGORY_SCREEN',
                             'DYNA_CATEGORY_SCREEN',
                             'GIGA_CATEGORY_SCREEN',
+                            'HUNDO_DYNAMAX_SCREEN',
                             'RARE_BACKGROUND_SCREEN',
                             'INK_BACKGROUND_SCREEN',
                             'ARMORED_MEWTWO_SCREEN',
@@ -2183,6 +2190,8 @@
                 normalized.rare_list = globalThis.RareBackgroundScanHelpers?.normalizeRareBackgroundList(result?.rare_list) || '';
             } else if (normalized.image_type === 'INK_BACKGROUND_SCREEN') {
                 normalized.rare_list = globalThis.RareBackgroundScanHelpers?.normalizeInkBackgroundList(result?.rare_list) || '';
+            } else if (normalized.image_type === 'HUNDO_DYNAMAX_SCREEN') {
+                normalized.rare_list = globalThis.RareBackgroundScanHelpers?.normalizeHundoDynamaxList(result?.rare_list) || '';
             } else if (normalized.image_type === 'ARMORED_MEWTWO_SCREEN') {
                 normalized.rare_list = globalThis.RareBackgroundScanHelpers?.normalizeArmoredMewtwoRareList(result?.rare_list) || '';
             } else {
@@ -2292,6 +2301,10 @@
                 .filter(result => result.image_type === 'INK_BACKGROUND_SCREEN')
                 .map(result => result.rare_list)
                 .filter(value => String(value || '').trim() !== '');
+            const hundoDynamaxLists = results
+                .filter(result => result.image_type === 'HUNDO_DYNAMAX_SCREEN')
+                .map(result => result.rare_list)
+                .filter(value => String(value || '').trim() !== '');
             const rareBackgroundLists = results
                 .filter(result => result.image_type === 'RARE_BACKGROUND_SCREEN')
                 .map(result => result.rare_list)
@@ -2306,6 +2319,12 @@
                 rareLines.push(
                     globalThis.RareBackgroundScanHelpers?.mergeInkBackgroundLists(inkBackgroundLists)
                     || inkBackgroundLists[0]
+                );
+            }
+            if (hundoDynamaxLists.length) {
+                rareLines.push(
+                    globalThis.RareBackgroundScanHelpers?.mergeHundoDynamaxLists(hundoDynamaxLists)
+                    || hundoDynamaxLists[0]
                 );
             }
             if (rareBackgroundLists.length) {
@@ -2326,7 +2345,7 @@
         };
 
         const isPopulatedAiValue = (value) => String(value || '').trim() !== '';
-        const RARE_LIST_IMAGE_TYPES = new Set(['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN']);
+        const RARE_LIST_IMAGE_TYPES = new Set(['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN', 'HUNDO_DYNAMAX_SCREEN']);
         const getRequiredValidationFields = (classifications = []) => [
             ...AI_REQUIRED_VALIDATION_FIELDS,
             ...(classifications.some(classification => RARE_LIST_IMAGE_TYPES.has(classification.image_type))
@@ -2440,6 +2459,7 @@ image_type 只能是：
 - BG_SPECIAL_CATEGORY_SCREEN
 - DYNA_CATEGORY_SCREEN
 - GIGA_CATEGORY_SCREEN
+- HUNDO_DYNAMAX_SCREEN
 - RARE_BACKGROUND_SCREEN
 - INK_BACKGROUND_SCREEN
 - ARMORED_MEWTWO_SCREEN
@@ -2450,6 +2470,11 @@ image_type 只能是：
 
 【分類規則】
 先檢查搜尋欄。只有搜尋欄「完全符合」以下字串，才可判成對應搜尋頁：
+0. 若搜尋欄完全符合「${HUNDO_DYNAMAX_SEARCH_FILTER}」
+   - image_type = HUNDO_DYNAMAX_SCREEN
+   - search_query = "${HUNDO_DYNAMAX_SEARCH_FILTER}"
+
+   這是百極巨的 100% IV 極巨化／超極巨化搜尋清單。每張卡片的 X 型圖標必須獨立判斷：實心／塗滿 X 型圖標 = 超極巨化；空心／僅輪廓 X 型圖標 = 極巨化。不可依物種、暱稱、CP 或鄰近寶可夢推斷；看不清楚時保持不確定，不要以全部結果都屬於同一種型態代替判讀。
 1. 若搜尋欄完全符合「${RARE_BACKGROUND_SEARCH_FILTER}」
    - image_type = RARE_BACKGROUND_SCREEN
    - search_query = "${RARE_BACKGROUND_SEARCH_FILTER}"
@@ -2532,7 +2557,7 @@ image_type 只能是：
    - 若看得到搜尋欄文字，就把實際搜尋字串填入 search_query；若看不到則填 ""
 
 【重要】
-1. 只有搜尋欄「完全符合」上述 8 種查詢時，才可判成對應搜尋頁。
+1. 只有搜尋欄「完全符合」上述 9 種查詢時，才可判成對應搜尋頁。
 2. 例如「年16-20&異色」「年16-20&4*」「${LEGENDARY_FILTER}&異色&4*」「異色」都不是允許的搜尋頁，必須判成 OTHER。
 3. CATEGORY_OVERVIEW_SCREEN 優先於單一分類頁；若同時看得到多個分類統計，必須判成 CATEGORY_OVERVIEW_SCREEN。
 4. 只有 HUNDO_LEGENDARY_SCREEN 且搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」之後，才可能啟用百神清單辨識；其他任何類型都不能當作百神清單圖。
@@ -2715,6 +2740,23 @@ ${outputTemplate}
 3. 禁止從個人檔案頁、分類頁、搜尋頁或資源頁推測 stardust。
 
 除了 stardust 之外，其餘欄位都必須留空字串。`;
+                case 'HUNDO_DYNAMAX_SCREEN':
+                    return `${baseRules}
+
+這是一張搜尋欄完全符合「${HUNDO_DYNAMAX_SEARCH_FILTER}」的寶可夢清單截圖。使用者稱為「百極巨」，只辨識目前畫面可見的寶可夢與對應型態，寫入 rare_list，不能從此搜尋頁推算帳號的極巨化／超極巨化總數。
+
+【百極巨：極巨化與超極巨化辨識規則】
+1. 必須逐張檢查畫面可見的卡片，依上到下、每列由左至右，每張最多計一次；頂部「寶可夢 (N)」只可交叉核對，不能直接拿來當可辨識的數量，不能推測截圖外卡片。
+2. 根據各卡片右上方、位於本體背後的粉紅 X 型圖標，優先判斷圖標本身的填充狀態：
+   - 實心／塗滿 X 型圖標，筆畫內部大部分沒有背景透出：超極巨化。
+   - 空心／只有輪廓 X 型圖標，內部可見背景留白：極巨化。
+   圖標的整體粉紅色深淺、大小、位置、形態名稱及是否有金色最愛星星，都不是單獨的判定依據。
+3. 每隻寶可夢單獨確認 X 型圖標。若被最愛星星、寶可夢本體遮擋，或模糊、不完整、無法確認實心／空心，該卡不要計入任何型態；嚴禁依寶可夢種類（包括可超極巨化的種類）、CP、暱稱中的「100」或「極」、鄰近卡片推測。4* 僅是已設定的搜尋條件，不用從名稱推斷個體值。
+4. 只在寶可夢物種與 X 圖標狀態都清楚時記錄。暱稱不是物種名稱，應按清楚可見的本體辨識物種；無法確認時略過，禁止編造。
+5. rare_list 僅輸出一行，以「百極巨：」開頭，每個條目以「極巨化」或「超極巨化」緊接寶可夢繁體中文名稱，不加空格，用半形逗號分隔；例如：
+   百極巨：極巨化毛毛角羊,超極巨化妙蛙花*2
+6. 同型態且同物種的卡片才合併為 *N；同物種的極巨化與超極巨化必須分開計算；數量 1 不寫 *1。
+7. 若全部可見卡片都看不清型態或名稱，rare_list 留空，不能猜測湊數。此分支只允許 rare_list 辨識寶可夢名稱；pokemon_list 及其餘欄位全部留空字串。`;
                 case 'INK_BACKGROUND_SCREEN':
                     return `${baseRules}
 
@@ -4134,7 +4176,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
         };
 
         const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = [], diagnosticRequestType = 'ordinary_primary') => {
-            const isRareVisualScan = ['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN'].includes(classification.image_type);
+            const isRareVisualScan = ['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN', 'HUNDO_DYNAMAX_SCREEN'].includes(classification.image_type);
             const requestOptions = {
                 imageDetail: isRareVisualScan ? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL,
                 diagnosticRequestType
@@ -4169,9 +4211,9 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 if (!normalizedValue) return;
                 const input = document.getElementById(id);
                 const rareHelpers = globalThis.RareBackgroundScanHelpers;
-                const hasInkBackground = id === 'g_rare_list'
-                    && /水墨背卡\s*[:：]/u.test(input.value + '\n' + normalizedValue);
-                input.value = hasInkBackground && typeof rareHelpers?.mergeRareListSections === 'function'
+                const shouldMergeRareList = id === 'g_rare_list'
+                    && typeof rareHelpers?.mergeRareListSections === 'function';
+                input.value = shouldMergeRareList
                     ? rareHelpers.mergeRareListSections(input.value, normalizedValue)
                     : normalizedValue;
                 if (STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.has(id)) {
@@ -4539,7 +4581,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     trainerTeamScanId = beginTrainerTeamScan();
                 }
                 const normalDataUrls = await Promise.all(normalJobs.map(async job => {
-                    if (['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN'].includes(job.classification.image_type)) return fileToOriginalDataUrl(job.file);
+                    if (['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'HUNDO_DYNAMAX_SCREEN'].includes(job.classification.image_type)) return fileToOriginalDataUrl(job.file);
                     if (job.classification.image_type !== 'SHINY_LEGENDARY_SCREEN') return job.classificationDataUrl;
                     const originalDataUrl = await fileToOriginalDataUrl(job.file);
                     return fileToShinyLegendaryEvidenceDataUrl(originalDataUrl);
@@ -5455,7 +5497,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                                 <button type="button" id="aiAutoBtn" onclick="autoScan()" class="w-full bg-indigo-600 text-white px-2 py-2 rounded-lg text-[11px] md:text-sm font-bold shadow-lg hover:bg-indigo-700 transition">🤖 AI自動掃描</button>
                                 <button type="button" id="aiDiagnosticsBtn" onclick="openAiDiagnostics()" class="hidden w-full bg-white border border-indigo-200 text-indigo-700 px-2 py-1.5 rounded-lg text-[11px] md:text-sm font-bold hover:bg-indigo-50 transition">📋 AI 診斷</button>
                                 <p id="aiAutoStatus" class="px-1 text-[10px] text-indigo-600 min-h-[1rem] leading-relaxed"></p>
-                                <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；命中「傳說的寶可夢,幻,究極異獸&amp;4*」時辨識百神清單，命中「特殊&amp;傳說的寶可夢,幻,究極異獸」時辨識裝甲超夢，命中「384,888,889&amp;特別背卡」時整理水墨背卡，其餘圖片只讀對應欄位，最後統一回填。</p>
+                                <p class="px-1 text-[10px] text-gray-500 leading-relaxed">系統會先分析每張截圖用途；命中「傳說的寶可夢,幻,究極異獸&amp;4*」時辨識百神清單，命中「特殊&amp;傳說的寶可夢,幻,究極異獸」時辨識裝甲超夢，命中「4*&amp;極巨化,超極巨化」時辨識百極巨，命中「384,888,889&amp;特別背卡」時整理水墨背卡，其餘圖片只讀對應欄位，最後統一回填。</p>
                             </div>
                         </div>
 

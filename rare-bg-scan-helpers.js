@@ -5,6 +5,8 @@
     const RARE_BACKGROUND_PREFIX = '稀有紫黑背卡:';
     const INK_BACKGROUND_SEARCH_FILTER = '384,888,889&特別背卡';
     const INK_BACKGROUND_PREFIX = '水墨背卡：';
+    const HUNDO_DYNAMAX_SEARCH_FILTER = '4*&極巨化,超極巨化';
+    const HUNDO_DYNAMAX_PREFIX = '百極巨：';
     const ARMORED_MEWTWO_SEARCH_FILTER = '特殊&傳說的寶可夢,幻,究極異獸';
     const ARMORED_MEWTWO_PREFIX = '稀有裝甲超夢';
 
@@ -22,6 +24,10 @@
 
     const isInkBackgroundSearchQuery = value => (
         normalizeSearchQuery(value) === INK_BACKGROUND_SEARCH_FILTER
+    );
+
+    const isHundoDynamaxSearchQuery = value => (
+        normalizeSearchQuery(value) === HUNDO_DYNAMAX_SEARCH_FILTER
     );
 
     const stripCodeFence = value => String(value ?? '')
@@ -58,7 +64,7 @@
             .filter(Boolean);
     };
 
-    const formatEntries = entries => {
+    const formatEntries = (entries, prefix = RARE_BACKGROUND_PREFIX) => {
         if (!entries.length) return '';
         const grouped = new Map();
         entries.forEach(entry => {
@@ -71,13 +77,27 @@
         const formatted = [...grouped.values()]
             .map(({ type, name, count }) => type + name + (count > 1 ? '*' + count : ''))
             .join(',');
-        return formatted ? RARE_BACKGROUND_PREFIX + formatted : '';
+        return formatted ? prefix + formatted : '';
     };
 
     const normalizeRareBackgroundList = value => formatEntries(parseEntries(value));
 
     const mergeRareBackgroundLists = values => formatEntries(
         (Array.isArray(values) ? values : [values]).flatMap(parseEntries)
+    );
+
+    // 100% IV Dynamax and Gigantamax searches are classified by the X badge, not by species.
+    // Keep the prefix distinct from the rare-purple-background collection.
+    const parseHundoDynamaxEntries = value => {
+        const raw = stripCodeFence(value).replace(/^百極巨\s*[:：]\s*/u, '');
+        if (!raw) return [];
+        return raw.split(/[,，、\n]+/).map(parseEntry).filter(Boolean);
+    };
+
+    const normalizeHundoDynamaxList = value => formatEntries(parseHundoDynamaxEntries(value), HUNDO_DYNAMAX_PREFIX);
+    const mergeHundoDynamaxLists = values => formatEntries(
+        (Array.isArray(values) ? values : [values]).flatMap(parseHundoDynamaxEntries),
+        HUNDO_DYNAMAX_PREFIX
     );
 
     const INK_BACKGROUND_NAME_ALIASES = new Map([
@@ -129,6 +149,7 @@
 
     const getRareListLineCategory = line => {
         if (/^水墨背卡\s*[:：]/u.test(line)) return 'ink';
+        if (/^百極巨\s*[:：]/u.test(line)) return 'hundo_dynamax';
         if (/^稀有紫黑背卡\s*[:：]/u.test(line)) return 'purple';
         if (/^稀有裝甲超夢/u.test(line)) return 'armored';
         return '';
@@ -151,6 +172,19 @@
         if (purpleIndex >= 0 && inkIndex > purpleIndex) {
             const [inkLine] = lines.splice(inkIndex, 1);
             lines.splice(purpleIndex, 0, inkLine);
+        }
+        // Keep named card groups above purple-background entries when rescan order changes.
+        const hundoIndex = lines.findIndex(line => getRareListLineCategory(line) === 'hundo_dynamax');
+        const purpleIndexAfterInk = lines.findIndex(line => getRareListLineCategory(line) === 'purple');
+        if (purpleIndexAfterInk >= 0 && hundoIndex > purpleIndexAfterInk) {
+            const [hundoLine] = lines.splice(hundoIndex, 1);
+            lines.splice(purpleIndexAfterInk, 0, hundoLine);
+        }
+        const inkIndexAfter = lines.findIndex(line => getRareListLineCategory(line) === 'ink');
+        const hundoIndexAfter = lines.findIndex(line => getRareListLineCategory(line) === 'hundo_dynamax');
+        if (hundoIndexAfter >= 0 && inkIndexAfter > hundoIndexAfter) {
+            const [inkLine] = lines.splice(inkIndexAfter, 1);
+            lines.splice(hundoIndexAfter, 0, inkLine);
         }
         return lines.join('\n');
     };
@@ -265,15 +299,20 @@
         RARE_BACKGROUND_PREFIX,
         INK_BACKGROUND_SEARCH_FILTER,
         INK_BACKGROUND_PREFIX,
+        HUNDO_DYNAMAX_SEARCH_FILTER,
+        HUNDO_DYNAMAX_PREFIX,
         ARMORED_MEWTWO_SEARCH_FILTER,
         ARMORED_MEWTWO_PREFIX,
         isRareBackgroundSearchQuery,
         isArmoredMewtwoSearchQuery,
         isInkBackgroundSearchQuery,
+        isHundoDynamaxSearchQuery,
         normalizeRareBackgroundList,
         mergeRareBackgroundLists,
         normalizeInkBackgroundList,
         mergeInkBackgroundLists,
+        normalizeHundoDynamaxList,
+        mergeHundoDynamaxLists,
         mergeRareListSections,
         normalizeArmoredMewtwoRareList,
         mergeArmoredMewtwoRareLists,
