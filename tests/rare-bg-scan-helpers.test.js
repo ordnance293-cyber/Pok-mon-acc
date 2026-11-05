@@ -11,6 +11,10 @@ const {
     normalizeInkBackgroundList,
     mergeInkBackgroundLists,
     mergeRareListSections,
+    HUNDO_DYNAMAX_SEARCH_FILTER,
+    isHundoDynamaxSearchQuery,
+    normalizeHundoDynamaxList,
+    mergeHundoDynamaxLists,
     insertRarePresetAtCaret,
     removeRarePresetLine
 } = require('../rare-bg-scan-helpers.js');
@@ -125,6 +129,33 @@ assert.equal(
 assert.equal(
     mergeRareListSections('稀有紫黑背卡:極巨化噴火龍\n水墨背卡：烈空坐*2', '水墨背卡：烈空坐*3'),
     '水墨背卡：烈空坐*3\n稀有紫黑背卡:極巨化噴火龍'
+);
+
+assert.equal(HUNDO_DYNAMAX_SEARCH_FILTER, '4*&極巨化,超極巨化');
+assert.equal(isHundoDynamaxSearchQuery(' 4* & 極巨化, 超極巨化 '), true);
+assert.equal(isHundoDynamaxSearchQuery('極巨化,超極巨化&背卡'), false);
+assert.equal(isHundoDynamaxSearchQuery('4*&極巨化,超極巨化&異色'), false);
+assert.equal(
+    normalizeHundoDynamaxList('百極巨：極巨化毛毛角羊,超極巨化巴大蝶,極巨化毛毛角羊'),
+    '百極巨：極巨化毛毛角羊*2,超極巨化巴大蝶'
+);
+assert.equal(
+    normalizeHundoDynamaxList('百極巨：極巨化巴大蝶*2,超極巨化巴大蝶,超極巨化巴大蝶'),
+    '百極巨：極巨化巴大蝶*2,超極巨化巴大蝶*2'
+);
+assert.equal(normalizeHundoDynamaxList('百極巨：極巨化巴大蝶*0'), '');
+assert.equal(normalizeHundoDynamaxList('百極巨：無法確認型態'), '');
+assert.equal(
+    mergeHundoDynamaxLists(['百極巨：極巨化毛毛角羊,超極巨化巴大蝶', '百極巨：極巨化毛毛角羊,超極巨化巴大蝶*2']),
+    '百極巨：極巨化毛毛角羊*2,超極巨化巴大蝶*3'
+);
+assert.equal(
+    mergeRareListSections('稀有無極汰那\n水墨背卡：烈空坐\n稀有紫黑背卡:極巨化噴火龍', '百極巨：極巨化毛毛角羊,超極巨化巴大蝶'),
+    '稀有無極汰那\n水墨背卡：烈空坐\n百極巨：極巨化毛毛角羊,超極巨化巴大蝶\n稀有紫黑背卡:極巨化噴火龍'
+);
+assert.equal(
+    mergeRareListSections('百極巨：極巨化毛毛角羊\n稀有裝甲超夢2隻', '百極巨：超極巨化巴大蝶*2'),
+    '百極巨：超極巨化巴大蝶*2\n稀有裝甲超夢2隻'
 );
 
 console.log('PASS rare background scan helper tests');
