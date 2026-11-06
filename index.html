@@ -1249,6 +1249,8 @@
             'ARMORED_MEWTWO_SCREEN',
             'TRAINER_PROFILE_SCREEN',
             'POKEMON_DETAIL_SCREEN',
+            'SHOP_COIN_SCREEN',
+            'ITEM_GREENPASS_SCREEN',
             'RESOURCE_SCREEN',
             'OTHER'
         ]);
@@ -1294,6 +1296,8 @@
             ARMORED_MEWTWO_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
+            SHOP_COIN_SCREEN: ['coin'],
+            ITEM_GREENPASS_SCREEN: ['greenpass', 'item_bag'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
             OTHER: []
         };
@@ -1316,6 +1320,8 @@
             ARMORED_MEWTWO_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
+            SHOP_COIN_SCREEN: ['coin'],
+            ITEM_GREENPASS_SCREEN: ['greenpass', 'item_bag'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
             OTHER: []
         };
@@ -1338,6 +1344,8 @@
             ARMORED_MEWTWO_SCREEN: ['rare_list'],
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
+            SHOP_COIN_SCREEN: ['coin'],
+            ITEM_GREENPASS_SCREEN: ['greenpass', 'item_bag'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag']
         };
         const AI_FIELD_SOURCE_PRIORITY = {
@@ -1355,11 +1363,11 @@
             old_poke: { OLD_POKEMON_SCREEN: 1 },
             old_leg: { OLD_LEGENDARY_SCREEN: 1 },
             masterball: { RESOURCE_SCREEN: 1 },
-            greenpass: { RESOURCE_SCREEN: 1 },
+            greenpass: { ITEM_GREENPASS_SCREEN: 2, RESOURCE_SCREEN: 1 },
             rarecandy: { RESOURCE_SCREEN: 1 },
-            coin: { RESOURCE_SCREEN: 1 },
+            coin: { SHOP_COIN_SCREEN: 2, RESOURCE_SCREEN: 1 },
             poke_bag: { CATEGORY_OVERVIEW_SCREEN: 2, RESOURCE_SCREEN: 1 },
-            item_bag: { RESOURCE_SCREEN: 1 },
+            item_bag: { ITEM_GREENPASS_SCREEN: 2, RESOURCE_SCREEN: 1 },
             level: { TRAINER_PROFILE_SCREEN: 1 },
             xp: { TRAINER_PROFILE_SCREEN: 1 },
             stardust: { POKEMON_DETAIL_SCREEN: 1 }
@@ -1429,6 +1437,8 @@
                             'ARMORED_MEWTWO_SCREEN',
                             'TRAINER_PROFILE_SCREEN',
                             'POKEMON_DETAIL_SCREEN',
+                            'SHOP_COIN_SCREEN',
+                            'ITEM_GREENPASS_SCREEN',
                             'RESOURCE_SCREEN',
                             'OTHER'
                         ]
@@ -4088,7 +4098,7 @@ ${mappingLines}`;
             return statusBase;
         };
 
-        const STORAGE_HEADER_IMAGE_TYPES = new Set(['RESOURCE_SCREEN', 'CATEGORY_OVERVIEW_SCREEN']);
+        const STORAGE_HEADER_IMAGE_TYPES = new Set(['RESOURCE_SCREEN', 'ITEM_GREENPASS_SCREEN', 'CATEGORY_OVERVIEW_SCREEN']);
         const buildStorageHeaderPrompt = () => `你是 Pokémon GO 頂部儲存空間標頭的嚴格驗證器。
 裁切中同時出現「寶可夢 161/400」與「蛋 9/12」是正常版面；必須依標籤與數對的直接關聯判斷，不能因第二個分頁或斜線數對而拒絕。
 - 「寶可夢」相連完整 current/capacity：header_type="pokemon"，保留標籤及完整數對。
