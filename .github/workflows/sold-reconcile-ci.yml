@@ -50,6 +50,9 @@ jobs:
       - name: Run rare background scan prompt tests
         run: node tests/rare-bg-scan-prompt.test.js
 
+      - name: Run shop coin and green pass recognition tests
+        run: node tests/shop-coin-greenpass-recognition.test.js
+
       - name: Run static regression checks
         run: python tests/verify_regressions.py
 
