@@ -31,14 +31,14 @@ MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-fo
 FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-crop-form-verifier-v2.md"
 # These snapshots intentionally move when the ordinary prompt contract is
 # deliberately revised; the rare-background icon rules are part of that prompt.
-CLASSIFICATION_PROMPT_HASH = "861d3a59c8f082462ffc28970156919579868fa3b9ea2b0e28d4b5ae2ee13ecb"
-CLASSIFICATION_PROMPT_LENGTH = 3877
-EXTRACTION_PROMPT_HASH = "41a86799463db4d5ace25f11e7ea45a9215b51e418bbe6fb2be3696dc570df56"
-EXTRACTION_PROMPT_LENGTH = 8396
+CLASSIFICATION_PROMPT_HASH = "d002ff379c58b50f93fc718b2a4d866d445573cbe6b4c15eba71a95d7ebee2ff"
+CLASSIFICATION_PROMPT_LENGTH = 4264
+EXTRACTION_PROMPT_HASH = "1f6bb20acf9cc51dd1e91dd1ffcb0eeaf787bc88e89f8377e64315f7c7da180b"
+EXTRACTION_PROMPT_LENGTH = 9396
 RESIZED_IMAGE_FUNCTION_HASH = "c4baf69d9b7a67771b356642bf549806254fe48a676952986150eb616a93daf4"
 RESIZED_IMAGE_FUNCTION_LENGTH = 1276
-SAVE_ACCOUNT_HASH = "b1222adc458417b658847850303e659a0034c590c4c14e2b178e2789b3537b31"
-SAVE_ACCOUNT_LENGTH = 13851
+SAVE_ACCOUNT_HASH = "00665082a6a1c36db4f891c3dcb6cde2ed14dbbcfb14347be47550a7c390d4da"
+SAVE_ACCOUNT_LENGTH = 13948
 NEW_ITEM_HASH = "38dc422adcd809710fdbf6040972e7e26c2ee0de63e3a433e779963b412daf1b"
 NEW_ITEM_LENGTH = 1745
 GENERATE_TEXT_HASH = "458872b462d197fd3cdc613200d4ae98a053bdbf5fff0a54838a33927e8fdb81"
@@ -653,13 +653,13 @@ def main() -> int:
             SMART_HUNDO_SCHEMA_HASH,
             SMART_HUNDO_SCHEMA_LENGTH,
         )),
-        ("ordinary classification prompt has the origin/main snapshot", lambda: assert_snapshot(
+        ("ordinary classification prompt matches approved shop/pass extension", lambda: assert_snapshot(
             "ordinary classification prompt",
             classification_prompt,
             CLASSIFICATION_PROMPT_HASH,
             CLASSIFICATION_PROMPT_LENGTH,
         )),
-        ("ordinary extraction prompt has the origin/main snapshot", lambda: assert_snapshot(
+        ("ordinary extraction prompt matches approved shop/pass extension", lambda: assert_snapshot(
             "ordinary extraction prompt",
             extraction_prompt,
             EXTRACTION_PROMPT_HASH,
@@ -671,7 +671,7 @@ def main() -> int:
             RESIZED_IMAGE_FUNCTION_HASH,
             RESIZED_IMAGE_FUNCTION_LENGTH,
         )),
-        ("Firebase/GAS/manual save path has the sold-retention snapshot", lambda: assert_snapshot(
+        ("Firebase/GAS/manual save path is unchanged from current main", lambda: assert_snapshot(
             "Firebase/GAS/manual save path",
             save_account,
             SAVE_ACCOUNT_HASH,
