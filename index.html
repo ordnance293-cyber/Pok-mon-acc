@@ -1850,6 +1850,16 @@
             return matches[0];
         };
 
+        // A premium pass item tile may display its quantity as x285 or ×285.
+        // Restrict this syntax to the greenpass field, not all numeric fields.
+        const extractGreenPassCount = (value) => {
+            const raw = String(value ?? '').trim()
+                .replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xFF10))
+                .replace(/[,，]/g, '');
+            const stack = raw.match(/^[xX×ｘＸ]\s*(\d+)\s*(?:張)?$/);
+            return stack ? stack[1] : extractSingleNumber(value);
+        };
+
         const extractSlashSideNumber = (value, side = 'left') => {
             if (value === undefined || value === null) return '';
             const raw = String(value).trim().replace(/,/g, '');
@@ -2186,7 +2196,7 @@
                 if (field === 'shiny_leg' && normalized.image_type === 'SHINY_LEGENDARY_SCREEN') return;
                 normalized[field] = ['poke_bag', 'item_bag'].includes(field)
                     ? extractStorageCapacity(result?.[field])
-                    : extractSingleNumber(result?.[field]);
+                    : (field === 'greenpass' ? extractGreenPassCount(result?.[field]) : extractSingleNumber(result?.[field]));
             });
             normalized.storage_primary_evidence = {
                 header_type: normalized.header_type,
@@ -2475,6 +2485,8 @@ image_type 只能是：
 - ARMORED_MEWTWO_SCREEN
 - TRAINER_PROFILE_SCREEN
 - POKEMON_DETAIL_SCREEN
+- SHOP_COIN_SCREEN
+- ITEM_GREENPASS_SCREEN
 - RESOURCE_SCREEN
 - OTHER
 
@@ -2530,7 +2542,17 @@ image_type 只能是：
    - image_type = POKEMON_DETAIL_SCREEN
    - search_query = ""
 
-9. 若是資源頁／背包頁，並可看到寶可幣、寶可夢包、道具背包、神奇糖果、大師球或綠票
+9A. 若頂部清楚顯示「商店」，且靠近頂部的金色皮卡丘寶可幣圖示旁有餘額數字
+   - image_type = SHOP_COIN_SCREEN
+   - search_query = ""
+   商店下方 GO Pass、禮包或活動商品售價都不是持有的寶可幣餘額。
+
+9B. 若頂部清楚顯示「道具」，且道具格中有綠色票券及「特級對戰入場券」名稱
+   - image_type = ITEM_GREENPASS_SCREEN
+   - search_query = ""
+   特級對戰入場券（綠色）才是綠票；遠距團體戰入場券（藍色）及一般團體戰入場券（橘色）不是綠票，不可相加。
+
+9C. 其他資源頁／背包頁，可見寶可幣、寶可夢包、道具背包、神奇糖果、大師球或綠票
    - image_type = RESOURCE_SCREEN
    - search_query = ""
 
@@ -2573,7 +2595,8 @@ image_type 只能是：
 4. 只有 HUNDO_LEGENDARY_SCREEN 且搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」之後，才可能啟用百神清單辨識；其他任何類型都不能當作百神清單圖。
 5. 完美數可以來自 CATEGORY_OVERVIEW_SCREEN；若看到只有單獨 4* / 完美搜尋頁且搜尋欄不是「${HUNDO_LEGENDARY_FILTER}」，請判成 OTHER。
 6. 只分類這一張圖，不要猜其他圖。
-7. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
+7. 商店寶可幣與可見特級對戰入場券的道具頁優先使用專用類型；不要因為其他數字或其他票券而判錯類型。
+8. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
 
         const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [] }) => {
             const outputTemplate = `{
@@ -4187,8 +4210,9 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
 
         const requestSingleImageExtraction = async (apiKey, dataUrl, classification, extractionFields, statusUpdater, retryFields = [], diagnosticRequestType = 'ordinary_primary') => {
             const isRareVisualScan = ['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN', 'HUNDO_DYNAMAX_SCREEN'].includes(classification.image_type);
+            const isResourceVisualScan = ['SHOP_COIN_SCREEN', 'ITEM_GREENPASS_SCREEN', 'RESOURCE_SCREEN'].includes(classification.image_type);
             const requestOptions = {
-                imageDetail: isRareVisualScan ? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL,
+                imageDetail: (isRareVisualScan || isResourceVisualScan) ? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL,
                 diagnosticRequestType
             };
             if (isRareVisualScan) {
@@ -4591,7 +4615,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     trainerTeamScanId = beginTrainerTeamScan();
                 }
                 const normalDataUrls = await Promise.all(normalJobs.map(async job => {
-                    if (['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'HUNDO_DYNAMAX_SCREEN'].includes(job.classification.image_type)) return fileToOriginalDataUrl(job.file);
+                    if (['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'HUNDO_DYNAMAX_SCREEN', 'SHOP_COIN_SCREEN', 'ITEM_GREENPASS_SCREEN', 'RESOURCE_SCREEN'].includes(job.classification.image_type)) return fileToOriginalDataUrl(job.file);
                     if (job.classification.image_type !== 'SHINY_LEGENDARY_SCREEN') return job.classificationDataUrl;
                     const originalDataUrl = await fileToOriginalDataUrl(job.file);
                     return fileToShinyLegendaryEvidenceDataUrl(originalDataUrl);
