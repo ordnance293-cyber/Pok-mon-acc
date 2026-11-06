@@ -2854,8 +2854,27 @@ ${outputTemplate}
 3. 若「道具」與 slash 數對明確相連，填 header_type="item" 及完整 item_bag（例如 "391/875"），poke_bag 留空。不得使用其他位置的道具圖示、寶可夢圖示、藥品、寶可夢球、分類圓圈或文字作為標頭證據。
 4. 若沒有可信的相符頂部標頭，填 header_type="none"，poke_bag 與 item_bag 都留空。不得用畫面別處的「寶可夢」作證據。
 5. image_type 本身不能決定背包欄位。資源頁仍可同時擷取畫面中明確可見的其他道具數量。
+6. coin 只取商店上方金色皮卡丘寶可幣圖示旁的目前持有餘額，不取商品價格、GO Pass 售價、金額符號或手機電量。
+7. greenpass 只取「特級對戰入場券」綠色票券那一格直屬的 x 數量；不能使用藍色遠距團體戰入場券、橘色一般團體戰入場券或誘餌模組的數量，也不能加總。
 
 除了上述資源欄位之外，其餘欄位都必須留空字串。`;
+                case 'SHOP_COIN_SCREEN':
+                    return `${baseRules}
+
+這是一張 Pokémon GO「商店」頁面，只擷取目前持有的寶可幣。
+1. 找到商店最上方的金色皮卡丘頭像寶可幣圖示，讀取緊貼圖示右側的大型餘額數字，純數字填入 coin。
+2. 不要使用商品區價格、GO Pass 豪華版價格、貨幣符號（$／NT$）、儲值組合數字、活動日期、等級進度、手機電量或時間。
+3. 看不到圖示與餘額的直接對應或數字不可讀，就讓 coin=""。禁止猜測。
+4. header_type="none"，其他所有欄位（含 greenpass、item_bag、pokemon_list）留空字串。`;
+                case 'ITEM_GREENPASS_SCREEN':
+                    return `${baseRules}
+
+這是一張 Pokémon GO「道具」背包畫面，擷取綠票及（若清楚可見）道具包容量。
+1. 綠票專指名稱為「特級對戰入場券」的綠色票券。找到名稱與圖示所屬的同一道具格，只讀該格下方的「x數字」，純數字填入 greenpass。
+2. 藍色「遠距團體戰入場券」、橘色「團體戰入場券」、各類誘餌模組都不是綠票；不得使用其他格的數字，不得把不同票券的數量相加。
+3. 若頂端有「道具」標頭及完整 current/capacity 數對，填 header_type="item"，並將完整數對填 item_bag；容量由程式另行驗證。沒有明確標頭與數對則填 header_type="none" 且 item_bag=""。
+4. coin 只能從商店的寶可幣餘額得知，這張道具圖不可推斷。所有其他欄位（含 coin、pokemon_list）留空字串。
+5. 綠票名稱、圖示或 x 數字看不清楚，greenpass 留空，不可改用相鄰道具的數量。`;
                 default:
                     return `${baseRules}
 
