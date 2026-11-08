@@ -49,6 +49,23 @@
         return issues.length ? { valid: false, total: null, issues } : { valid: true, total, issues: [] };
     }
 
+    // 雲端清單以百神明細為準；舊帳號若沒有明細，才使用既有數字欄位。
+    // 沒有可靠數量時回傳 null，避免將「未填」誤認為 0 隻。
+    function getInventoryHundoCount(item) {
+        const list = String(item?.hundos ?? '').trim();
+        if (list) {
+            const parsed = parseHundoListCount(list);
+            return parsed.valid ? parsed.total : null;
+        }
+
+        const raw = item?.st_hundo_leg;
+        if (typeof raw !== 'string' && typeof raw !== 'number') return null;
+        const value = String(raw).trim();
+        if (!/^[0-9]+$/.test(value)) return null;
+        const count = Number(value);
+        return Number.isSafeInteger(count) ? count : null;
+    }
+
     function synchronizeHundoCount({ listInput, countInput, evidence = null, messageElement = null }) {
         const parsed = parseHundoListCount(listInput?.value);
         if (countInput) countInput.value = parsed.valid ? String(parsed.total) : '';
@@ -77,5 +94,5 @@
         return parsed;
     }
 
-    return { parseHundoListCount, synchronizeHundoCount, normalizeParsingCopy };
+    return { parseHundoListCount, synchronizeHundoCount, getInventoryHundoCount, normalizeParsingCopy };
 });

@@ -2,7 +2,7 @@
 
 const assert = require('assert');
 const fs = require('fs');
-const { parseHundoListCount, synchronizeHundoCount } = require('../hundo-list-count.js');
+const { parseHundoListCount, synchronizeHundoCount, getInventoryHundoCount } = require('../hundo-list-count.js');
 
 const valid = (text, total) => assert.deepStrictEqual(parseHundoListCount(text), { valid: true, total, issues: [] });
 const invalid = text => {
@@ -25,6 +25,18 @@ valid('特別背卡超夢,奈克洛茲瑪（拂曉之翼）,待確認（CP2387�
     '蓋歐卡*9007199254740991,超夢'
 ].forEach(invalid);
 
+// 清單畫面的百神數量必須以明細為準，並安全處理舊資料。
+assert.strictEqual(getInventoryHundoCount({ hundos: '蓋歐卡*2,超夢', st_hundo_leg: '99' }), 3);
+assert.strictEqual(getInventoryHundoCount({ hundos: '蓋歐卡＊２，超夢 × ３' }), 5);
+assert.strictEqual(getInventoryHundoCount({ st_hundo_leg: '4' }), 4);
+assert.strictEqual(getInventoryHundoCount({ hundos: '', st_hundo_leg: '0' }), 0);
+assert.strictEqual(getInventoryHundoCount({ hundos: '蓋歐卡*', st_hundo_leg: '6' }), null);
+assert.strictEqual(getInventoryHundoCount({ st_hundo_leg: '4.5' }), null);
+assert.strictEqual(getInventoryHundoCount({ st_hundo_leg: '-1' }), null);
+assert.strictEqual(getInventoryHundoCount({ st_hundo_leg: '9007199254740992' }), null);
+assert.strictEqual(getInventoryHundoCount({ hundos: '' }), null);
+assert.strictEqual(getInventoryHundoCount({}), null);
+
 const classList = { toggle() {} };
 const listInput = { value: '蓋歐卡*2,超夢,雷公*3', classList, setAttribute(name, value) { this[name] = value; } };
 const countInput = { value: '99' };
@@ -43,6 +55,8 @@ assert.match(messageElement.textContent, /數量格式/);
 
 const production = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(production, /id="st_hundo_leg" readonly/, 'the derived count remains serializable but cannot be edited');
+assert.match(production, /HundoListCount\.getInventoryHundoCount\(item\)/, 'inventory rows derive the hundo count');
+assert.match(production, /百神獸：\$\{hundoLabel\}/, 'inventory rows display a hundo count badge');
 assert.doesNotMatch(production, /id="g_hundos"[^>]*oninput=/, 'the list has one JavaScript event hookup');
 assert.match(production, /st_hundo_leg: String\(parsedHundos\.total\)/, 'save payload uses the parser result, not the DOM count');
 assert.match(production, /if \(field === 'hundo_leg'\) return;/, 'screenshot extraction cannot write the derived field');
