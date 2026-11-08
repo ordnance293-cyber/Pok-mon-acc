@@ -30,11 +30,11 @@ MANUAL_V2_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-state-p
 MANUAL_V1_FORM_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-form-recognition-v1.md"
 FORM_VERIFIER_MANUAL_ACCEPTANCE_DOC = ROOT / "docs" / "manual-tests" / "smart-hundo-crop-form-verifier-v2.md"
 # These snapshots intentionally move when the ordinary prompt contract is
-# deliberately revised; the rare-background icon rules are part of that prompt.
-CLASSIFICATION_PROMPT_HASH = "d002ff379c58b50f93fc718b2a4d866d445573cbe6b4c15eba71a95d7ebee2ff"
-CLASSIFICATION_PROMPT_LENGTH = 4264
-EXTRACTION_PROMPT_HASH = "1f6bb20acf9cc51dd1e91dd1ffcb0eeaf787bc88e89f8377e64315f7c7da180b"
-EXTRACTION_PROMPT_LENGTH = 9396
+# deliberately revised; this version also includes the dedicated exact-query Eternatus recognition route.
+CLASSIFICATION_PROMPT_HASH = "6a5b7eb5480f650422b3532b7d2be0990862208fb810634775b4909f1171cc02"
+CLASSIFICATION_PROMPT_LENGTH = 4468
+EXTRACTION_PROMPT_HASH = "b586c68679e0b6af7376857fb43254a838f013b4c4399395bc4a865c8eeb96de"
+EXTRACTION_PROMPT_LENGTH = 9916
 RESIZED_IMAGE_FUNCTION_HASH = "c4baf69d9b7a67771b356642bf549806254fe48a676952986150eb616a93daf4"
 RESIZED_IMAGE_FUNCTION_LENGTH = 1276
 SAVE_ACCOUNT_HASH = "00665082a6a1c36db4f891c3dcb6cde2ed14dbbcfb14347be47550a7c390d4da"
@@ -653,13 +653,13 @@ def main() -> int:
             SMART_HUNDO_SCHEMA_HASH,
             SMART_HUNDO_SCHEMA_LENGTH,
         )),
-        ("ordinary classification prompt matches approved shop/pass extension", lambda: assert_snapshot(
+        ("ordinary classification prompt matches approved Eternatus extension", lambda: assert_snapshot(
             "ordinary classification prompt",
             classification_prompt,
             CLASSIFICATION_PROMPT_HASH,
             CLASSIFICATION_PROMPT_LENGTH,
         )),
-        ("ordinary extraction prompt matches approved shop/pass extension", lambda: assert_snapshot(
+        ("ordinary extraction prompt matches approved Eternatus extension", lambda: assert_snapshot(
             "ordinary extraction prompt",
             extraction_prompt,
             EXTRACTION_PROMPT_HASH,
