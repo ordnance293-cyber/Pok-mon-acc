@@ -50,6 +50,11 @@ jobs:
       - name: Run rare background scan prompt tests
         run: node tests/rare-bg-scan-prompt.test.js
 
+      - name: Run Eternatus recognition and rare-list helper tests
+        run: |
+          node tests/rare-bg-scan-helpers.test.js
+          node tests/eternatus-ai.test.js
+
       - name: Run shop coin and green pass recognition tests
         run: node tests/shop-coin-greenpass-recognition.test.js
 
