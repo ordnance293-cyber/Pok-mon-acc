@@ -9,6 +9,8 @@
     const HUNDO_DYNAMAX_PREFIX = '百極巨：';
     const ARMORED_MEWTWO_SEARCH_FILTER = '特殊&傳說的寶可夢,幻,究極異獸';
     const ARMORED_MEWTWO_PREFIX = '稀有裝甲超夢';
+    const ETERNATUS_SEARCH_FILTER = '無極汰那';
+    const ETERNATUS_PREFIX = '稀有無極汰那';
 
     const normalizeSearchQuery = value => String(value ?? '')
         .trim()
@@ -21,6 +23,8 @@
     const isArmoredMewtwoSearchQuery = value => (
         normalizeSearchQuery(value) === ARMORED_MEWTWO_SEARCH_FILTER
     );
+
+    const isEternatusSearchQuery = value => normalizeSearchQuery(value) === ETERNATUS_SEARCH_FILTER;
 
     const isInkBackgroundSearchQuery = value => (
         normalizeSearchQuery(value) === INK_BACKGROUND_SEARCH_FILTER
@@ -152,6 +156,7 @@
         if (/^百極巨\s*[:：]/u.test(line)) return 'hundo_dynamax';
         if (/^稀有紫黑背卡\s*[:：]/u.test(line)) return 'purple';
         if (/^稀有裝甲超夢/u.test(line)) return 'armored';
+        if (/^稀有無極汰那(?:[0-9]+隻)?$/u.test(line)) return 'eternatus';
         return '';
     };
 
@@ -212,6 +217,33 @@
         const count = (Array.isArray(values) ? values : [values])
             .reduce((sum, value) => sum + parseArmoredMewtwoCount(value), 0);
         return count > 0 ? `${ARMORED_MEWTWO_PREFIX}${count}隻` : '';
+    };
+
+    // Only explicit positive Eternatus counts are accepted as AI stock evidence.
+    const parseEternatusCount = value => {
+        const raw = stripCodeFence(value)
+            .replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xFF10))
+            .replace(/\s+/g, '');
+        const match = raw.match(/^(?:稀有)?無極汰那(?:[:：*xX×])?([0-9]+)隻?$/u);
+        if (!match) return 0;
+        const count = Number(match[1]);
+        return Number.isSafeInteger(count) && count > 0 ? count : 0;
+    };
+
+    const normalizeEternatusRareList = value => {
+        const count = parseEternatusCount(value);
+        return count ? ETERNATUS_PREFIX + count + '隻' : '';
+    };
+
+    const mergeEternatusRareLists = values => {
+        let count = 0;
+        for (const value of (Array.isArray(values) ? values : [values])) {
+            const next = parseEternatusCount(value);
+            if (!next) continue;
+            if (!Number.isSafeInteger(count + next)) return '';
+            count += next;
+        }
+        return count ? ETERNATUS_PREFIX + count + '隻' : '';
     };
 
     const insertRarePresetAtCaret = (value, preset, selectionStart, selectionEnd) => {
@@ -303,8 +335,11 @@
         HUNDO_DYNAMAX_PREFIX,
         ARMORED_MEWTWO_SEARCH_FILTER,
         ARMORED_MEWTWO_PREFIX,
+        ETERNATUS_SEARCH_FILTER,
+        ETERNATUS_PREFIX,
         isRareBackgroundSearchQuery,
         isArmoredMewtwoSearchQuery,
+        isEternatusSearchQuery,
         isInkBackgroundSearchQuery,
         isHundoDynamaxSearchQuery,
         normalizeRareBackgroundList,
@@ -316,6 +351,8 @@
         mergeRareListSections,
         normalizeArmoredMewtwoRareList,
         mergeArmoredMewtwoRareLists,
+        normalizeEternatusRareList,
+        mergeEternatusRareLists,
         insertRarePresetAtCaret,
         removeRarePresetLine
     };

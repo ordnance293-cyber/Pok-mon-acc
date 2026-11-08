@@ -28,7 +28,7 @@ const classificationPrompt = source.slice(classificationStart, classificationEnd
 
 // The rare-card extractor must use the same model, reasoning budget, and image
 // detail as the Smart Hundo extractor, while resource screenshots get high-detail images.
-assert.match(extraction, /const isRareVisualScan = \['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN', 'HUNDO_DYNAMAX_SCREEN'\]\.includes\(classification\.image_type\);/);
+assert.match(extraction, /const isRareVisualScan = \['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ARMORED_MEWTWO_SCREEN', 'ETERNATUS_SCREEN', 'HUNDO_DYNAMAX_SCREEN'\]\.includes\(classification\.image_type\);/);
 assert.match(extraction, /requestOptions\.model = HUNDO_SMART_MODEL/);
 assert.match(extraction, /requestOptions\.reasoningEffort = HUNDO_SMART_REASONING_EFFORT/);
 assert.match(extraction, /const isResourceVisualScan = \['SHOP_COIN_SCREEN', 'ITEM_GREENPASS_SCREEN', 'RESOURCE_SCREEN'\]\.includes\(classification\.image_type\);/);
@@ -76,7 +76,7 @@ assert.match(source, /copySimpleText\('384,888,889&特別背卡', this\)[^>]*>�
 assert.match(source, /INK_BACKGROUND_SCREEN: \['rare_list'\]/);
 assert.match(source, /normalizeInkBackgroundList\(result\?\.rare_list\)/);
 assert.match(source, /mergeInkBackgroundLists\(inkBackgroundLists\)/);
-assert.match(source, /\['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'HUNDO_DYNAMAX_SCREEN', 'SHOP_COIN_SCREEN', 'ITEM_GREENPASS_SCREEN', 'RESOURCE_SCREEN'\]\.includes\(job\.classification\.image_type\)/);
+assert.match(source, /\['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ETERNATUS_SCREEN', 'HUNDO_DYNAMAX_SCREEN', 'SHOP_COIN_SCREEN', 'ITEM_GREENPASS_SCREEN', 'RESOURCE_SCREEN'\]\.includes\(job\.classification\.image_type\)/);
 
 const mergeStart = source.indexOf('const mergeAiResults =');
 const mergeEnd = source.indexOf('const isPopulatedAiValue =', mergeStart);
