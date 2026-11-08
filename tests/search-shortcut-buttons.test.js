@@ -16,4 +16,14 @@ assert.ok(
   '百極巨 button should be visible beside 百神 in the 搜尋 shortcuts'
 );
 assert.match(searchSection, /id="hundoDynamaxSearchButton"[^>]*aria-label="複製百極巨搜尋指令"/);
+const eternatus = /<button type="button" id="eternatusSearchButton" onclick="window\\.copySimpleText\\('無極汰那', this\\)"[^>]*>無極汰那<\\/button>/g;
+assert.equal([...searchSection.matchAll(eternatus)].length, 1, '無極汰那 button must appear exactly once and copy its exact name');
+assert.ok(
+  searchSection.indexOf('id="hundoDynamaxSearchButton"') < searchSection.indexOf('id="eternatusSearchButton"')
+    && searchSection.indexOf('id="eternatusSearchButton"') < searchSection.indexOf('>色神</button>'),
+  '無極汰那 button must appear in the existing search shortcut row'
+);
+assert.match(searchSection, /id="eternatusSearchButton"[^>]*aria-label="複製無極汰那搜尋指令"/);
+console.log('PASS 無極汰那 search shortcut');
+
 console.log('PASS 百極巨 search shortcut');
