@@ -49,12 +49,67 @@ assert.equal(unverifiable.giga, '');
 assert.match(unverifiable.review_messages.giga, /核對原圖/);
 assert.deepEqual(helpers.reconcileMaxCategoryEvidence([]).audited_fields, []);
 
+// Regression for the real November screenshot: first-pass 12 and 4 must not
+// disappear simply because a separate high-detail request is inconclusive.
+const emptyVerification = helpers.validateMaxCategoryEvidence({
+    dyna_label: '', dyna_count: '', dyna_position: 'not_visible',
+    giga_label: '', giga_count: '', giga_position: 'not_visible'
+}, overview);
+const fromPrimary = helpers.reconcileMaxCategoryEvidence(
+    [emptyVerification], { dyna: '12', giga: '4' }
+);
+assert.equal(fromPrimary.dyna, '12');
+assert.equal(fromPrimary.giga, '4');
+assert.match(fromPrimary.review_messages.dyna, /保留初步辨識/);
+assert.match(fromPrimary.review_messages.giga, /保留初步辨識/);
+
+// The previous 13/13 duplicate bug must not return if the focused verifier fails.
+const duplicatedPrimary = helpers.reconcileMaxCategoryEvidence(
+    [emptyVerification], { dyna: '13', giga: '13' }
+);
+assert.equal(duplicatedPrimary.dyna, '13');
+assert.equal(duplicatedPrimary.giga, '');
+assert.match(duplicatedPrimary.review_messages.giga, /相同/);
+
+// Valid independent Gigantamax evidence can correct a copied initial count.
+const fixedDuplicate = helpers.reconcileMaxCategoryEvidence(
+    [valid], { dyna: '13', giga: '13' }
+);
+assert.equal(fixedDuplicate.dyna, '13');
+assert.equal(fixedDuplicate.giga, '3');
+
+// A focused read of only one label must not wipe the other initial count.
+const partialVerified = helpers.validateMaxCategoryEvidence({
+    ...evidence('12', '4'), giga_label: ''
+}, overview);
+const mixed = helpers.reconcileMaxCategoryEvidence([partialVerified], { dyna: '12', giga: '4' });
+assert.equal(mixed.dyna, '12');
+assert.equal(mixed.giga, '4');
+
+const noFirstPass = helpers.reconcileMaxCategoryEvidence([emptyVerification], {});
+assert.equal(noFirstPass.dyna, '');
+assert.equal(noFirstPass.giga, '');
+assert.match(noFirstPass.review_messages.dyna, /沒有可靠數字/);
+
+const zeroPrimary = helpers.reconcileMaxCategoryEvidence(
+    [emptyVerification], { dyna: '0', giga: '4' }
+);
+assert.equal(zeroPrimary.dyna, '0');
+assert.equal(zeroPrimary.giga, '4');
+const bothZero = helpers.reconcileMaxCategoryEvidence(
+    [emptyVerification], { dyna: '0', giga: '0' }
+);
+assert.equal(bothZero.dyna, '0');
+assert.equal(bothZero.giga, '0');
+
+
+
 for (const text of [
     '<script src="max-category-count-helpers.js"></script>',
     'const MAX_CATEGORY_COUNT_JSON_SCHEMA =',
     'const requestMaxCategoryCountVerification =',
     'maxCategoryVerificationTask',
-    'reconcileMaxCategoryEvidence(maxCategoryRecords)',
+    'reconcileMaxCategoryEvidence(',
     "setAiFieldReview('st_dyna'",
     "setAiFieldReview('st_giga'",
     "'directly_below_label'",
@@ -64,7 +119,9 @@ const prompt = screenshot.slice(
     screenshot.indexOf('const buildMaxCategoryCountVerificationPrompt ='),
     screenshot.indexOf('const buildSmartHundoPrompt =')
 );
-for (const term of ['極巨化', '超極巨化', '13', '3', '正下方', '禁止']) {
+for (const term of ['極巨化', '超極巨化', '正下方', '禁止']) {
     assert(prompt.includes(term), 'focused prompt must ground label to count: ' + term);
 }
-console.log('PASS exact-label Dynamax / Gigantamax category count verification');
+assert(screenshot.includes("classification.image_type === 'CATEGORY_OVERVIEW_SCREEN') return fileToOriginalDataUrl(job.file)"));
+assert(screenshot.includes('requestOptions.imageDetail = HUNDO_SMART_IMAGE_DETAIL'));
+console.log('PASS category count fallback, duplicate guard and native-image extraction');
