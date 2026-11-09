@@ -2511,7 +2511,7 @@
 1. 尋找分類列表的圓形圖示及下方完整標籤。必須分別找到「極巨化」與「超極巨化」；兩個詞不可互相代替，不可只用「極巨化」子字串匹配到「超極巨化」。
 2. 數量只能讀取對應完整標籤的正下方、同一欄垂直對齊的數字。禁止使用上排或隔壁圖示的數字、手機時間、背包容量、搜尋結果、圖示上的其他符號。
 3. 請由上至下掃描到圖片底部。超極巨化可能單獨位於下一排左側；不能因第一排出現極巨化 13，就認定下一排超極巨化也是 13。
-4. 舉例：如果原圖上排「極巨化」正下方為 13、下一排「超極巨化」正下方為 3，則 dyna_count="13" 且 giga_count="3"。這只是示例，實際必須以原圖為準；兩個數字也可能真的相等。
+4. 逐張讀取實際出現的數字，兩種分類即使分屬不同列也不可共用數字；數字可能不同，也可能真正相同。不要把任何示例數字當成答案。
 5. count 只能是圖中看到的純數字（例如 "3"、"13"、"0"）；模糊、看不到或標籤與數字不相鄰時留空，position 填 other 或 not_visible。禁止由其他分類加總、減算或臆測。
 6. dyna_label／giga_label 必須逐字抄錄你實際看見的完整標籤。若沒看見就留空。
 7. 分類總覽頁可以同時輸出兩個欄位；單獨極巨化分類頁只能輸出 dyna，單獨超極巨化分類頁只能輸出 giga。其餘欄位應為空字串，position 為 not_visible。
@@ -4332,6 +4332,10 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 imageDetail: (isRareVisualScan || isResourceVisualScan) ? HUNDO_SMART_IMAGE_DETAIL : AI_IMAGE_DETAIL,
                 diagnosticRequestType
             };
+            // The overview uses small two-row category counts; keep native pixels for extraction.
+            if (classification.image_type === 'CATEGORY_OVERVIEW_SCREEN') {
+                requestOptions.imageDetail = HUNDO_SMART_IMAGE_DETAIL;
+            }
             if (isRareVisualScan) {
                 requestOptions.model = HUNDO_SMART_MODEL;
                 requestOptions.reasoningEffort = HUNDO_SMART_REASONING_EFFORT;
@@ -4735,6 +4739,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     trainerTeamScanId = beginTrainerTeamScan();
                 }
                 const normalDataUrls = await Promise.all(normalJobs.map(async job => {
+                    if (job.classification.image_type === 'CATEGORY_OVERVIEW_SCREEN') return fileToOriginalDataUrl(job.file);
                     if (['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ETERNATUS_SCREEN', 'HUNDO_DYNAMAX_SCREEN', 'SHOP_COIN_SCREEN', 'ITEM_GREENPASS_SCREEN', 'RESOURCE_SCREEN'].includes(job.classification.image_type)) return fileToOriginalDataUrl(job.file);
                     if (job.classification.image_type !== 'SHINY_LEGENDARY_SCREEN') return job.classificationDataUrl;
                     const originalDataUrl = await fileToOriginalDataUrl(job.file);
@@ -4880,8 +4885,12 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                         }
                         return record;
                     });
-                    const maxCategoryDecision = globalThis.MaxCategoryCountHelpers.reconcileMaxCategoryEvidence(maxCategoryRecords);
-                    // The unverified first-pass category counts must never reach the form.
+                    const maxCategoryDecision = globalThis.MaxCategoryCountHelpers.reconcileMaxCategoryEvidence(
+                        maxCategoryRecords, validationResult.mergedResult
+                    );
+                    // Verified counts override the first pass; inconclusive verification
+                    // preserves readable initial values while suspicious duplicate rows
+                    // and confirmed conflicts require manual review.
                     maxCategoryDecision.audited_fields.forEach(field => {
                         validationResult.mergedResult[field] = maxCategoryDecision[field];
                     });
