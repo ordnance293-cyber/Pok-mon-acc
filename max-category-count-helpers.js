@@ -45,7 +45,7 @@
             giga: normalizeExactCount(primaryCounts?.giga)
         };
         const hasOverview = relevant.some(record => record?.image_type === 'CATEGORY_OVERVIEW_SCREEN');
-        const identicalOverviewCounts = hasOverview && initial.dyna !== ''
+        const identicalOverviewCounts = hasOverview && initial.dyna !== '' && initial.dyna !== '0'
             && initial.dyna === initial.giga;
 
         for (const field of ['dyna', 'giga']) {
