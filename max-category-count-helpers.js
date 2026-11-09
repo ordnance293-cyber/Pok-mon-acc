@@ -35,21 +35,49 @@
         return { image_type: imageType, values, unverified_fields };
     };
 
-    const reconcileMaxCategoryEvidence = (records = []) => {
+    // Treat the focused verifier as additional evidence, not the sole source of truth.
+    // A failed or unreadable verification must never silently erase a usable first-pass value.
+    const reconcileMaxCategoryEvidence = (records = [], primaryCounts = {}) => {
         const result = { dyna: '', giga: '', audited_fields: [], review_messages: { dyna: '', giga: '' } };
+        const relevant = Array.isArray(records) ? records : [];
+        const initial = {
+            dyna: normalizeExactCount(primaryCounts?.dyna),
+            giga: normalizeExactCount(primaryCounts?.giga)
+        };
+        const hasOverview = relevant.some(record => record?.image_type === 'CATEGORY_OVERVIEW_SCREEN');
+        const identicalOverviewCounts = hasOverview && initial.dyna !== ''
+            && initial.dyna === initial.giga;
+
         for (const field of ['dyna', 'giga']) {
-            const applicable = (Array.isArray(records) ? records : []).filter(record =>
-                expectedFields(record?.image_type).includes(field));
+            const applicable = relevant.filter(record => expectedFields(record?.image_type).includes(field));
             if (!applicable.length) continue;
             result.audited_fields.push(field);
-            const validCounts = [...new Set(applicable.map(record => record?.values?.[field]).filter(value =>
-                normalizeExactCount(value) !== ''))];
-            if (validCounts.length === 1 && applicable.every(record => record?.values?.[field] === validCounts[0])) {
-                result[field] = validCounts[0];
-            } else if (validCounts.length > 1) {
-                result.review_messages[field] = `${FIELD_DISPLAY_LABELS[field]}數量在不同截圖間衝突，請核對原圖後手動填入。`;
+
+            const verifiedCounts = [...new Set(applicable
+                .map(record => normalizeExactCount(record?.values?.[field]))
+                .filter(Boolean))];
+
+            if (verifiedCounts.length > 1) {
+                result.review_messages[field] = `${FIELD_DISPLAY_LABELS[field]}的不同原圖複核結果互相衝突，請核對原圖後手動填入。`;
+                continue;
+            }
+            if (verifiedCounts.length === 1) {
+                result[field] = verifiedCounts[0];
+                continue;
+            }
+
+            // On the overview page, identical initial counts are particularly susceptible
+            // to copying the upper row's Dynamax number into the lower Gigantamax row.
+            // Keep Dynamax's tentative count but require proof for the duplicate Gigantamax.
+            if (field === 'giga' && identicalOverviewCounts) {
+                result.review_messages[field] = '超極巨化初步數字與極巨化相同，且原圖複核未確認；請核對原圖後手動填入。';
+                continue;
+            }
+            if (initial[field] !== '') {
+                result[field] = initial[field];
+                result.review_messages[field] = `${FIELD_DISPLAY_LABELS[field]}已保留初步辨識 ${initial[field]}，高解析度複核未完成，請核對原圖。`;
             } else {
-                result.review_messages[field] = `${FIELD_DISPLAY_LABELS[field]}的文字標籤及正下方數字未完成複核，請核對原圖後手動填入。`;
+                result.review_messages[field] = `${FIELD_DISPLAY_LABELS[field]}沒有可靠數字，請核對原圖後手動填入。`;
             }
         }
         return result;
