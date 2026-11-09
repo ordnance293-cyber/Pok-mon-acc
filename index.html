@@ -2505,6 +2505,21 @@
 
         const mergeTaskResultsIntoAiResult = (taskResults = []) => mergeAiResults(taskResults.map(task => task.imageResult));
 
+        const buildMaxCategoryCountVerificationPrompt = imageType => `你是 Pokémon GO「極巨化／超極巨化分類數量」的獨立原圖核對器。已知截圖類型 ${imageType}，只從這一張原圖讀數，不重做分類，不猜測、不跨圖推論。
+
+【辨識規則】
+1. 尋找分類列表的圓形圖示及下方完整標籤。必須分別找到「極巨化」與「超極巨化」；兩個詞不可互相代替，不可只用「極巨化」子字串匹配到「超極巨化」。
+2. 數量只能讀取對應完整標籤的正下方、同一欄垂直對齊的數字。禁止使用上排或隔壁圖示的數字、手機時間、背包容量、搜尋結果、圖示上的其他符號。
+3. 請由上至下掃描到圖片底部。超極巨化可能單獨位於下一排左側；不能因第一排出現極巨化 13，就認定下一排超極巨化也是 13。
+4. 舉例：如果原圖上排「極巨化」正下方為 13、下一排「超極巨化」正下方為 3，則 dyna_count="13" 且 giga_count="3"。這只是示例，實際必須以原圖為準；兩個數字也可能真的相等。
+5. count 只能是圖中看到的純數字（例如 "3"、"13"、"0"）；模糊、看不到或標籤與數字不相鄰時留空，position 填 other 或 not_visible。禁止由其他分類加總、減算或臆測。
+6. dyna_label／giga_label 必須逐字抄錄你實際看見的完整標籤。若沒看見就留空。
+7. 分類總覽頁可以同時輸出兩個欄位；單獨極巨化分類頁只能輸出 dyna，單獨超極巨化分類頁只能輸出 giga。其餘欄位應為空字串，position 為 not_visible。
+
+【輸出 JSON】
+只輸出 dyna_label, dyna_count, dyna_position, giga_label, giga_count, giga_position，不能加其他欄位。
+dyna_position／giga_position 只能是 directly_below_label、other 或 not_visible。`;
+
         const buildAiClassificationPrompt = () => `你是寶可夢 GO 截圖分類器。這次只會收到 1 張圖片，你只能做第一階段分類，禁止抽取數字，禁止假設其他圖片存在，禁止跨圖合併。
 
 【輸出格式】
@@ -2651,21 +2666,6 @@ image_type 只能是：
 6. 只分類這一張圖，不要猜其他圖。
 7. 商店寶可幣與可見特級對戰入場券的道具頁優先使用專用類型；不要因為其他數字或其他票券而判錯類型。
 8. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
-
-        const buildMaxCategoryCountVerificationPrompt = imageType => `你是 Pokémon GO「極巨化／超極巨化分類數量」的獨立原圖核對器。已知截圖類型 ${imageType}，只從這一張原圖讀數，不重做分類，不猜測、不跨圖推論。
-
-【辨識規則】
-1. 尋找分類列表的圓形圖示及下方完整標籤。必須分別找到「極巨化」與「超極巨化」；兩個詞不可互相代替，不可只用「極巨化」子字串匹配到「超極巨化」。
-2. 數量只能讀取對應完整標籤的正下方、同一欄垂直對齊的數字。禁止使用上排或隔壁圖示的數字、手機時間、背包容量、搜尋結果、圖示上的其他符號。
-3. 請由上至下掃描到圖片底部。超極巨化可能單獨位於下一排左側；不能因第一排出現極巨化 13，就認定下一排超極巨化也是 13。
-4. 舉例：如果原圖上排「極巨化」正下方為 13、下一排「超極巨化」正下方為 3，則 dyna_count="13" 且 giga_count="3"。這只是示例，實際必須以原圖為準；兩個數字也可能真的相等。
-5. count 只能是圖中看到的純數字（例如 "3"、"13"、"0"）；模糊、看不到或標籤與數字不相鄰時留空，position 填 other 或 not_visible。禁止由其他分類加總、減算或臆測。
-6. dyna_label／giga_label 必須逐字抄錄你實際看見的完整標籤。若沒看見就留空。
-7. 分類總覽頁可以同時輸出兩個欄位；單獨極巨化分類頁只能輸出 dyna，單獨超極巨化分類頁只能輸出 giga。其餘欄位應為空字串，position 為 not_visible。
-
-【輸出 JSON】
-只輸出 dyna_label, dyna_count, dyna_position, giga_label, giga_count, giga_position，不能加其他欄位。
-dyna_position／giga_position 只能是 directly_below_label、other 或 not_visible。`;
 
         const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [] }) => {
             const outputTemplate = `{
