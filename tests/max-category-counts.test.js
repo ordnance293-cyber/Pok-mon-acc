@@ -96,6 +96,12 @@ const zeroPrimary = helpers.reconcileMaxCategoryEvidence(
 );
 assert.equal(zeroPrimary.dyna, '0');
 assert.equal(zeroPrimary.giga, '4');
+const bothZero = helpers.reconcileMaxCategoryEvidence(
+    [emptyVerification], { dyna: '0', giga: '0' }
+);
+assert.equal(bothZero.dyna, '0');
+assert.equal(bothZero.giga, '0');
+
 
 
 for (const text of [
