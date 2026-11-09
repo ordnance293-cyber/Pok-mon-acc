@@ -11,6 +11,7 @@
     <script src="smart-hundo-visual-rules.js"></script>
     <script src="smart-hundo-helpers.js"></script>
     <script src="rare-bg-scan-helpers.js"></script>
+    <script src="max-category-count-helpers.js"></script>
     <script src="hundo-list-count.js"></script>
     <script src="smart-hundo-form-verifier.js"></script>
     <script src="trainer-team-helpers.js"></script>
@@ -801,6 +802,8 @@
         const smartHundoAiValueOwnership = new Map();
         const STORAGE_CAPACITY_AI_OWNED_INPUT_IDS = new Set(['st_poke_bag', 'st_item_bag']);
         const storageCapacityAiValueOwnership = new Map();
+        const MAX_CATEGORY_AI_OWNED_INPUT_IDS = new Set(['st_dyna', 'st_giga']);
+        const maxCategoryAiValueOwnership = new Map();
         let smartHundoSessionCounter = 0;
         let activeSmartHundoSessionId = 0;
         let smartHundoManualRevision = 0;
@@ -813,7 +816,7 @@
         let trainerTeamAiValueOwnership = null;
         let activeAiScanDiagnostics = null;
 
-        const AI_REVIEW_FIELD_IDS = ['st_shiny_leg', 'st_shiny', 'st_legend', 'st_poke_bag', 'st_item_bag'];
+        const AI_REVIEW_FIELD_IDS = ['st_shiny_leg', 'st_shiny', 'st_legend', 'st_poke_bag', 'st_item_bag', 'st_dyna', 'st_giga'];
         const setAiFieldReview = (inputId, message) => {
             const input = document.getElementById(inputId);
             if (!input) return false;
@@ -832,6 +835,12 @@
 
         const beginAutoScanRun = () => {
             clearAiFieldReviews();
+            MAX_CATEGORY_AI_OWNED_INPUT_IDS.forEach(inputId => {
+                const marker = maxCategoryAiValueOwnership.get(inputId);
+                const input = document.getElementById(inputId);
+                if (marker && input && input.value === marker.value) input.value = '';
+                maxCategoryAiValueOwnership.delete(inputId);
+            });
             STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.forEach(inputId => {
                 const marker = storageCapacityAiValueOwnership.get(inputId);
                 const input = document.getElementById(inputId);
@@ -1496,6 +1505,24 @@
                     'old_poke', 'old_leg', 'masterball', 'greenpass', 'rarecandy', 'coin',
                     'poke_bag', 'item_bag', 'level', 'xp', 'stardust', 'pokemon_list', 'rare_list'
                 ]
+            }
+        };
+        const MAX_CATEGORY_COUNT_JSON_SCHEMA = {
+            name: 'pokemon_go_max_category_count_evidence',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    dyna_label: { type: 'string' },
+                    dyna_count: { type: 'string' },
+                    dyna_position: { type: 'string', enum: ['directly_below_label', 'other', 'not_visible'] },
+                    giga_label: { type: 'string' },
+                    giga_count: { type: 'string' },
+                    giga_position: { type: 'string', enum: ['directly_below_label', 'other', 'not_visible'] }
+                },
+                required: ['dyna_label', 'dyna_count', 'dyna_position',
+                           'giga_label', 'giga_count', 'giga_position']
             }
         };
         const SHINY_LEGENDARY_JSON_SCHEMA = {
@@ -2692,6 +2719,8 @@ ${outputTemplate}
 - 超極巨化 -> giga
 - 完美 -> perfect
 
+重要：極巨化和超極巨化是兩個不同的分類，雖然「超極巨化」包含「極巨化」三個字，也不能配到同一個數字。每個圓形分類圖示都有自己的標籤，數量必須是該標籤正下方緊鄰的數字。先找到「極巨化」完整標籤再讀它下方的數字；再獨立找到「超極巨化」完整標籤並讀它下方的數字。當超極巨化位於下一排左側時，禁止將上一排右側極巨化的數量複製到超極巨化。若看不到標籤與數字的垂直對應，該欄位留空；系統會用原始解析度再複核。
+
 若同一張圖頂部儲存空間標頭清楚顯示「寶可夢」且緊鄰完整 current/capacity（例如 373/1150），另填 header_type="pokemon" 與 poke_bag="373/1150"。必須回傳兩個數字與斜線，絕不可只回傳左側或右側，不得計算或推論容量；標頭與數對必須屬於同一頂部區域，不得使用畫面其他「寶可夢」或「道具」。JavaScript 會擷取右側容量。否則 header_type="none" 且 poke_bag 留空。
 
 不能因為你認為其他截圖會補資料就略過。
@@ -2920,6 +2949,21 @@ ${outputTemplate}
 所有欄位都必須留空字串。`;
             }
         };
+
+        const buildMaxCategoryCountVerificationPrompt = imageType => `你是 Pokémon GO「極巨化／超極巨化分類數量」的獨立原圖核對器。已知截圖類型 ${imageType}，只從這一張原圖讀數，不重做分類，不猜測、不跨圖推論。
+
+【辨識規則】
+1. 尋找分類列表的圓形圖示及下方完整標籤。必須分別找到「極巨化」與「超極巨化」；兩個詞不可互相代替，不可只用「極巨化」子字串匹配到「超極巨化」。
+2. 數量只能讀取對應完整標籤的正下方、同一欄垂直對齊的數字。禁止使用上排或隔壁圖示的數字、手機時間、背包容量、搜尋結果、圖示上的其他符號。
+3. 請由上至下掃描到圖片底部。超極巨化可能單獨位於下一排左側；不能因第一排出現極巨化 13，就認定下一排超極巨化也是 13。
+4. 舉例：如果原圖上排「極巨化」正下方為 13、下一排「超極巨化」正下方為 3，則 dyna_count="13" 且 giga_count="3"。這只是示例，實際必須以原圖為準；兩個數字也可能真的相等。
+5. count 只能是圖中看到的純數字（例如 "3"、"13"、"0"）；模糊、看不到或標籤與數字不相鄰時留空，position 填 other 或 not_visible。禁止由其他分類加總、減算或臆測。
+6. dyna_label／giga_label 必須逐字抄錄你實際看見的完整標籤。若沒看見就留空。
+7. 分類總覽頁可以同時輸出兩個欄位；單獨極巨化分類頁只能輸出 dyna，單獨超極巨化分類頁只能輸出 giga。其餘欄位應為空字串，position 為 not_visible。
+
+【輸出 JSON】
+只輸出 dyna_label, dyna_count, dyna_position, giga_label, giga_count, giga_position，不能加其他欄位。
+dyna_position／giga_position 只能是 directly_below_label、other 或 not_visible。`;
 
         const buildSmartHundoPrompt = ({ structuralRetry = false } = {}) => `你是寶可夢 GO 百分百傳說、幻與究極異獸卡片的嚴格全圖視覺抽取器。
 
@@ -4260,6 +4304,24 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
             return result;
         };
 
+        const requestMaxCategoryCountVerification = async (apiKey, originalDataUrl, classification) => {
+            const raw = await requestOpenAiJsonSchema(
+                apiKey,
+                buildMaxCategoryCountVerificationPrompt(classification.image_type),
+                originalDataUrl,
+                MAX_CATEGORY_COUNT_JSON_SCHEMA,
+                null,
+                {
+                    model: HUNDO_SMART_MODEL,
+                    reasoningEffort: HUNDO_SMART_REASONING_EFFORT,
+                    imageDetail: 'high',
+                    maxRetries: 2,
+                    diagnosticRequestType: 'max_category_verification'
+                }
+            );
+            return globalThis.MaxCategoryCountHelpers.validateMaxCategoryEvidence(raw, classification.image_type);
+        };
+
         const requestSingleImageClassification = async (apiKey, dataUrl, statusUpdater) => {
             const rawResult = await requestOpenAiJsonSchema(apiKey, buildAiClassificationPrompt(), dataUrl, OPENAI_CLASSIFICATION_JSON_SCHEMA, statusUpdater, { diagnosticRequestType: 'classification' });
             return normalizeAiClassification(rawResult);
@@ -4307,6 +4369,9 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 input.value = shouldMergeRareList
                     ? rareHelpers.mergeRareListSections(input.value, normalizedValue)
                     : normalizedValue;
+                if (MAX_CATEGORY_AI_OWNED_INPUT_IDS.has(id)) {
+                    maxCategoryAiValueOwnership.set(id, { value: normalizedValue });
+                }
                 if (STORAGE_CAPACITY_AI_OWNED_INPUT_IDS.has(id)) {
                     storageCapacityAiValueOwnership.set(id, { value: normalizedValue });
                 }
@@ -4678,6 +4743,13 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     return fileToShinyLegendaryEvidenceDataUrl(originalDataUrl);
                 }));
                 const normalClassifications = normalJobs.map(job => job.classification);
+                const maxCategoryJobs = normalJobs
+                    .filter(job => globalThis.MaxCategoryCountHelpers?.MAX_CATEGORY_IMAGE_TYPES.includes(job.classification.image_type));
+                // Run focused high-resolution checks concurrently with ordinary extraction.
+                const maxCategoryVerificationTask = Promise.allSettled(maxCategoryJobs.map(async job => {
+                    const originalDataUrl = await fileToOriginalDataUrl(job.file);
+                    return requestMaxCategoryCountVerification(apiKey, originalDataUrl, job.classification);
+                }));
                 const ordinaryPrimaryRequestCount = normalClassifications.filter(
                     classification => getAiExtractionFields(classification).length > 0
                 ).length;
@@ -4790,6 +4862,35 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                         taskResults,
                         statusWriter: () => progress.update('ordinaryRecovery', 0, normalJobs.length)
                     });
+                    const maxCategorySettlements = await maxCategoryVerificationTask;
+                    const maxCategoryRecords = maxCategoryJobs.map((job, index) => {
+                        const settlement = maxCategorySettlements[index];
+                        const record = settlement.status === 'fulfilled'
+                            ? settlement.value
+                            : {
+                                image_type: job.classification.image_type,
+                                values: { dyna: '', giga: '' },
+                                unverified_fields: globalThis.MaxCategoryCountHelpers.expectedFields(job.classification.image_type)
+                            };
+                        diagnostics.images[job.index].max_category_verification = {
+                            succeeded: settlement.status === 'fulfilled',
+                            values: record.values,
+                            unverified_fields: record.unverified_fields
+                        };
+                        if (settlement.status === 'rejected') {
+                            diagnostics.images[job.index].failures.push(safeAiFailure(settlement.reason, 'max_category_verification'));
+                        }
+                        return record;
+                    });
+                    const maxCategoryDecision = globalThis.MaxCategoryCountHelpers.reconcileMaxCategoryEvidence(maxCategoryRecords);
+                    // The unverified first-pass category counts must never reach the form.
+                    maxCategoryDecision.audited_fields.forEach(field => {
+                        validationResult.mergedResult[field] = maxCategoryDecision[field];
+                    });
+                    validationResult.coverage = evaluateRequiredFieldCoverage(
+                        validationResult.mergedResult, normalClassifications, validationResult.allResults
+                    );
+                    diagnostics.max_category_count_decision = sanitizeAiScanDiagnostics(maxCategoryDecision);
                     diagnostics.ordinary_recovery_request_count = validationResult.recoveryTargetCount;
                     diagnostics.stage_duration_ms.ordinary_recovery = aiScanNow() - recoveryStartedAt;
                     validationResult.validationTaskResults.forEach(result => {
@@ -4814,6 +4915,7 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     return {
                         ...validationResult,
                         storageDecisions,
+                        maxCategoryDecision,
                         failedJobCount: Number(taskResults.failedJobCount || 0)
                     };
                 })();
@@ -4904,7 +5006,8 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                     coverage: ordinaryCoverage,
                     validationTaskResults,
                     allResults: ordinaryAllResults = [],
-                    storageDecisions = {}
+                    storageDecisions = {},
+                    maxCategoryDecision = { review_messages: {} }
                 } = normalOutcome;
                 let finalCoverage = ordinaryCoverage;
                 if (!isCurrentAutoScanRun(scanRunId)) return;
@@ -4918,6 +5021,8 @@ storage_text 必須保留完整可見數對（例如 "161/400" 或 "391/875"）�
                 diagnostics.count_consistency = sanitizeAiScanDiagnostics(countReconciliation);
                 setAiFieldReview('st_poke_bag', formatStorageReview('poke_bag', storageDecisions.poke_bag));
                 setAiFieldReview('st_item_bag', formatStorageReview('item_bag', storageDecisions.item_bag));
+                setAiFieldReview('st_dyna', maxCategoryDecision.review_messages?.dyna || '');
+                setAiFieldReview('st_giga', maxCategoryDecision.review_messages?.giga || '');
 
                 if (trainerTeamJobs.length > 0) {
                     const teamHelpers = globalThis.TrainerTeamHelpers;
