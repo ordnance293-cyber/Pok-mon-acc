@@ -35,7 +35,7 @@ assert.match(source, /RARE_LIST_IMAGE_TYPES = new Set\(\[[^\]]*'HUNDO_DYNAMAX_SC
 assert.match(source, /const isRareVisualScan = \[[^\]]*'HUNDO_DYNAMAX_SCREEN'\]\.includes/);
 assert.match(source, /\['RARE_BACKGROUND_SCREEN', 'INK_BACKGROUND_SCREEN', 'ETERNATUS_SCREEN', 'HUNDO_DYNAMAX_SCREEN', 'SHOP_COIN_SCREEN', 'ITEM_GREENPASS_SCREEN', 'RESOURCE_SCREEN'\]\.includes\(job\.classification\.image_type\)/);
 assert.match(source, /mergeRareListSections\(input\.value, normalizedValue\)/);
-assert.match(source, /copySimpleText\('4\*&極巨化,超極巨化', this\)[^>]*>百極巨<\/button>/);
+assert.match(source, /copySimpleText\('4\*&極巨化,超極巨化', this\)[^>]*>百超極巨<\/button>/);
 
 assert.equal(
   helper.normalizeHundoDynamaxList('百極巨：極巨化毛毛角羊,超極巨化巴大蝶,極巨化毛毛角羊'),
