@@ -17,6 +17,7 @@ const shortcuts = [
   ['裝甲超夢', '特殊&傳說的寶可夢,幻,究極異獸'],
   ['背卡', '極巨化,超極巨化&背卡'],
   ['水墨背卡', '384,888,889&特別背卡'],
+  ['銀冠體質', '4攻擊,4防禦&4攻擊,4hp&4防禦,4hp&!4*&!暗影'],
   ['16–20', '年16-20'],
   ['16–20神', '年16-20&傳說的寶可夢,幻,究極異獸']
 ];
@@ -35,4 +36,5 @@ for (let i = 0; i < shortcuts.length; i++) {
 assert.match(buttons[0], /id="eternatusSearchButton"[^>]*aria-label="複製無極汰那搜尋指令"/);
 assert.match(buttons[3], /id="hundoDynamaxSearchButton"[^>]*aria-label="複製百超極巨搜尋指令"/);
 assert.match(buttons[7], /id="inkBackgroundSearchButton"[^>]*aria-label="複製水墨背卡搜尋指令"/);
+assert.match(buttons[8], /id="silverCapIvSearchButton"[^>]*aria-label="複製銀冠體質搜尋指令"/);
 console.log('PASS search shortcut order, button labels, and unchanged queries');
