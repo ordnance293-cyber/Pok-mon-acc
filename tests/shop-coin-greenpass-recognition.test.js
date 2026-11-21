@@ -48,7 +48,7 @@ assert(passPrompt.includes('header_type="item"'));
 
 const allowedFields = between('const AI_IMAGE_TYPE_ALLOWED_FIELDS =', 'const AI_EXPECTED_FIELDS_BY_IMAGE_TYPE =');
 assert(allowedFields.includes("SHOP_COIN_SCREEN: ['coin']"));
-assert(allowedFields.includes("ITEM_GREENPASS_SCREEN: ['greenpass', 'item_bag']"));
+assert(allowedFields.includes("ITEM_GREENPASS_SCREEN: ['greenpass', 'masterball', 'rarecandy', 'item_bag']"));
 const priorities = between('const AI_FIELD_SOURCE_PRIORITY =', 'const AI_FIELD_LABELS =');
 assert(priorities.includes('coin: { SHOP_COIN_SCREEN: 2, RESOURCE_SCREEN: 1 }'));
 assert(priorities.includes('greenpass: { ITEM_GREENPASS_SCREEN: 2, RESOURCE_SCREEN: 1 }'));

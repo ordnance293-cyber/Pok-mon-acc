@@ -1352,7 +1352,7 @@
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             SHOP_COIN_SCREEN: ['coin'],
-            ITEM_GREENPASS_SCREEN: ['greenpass', 'item_bag'],
+            ITEM_GREENPASS_SCREEN: ['greenpass', 'masterball', 'rarecandy', 'item_bag'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
             OTHER: []
         };
@@ -1377,7 +1377,7 @@
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             SHOP_COIN_SCREEN: ['coin'],
-            ITEM_GREENPASS_SCREEN: ['greenpass', 'item_bag'],
+            ITEM_GREENPASS_SCREEN: ['greenpass', 'masterball', 'rarecandy', 'item_bag'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag'],
             OTHER: []
         };
@@ -1402,7 +1402,7 @@
             TRAINER_PROFILE_SCREEN: ['level', 'xp'],
             POKEMON_DETAIL_SCREEN: ['stardust'],
             SHOP_COIN_SCREEN: ['coin'],
-            ITEM_GREENPASS_SCREEN: ['greenpass', 'item_bag'],
+            ITEM_GREENPASS_SCREEN: ['greenpass', 'masterball', 'rarecandy', 'item_bag'],
             RESOURCE_SCREEN: ['masterball', 'greenpass', 'rarecandy', 'coin', 'poke_bag', 'item_bag']
         };
         const AI_FIELD_SOURCE_PRIORITY = {
@@ -1419,9 +1419,9 @@
             perfect: { CATEGORY_OVERVIEW_SCREEN: 1 },
             old_poke: { OLD_POKEMON_SCREEN: 1 },
             old_leg: { OLD_LEGENDARY_SCREEN: 1 },
-            masterball: { RESOURCE_SCREEN: 1 },
+            masterball: { RESOURCE_SCREEN: 2, ITEM_GREENPASS_SCREEN: 1 },
             greenpass: { ITEM_GREENPASS_SCREEN: 2, RESOURCE_SCREEN: 1 },
-            rarecandy: { RESOURCE_SCREEN: 1 },
+            rarecandy: { RESOURCE_SCREEN: 2, ITEM_GREENPASS_SCREEN: 1 },
             coin: { SHOP_COIN_SCREEN: 2, RESOURCE_SCREEN: 1 },
             poke_bag: { CATEGORY_OVERVIEW_SCREEN: 2, RESOURCE_SCREEN: 1 },
             item_bag: { ITEM_GREENPASS_SCREEN: 2, RESOURCE_SCREEN: 1 },
@@ -1936,6 +1936,16 @@
             return stack ? stack[1] : extractSingleNumber(value);
         };
 
+        // Item tiles commonly show stack counts as x1796 / ×1, not bare digits.
+        // Only accept a single stack quantity; never extract XL labels, sums, or capacity pairs.
+        const extractItemStackCount = (value) => {
+            const raw = String(value ?? '').trim()
+                .replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xFF10))
+                .replace(/[,，]/g, '');
+            const match = raw.match(/^(?:[xX×ｘＸ]\s*)?(\d+)\s*(?:顆|個)?$/);
+            return match ? match[1] : '';
+        };
+
         const extractSlashSideNumber = (value, side = 'left') => {
             if (value === undefined || value === null) return '';
             const raw = String(value).trim().replace(/,/g, '');
@@ -2272,7 +2282,10 @@
                 if (field === 'shiny_leg' && normalized.image_type === 'SHINY_LEGENDARY_SCREEN') return;
                 normalized[field] = ['poke_bag', 'item_bag'].includes(field)
                     ? extractStorageCapacity(result?.[field])
-                    : (field === 'greenpass' ? extractGreenPassCount(result?.[field]) : extractSingleNumber(result?.[field]));
+                    : (field === 'greenpass' ? extractGreenPassCount(result?.[field])
+                    : (field === 'masterball' || field === 'rarecandy'
+                        ? extractItemStackCount(result?.[field])
+                        : extractSingleNumber(result?.[field])));
             });
             normalized.storage_primary_evidence = {
                 header_type: normalized.header_type,
@@ -2656,12 +2669,17 @@ image_type 只能是：
    - search_query = ""
    商店下方 GO Pass、禮包或活動商品售價都不是持有的寶可幣餘額。
 
-9B. 若頂部清楚顯示「道具」，且道具格中有綠色票券及「特級對戰入場券」名稱
+9B. 若頂部顯示「道具」，而且任一可見道具格有「神奇糖果」或「大師球」（包括同時出現綠票的畫面）
+   - image_type = RESOURCE_SCREEN
+   - search_query = ""
+   這類道具頁優先判為 RESOURCE_SCREEN，不能因底部有「特級對戰入場券」就改成只辨識綠票。注意「神奇糖果XL」不等於「神奇糖果」；若只有 XL、沒有一般糖果或大師球，依其他可見內容分類。
+
+9C. 若頂部顯示「道具」，看得到「特級對戰入場券」綠色票券，但未看到一般神奇糖果或大師球
    - image_type = ITEM_GREENPASS_SCREEN
    - search_query = ""
    特級對戰入場券（綠色）才是綠票；遠距團體戰入場券（藍色）及一般團體戰入場券（橘色）不是綠票，不可相加。
 
-9C. 其他資源頁／背包頁，可見寶可幣、寶可夢包、道具背包、神奇糖果、大師球或綠票
+9D. 其他資源頁／背包頁，可見寶可幣、寶可夢包、道具背包等資源
    - image_type = RESOURCE_SCREEN
    - search_query = ""
 
@@ -2704,7 +2722,7 @@ image_type 只能是：
 4. 只有 HUNDO_LEGENDARY_SCREEN 且搜尋欄完全符合「${HUNDO_LEGENDARY_FILTER}」之後，才可能啟用百神清單辨識；其他任何類型都不能當作百神清單圖。
 5. 完美數可以來自 CATEGORY_OVERVIEW_SCREEN；若看到只有單獨 4* / 完美搜尋頁且搜尋欄不是「${HUNDO_LEGENDARY_FILTER}」，請判成 OTHER。
 6. 只分類這一張圖，不要猜其他圖。
-7. 商店寶可幣與可見特級對戰入場券的道具頁優先使用專用類型；不要因為其他數字或其他票券而判錯類型。
+7. 商店寶可幣優先使用專用類型；道具頁只要出現一般神奇糖果或大師球，一律優先 RESOURCE_SCREEN，不能只辨識綠票。只有綠票而沒有上述兩種道具時，才用 ITEM_GREENPASS_SCREEN。
 8. 只輸出乾淨 JSON，不要 Markdown、不要額外說明。`;
 
         const buildAiExtractionPrompt = ({ image_type, search_query, retry_fields = [] }) => {
@@ -2760,6 +2778,16 @@ ${outputTemplate}
 7. 特殊調查 checkbox、合體與 Mega checkbox 完全不在這次 AI 擷取範圍內，嚴禁輸出任何對應狀態或推論。
 8. 若這次沒有明確要求 pokemon_list，嚴禁辨識、推測或輸出任何寶可夢名稱。
 9. 不要 Markdown、不要 code fence、不要額外說明。${retryRules}`;
+
+            const resourceTileRules = [
+                '【道具格與數字精準配對】',
+                '1. 由上到下掃描整張圖，包含底部最後一列。道具背包通常每列三格：每格上方是圖示、圖示左下方是 x／×數量、下方是完整道具名稱。先確認同一格的名稱和圖示，再讀那一格自己的數量；絕不可跨欄、跨列搬用相鄰數字。',
+                '2. 神奇糖果（rarecandy）是彩虹色圓形／球形旋渦糖果，名稱必須完整對應「神奇糖果」。三角形彩虹色「神奇糖果XL」是不同道具；只看到 XL 時 rarecandy 留空，兩者同時出現時只讀一般神奇糖果那一格，絕對不可把 XL 的 x 數量當作一般糖果或合計。',
+                '3. 大師球（masterball）是紫粉色精靈球，正面有白色 M 標誌，名稱必須對應「大師球」。不要用普通精靈球、超級球、高級球的數量；也不要把紫色其他道具或一般球誤認成大師球。',
+                '4. 數量可能出現在圖示左下角的淡綠色半透明底框，或因畫面效果變淡；只要完整名稱、對應圖示及 x／×數量仍可清楚確認，就應正常讀取，不要因為顏色偏淡而忽略。',
+                '5. 只把實際看見的單格數量填入對應欄位，使用純數字，不帶 x／×、逗號、物品名稱或單位。畫面頂端的道具容量 current/capacity、手機時間、電量、其他球與道具的 x 數量都不是這兩項的數量。',
+                '6. 同一項目看不到、只有部分名稱、數字模糊或無法證明數量屬於同一格，該欄位留空，不可猜測，也不可用附近道具或另一張圖補值。'
+            ].join('\n');
 
             switch (image_type) {
                 case 'CATEGORY_OVERVIEW_SCREEN':
@@ -2974,8 +3002,10 @@ ${outputTemplate}
 3. 若「道具」與 slash 數對明確相連，填 header_type="item" 及完整 item_bag（例如 "391/875"），poke_bag 留空。不得使用其他位置的道具圖示、寶可夢圖示、藥品、寶可夢球、分類圓圈或文字作為標頭證據。
 4. 若沒有可信的相符頂部標頭，填 header_type="none"，poke_bag 與 item_bag 都留空。不得用畫面別處的「寶可夢」作證據。
 5. image_type 本身不能決定背包欄位。資源頁仍可同時擷取畫面中明確可見的其他道具數量。
-6. coin 只取商店上方金色皮卡丘寶可幣圖示旁的目前持有餘額，不取商品價格、GO Pass 售價、金額符號或手機電量。
+6. coin 只取商店上方金色皮卡丘寶可幣圖示旁的目前持有餘額，不取商品價格、GO Pass 售價、金額符號或手機電量；背包已滿時顯示的「升級包包 200」是購買價格，不是帳號持有寶可幣。
 7. greenpass 只取「特級對戰入場券」綠色票券那一格直屬的 x 數量；不能使用藍色遠距團體戰入場券、橘色一般團體戰入場券或誘餌模組的數量，也不能加總。
+
+${resourceTileRules}
 
 除了上述資源欄位之外，其餘欄位都必須留空字串。`;
                 case 'SHOP_COIN_SCREEN':
@@ -2989,12 +3019,16 @@ ${outputTemplate}
                 case 'ITEM_GREENPASS_SCREEN':
                     return `${baseRules}
 
-這是一張 Pokémon GO「道具」背包畫面，擷取綠票及（若清楚可見）道具包容量。
+這是一張 Pokémon GO「道具」背包畫面，擷取綠票、可見的神奇糖果與大師球，以及（若清楚可見）道具包容量。
 1. 綠票專指名稱為「特級對戰入場券」的綠色票券。找到名稱與圖示所屬的同一道具格，只讀該格下方的「x數字」，純數字填入 greenpass。
 2. 藍色「遠距團體戰入場券」、橘色「團體戰入場券」、各類誘餌模組都不是綠票；不得使用其他格的數字，不得把不同票券的數量相加。
 3. 若頂端有「道具」標頭及完整 current/capacity 數對，填 header_type="item"，並將完整數對填 item_bag；容量由程式另行驗證。沒有明確標頭與數對則填 header_type="none" 且 item_bag=""。
-4. coin 只能從商店的寶可幣餘額得知，這張道具圖不可推斷。所有其他欄位（含 coin、pokemon_list）留空字串。
-5. 綠票名稱、圖示或 x 數字看不清楚，greenpass 留空，不可改用相鄰道具的數量。`;
+4. coin 只能從商店的寶可幣餘額得知，這張道具圖不可推斷。
+5. 綠票名稱、圖示或 x 數字看不清楚，greenpass 留空，不可改用相鄰道具的數量。
+
+${resourceTileRules}
+
+除了 greenpass、masterball、rarecandy、item_bag 之外，其餘所有欄位（含 coin、pokemon_list）都必須留空字串。`;
                 default:
                     return `${baseRules}
 
