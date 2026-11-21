@@ -1942,7 +1942,7 @@
             const raw = String(value ?? '').trim()
                 .replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xFF10))
                 .replace(/[,，]/g, '');
-            const match = raw.match(/^(?:[xX×ｘＸ]\\s*)?(\\d+)\\s*(?:顆|個)?$/);
+            const match = raw.match(/^(?:[xX×ｘＸ]\s*)?(\d+)\s*(?:顆|個)?$/);
             return match ? match[1] : '';
         };
 
@@ -2787,7 +2787,7 @@ ${outputTemplate}
                 '4. 數量可能出現在圖示左下角的淡綠色半透明底框，或因畫面效果變淡；只要完整名稱、對應圖示及 x／×數量仍可清楚確認，就應正常讀取，不要因為顏色偏淡而忽略。',
                 '5. 只把實際看見的單格數量填入對應欄位，使用純數字，不帶 x／×、逗號、物品名稱或單位。畫面頂端的道具容量 current/capacity、手機時間、電量、其他球與道具的 x 數量都不是這兩項的數量。',
                 '6. 同一項目看不到、只有部分名稱、數字模糊或無法證明數量屬於同一格，該欄位留空，不可猜測，也不可用附近道具或另一張圖補值。'
-            ].join('\\n');
+            ].join('\n');
 
             switch (image_type) {
                 case 'CATEGORY_OVERVIEW_SCREEN':
